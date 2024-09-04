@@ -11,6 +11,7 @@ export const scrape = async (req, res) => {
         res.json({ data: data.data, success: true, code: data.code, message: data.message });
     } catch (error) {
         console.error(error);
+        logger.error(`爬取数据失败${error}`);
         res.status(200).json({ data: null, success: false, code: 500, message: error.message });
     }
 };

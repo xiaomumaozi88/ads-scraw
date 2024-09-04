@@ -33,7 +33,7 @@ const status = {
     current: Status.LOGGED_OUT, // 初始状态为未登录
     update(newStatus) {
         this.current = newStatus;
-        console.log(`当前状态: ${this.current}`);
+        logger.info(`当前状态: ${this.current}`);
     }
 };
 
@@ -75,7 +75,7 @@ export const scrapeData = async (orderId) => {
         return result;
 
     } catch (error) {
-        console.error(`Error in scrapeData: ${error}`);
+        logger.error(`Error in scrapeData: ${error}`);
         return null;
     }
 };
@@ -120,13 +120,13 @@ export const login = async () => {
 
     status.update(Status.AWAITING_VERIFICATION);
     loginPage = page;
-    console.log('验证码已发送');
+    logger.info('验证码已发送');
 }
 
 // 验证码校验
 export const verifyCode = async (verificationCode) => {
     if(!loginPage) {
-        console.log('登陆页面不存在');
+        logger.info('登陆页面不存在');
         return {
             data: null,
             code: 404,
@@ -135,7 +135,7 @@ export const verifyCode = async (verificationCode) => {
     }
     // 如果当前状态不是验证码验证
     if (status.current !== Status.AWAITING_VERIFICATION) {
-        console.log('当前状态不是验证码验证状态，无法进行验证码校验');
+        logger.info('当前状态不是验证码验证状态，无法进行验证码校验');
         return {
             data: null,
             code: 'NOT_IN_STEP',
@@ -211,11 +211,11 @@ const fetchData = async (page) => {
     try {
         const result = await Promise.race([
             page.waitForSelector('.particle-table-placeholder', { timeout: 10000 }).then(() => {
-                console.log('数据获取失败');
+                logger.info('数据获取失败');
                 return 'failure';
             }),
             page.waitForSelector('.particle-table-row', { timeout: 10000 }).then(() => {
-                console.log('数据获取成功');
+                logger.info('数据获取成功');
                 return 'success';
             })
         ]);
@@ -267,7 +267,7 @@ const fetchData = async (page) => {
         };
 
     } catch (error) {
-        console.error(`发生错误：${error}`);
+        logger.error(`发生错误：${error}`);
         return null;
     }
 };
@@ -298,8 +298,8 @@ export const clearLogin = async () => {
         status.update(Status.LOGGED_OUT);
         browser.close();
         initializeBrowser();
-        console.log(`文件夹 ${folderToDelete} 已成功删除`);
+        logger.info(`文件夹 ${folderToDelete} 已成功删除`);
     } catch (error) {
-        console.error(`删除文件夹时发生错误: ${error}`);
+        logger.error(`删除文件夹时发生错误: ${error}`);
     }
 };
