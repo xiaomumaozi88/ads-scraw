@@ -4,6 +4,7 @@ import bodyParser from 'body-parser';
 import log4js from 'log4js';
 import cors from 'cors';
 import apiRoutes from './src/routes/apiRoutes.js';
+import dayjs from 'dayjs';
 import * as puppeteerService from './src/services/puppeteerService.js';
 dotenv.config();
 
