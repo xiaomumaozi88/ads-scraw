@@ -15,15 +15,7 @@
   "scripts": {
     "build": "",
     "start": "node app.js",
-    "dev": "nodemon app.js",
-    "test": "mocha tests --recursive --timeout 5000",
-    "test-single": "mocha",
-    "shell": "node --experimental-repl-await ./shell.js",
-    "generate-docs": "jsdoc --configure .jsdoc.json --verbose",
-    "aics-docs": "node build/aicsDocs.js",
-    "start-docs": "live-server ./aicsDocs/", "node-fetch": "^3.3.0",
-    "start-quick": "cross-env QUICK=true node app.js",
-    "update-ws": "git pull https://github.com/pedroslopez/whatsapp-web.js.git main"
+    "dev": "nodemon app.js"
   },
   "engines": {
     "node": ">=16.0.0"
