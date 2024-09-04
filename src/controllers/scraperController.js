@@ -1,19 +1,16 @@
-// src/controllers/scraperController.js
 import * as puppeteerService from '../services/puppeteerService.js';
 
 export const scrape = async (req, res) => {
     const { orderId } = req.body;
-
-    console.log('接受参数', orderId);
     if (!orderId) {
-        return res.status(400).json({ error: 'Order ID is required' });
+        return res.status(400).json({ data: null, success: false, code: 400, message: '缺少orderId参数'});
     }
 
     try {
         const data = await puppeteerService.scrapeData(orderId);
-        res.json({ data, success: true, code: 200 });
+        res.json({ data: data.data, success: true, code: data.code, message: data.message });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ data: null, success: false, code: 500 });
+        res.status(200).json({ data: null, success: false, code: 500, message: error.message });
     }
 };

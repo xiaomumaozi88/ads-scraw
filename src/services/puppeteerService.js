@@ -1,39 +1,56 @@
 import puppeteer from 'puppeteer';
 import { puppeteerOptions } from '../config.js';
 import { curDate } from '../utils/utils.js';
-import readline from 'readline';
+import { rm } from 'fs/promises';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+// 获取当前目录的绝对路径
+const __dirname = dirname(__filename);
+
+// 指定要删除的文件夹路径
+const folderToDelete = join(__dirname, '../../tmp');
+
+// import readline from 'readline';
 
 let browser;
+let loginPage;
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
+// 状态枚举
+const Status = Object.freeze({
+    LOGGED_OUT: 'LOGGED_OUT', // 未登录
+    LOGGING_IN: 'LOGGING_IN', // 发起登录中
+    AWAITING_VERIFICATION: 'AWAITING_VERIFICATION', // 验证码已发送等待填写中
+    VERIFYING_CODE: 'VERIFYING_CODE', // 验证码验证中
+    LOGIN_FAILED: 'LOGIN_FAILED', // 登录失败
+    ONLINE: 'ONLINE', // 已登录,
+    NO_AUTH_ONLINE: 'NO_AUTH_ONLINE', // 已登录但无查看订单权限
 });
 
-export const askQuestion = (question) => {
-    return new Promise((resolve) => {
-        rl.question(question, (answer) => {
-            resolve(answer);
-        });
-    });
+// 状态管理
+const status = {
+    current: Status.LOGGED_OUT, // 初始状态为未登录
+    update(newStatus) {
+        this.current = newStatus;
+        console.log(`当前状态: ${this.current}`);
+    }
 };
 
-export const closeAskQuestion = () => {
-    rl.close();
-};
 
-const usrName = 'googleplay_web@nibirutech.com';
-const usrPwd = 'GPweb2024';
-const accountId = '5185069862310717718';
+const loginPageUrl = 'https://accounts.google.com/ServiceLogin?service=androiddeveloper&passive=true&continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F';
+
+// const usrName = 'googleplay_web@nibirutech.com';
+// const usrPwd = 'GPweb2024';
+// const usrName = 'huangyouchuan@nibirutech.com';
+// const usrPwd = 'Vdyulm0zo2';
+// const usrName = process.env.USER_NAME;
+// const usrPwd = process.env.USER_PASSWORD;
+// const accountId = process.env.ACCOUNT_ID;
 
 export const initializeBrowser = async () => {
     browser = await puppeteer.launch(puppeteerOptions);
-    // context = await browser.createIncognitoBrowserContext();
 };
-
-// export const clearAllCookies = async () => {
-//     await context.clearCookies(); // 清除所有 cookies
-// };
 
 export const closeBrowser = async () => {
     if (browser) {
@@ -42,142 +59,247 @@ export const closeBrowser = async () => {
 };
 
 export const scrapeData = async (orderId) => {
+    try {
+        const page = await browser.newPage();
+        const orderUrl = `https://play.google.com/console/u/0/developers/${process.env.ACCOUNT_ID}/orders?search=${orderId}&from=2008-01-01&to=${curDate()}`;
+        await page.goto(orderUrl, { timeout: 120 * 1000, waitUntil: 'domcontentloaded' });
+
+        // 检查登录状态
+        if (!await isLoggedIn(page)) {
+            status.update(Status.LOGGING_IN);
+            await login(page);
+        }
+
+        const result = await fetchData(page);
+        await page.close();
+        return result;
+
+    } catch (error) {
+        console.error(`Error in scrapeData: ${error}`);
+        return null;
+    }
+};
+
+// 查询当前状态
+export const getStatus = async () => {
+    return {
+        data: status.current,
+        message: '当前状态'
+    };
+};
+
+const isLoggedIn = async (page) => {
+    const curPageUrl = page.url();
+    return curPageUrl.includes(`https://play.google.com/console/u/0/developers/${process.env.ACCOUNT_ID}/orders`);
+};
+
+// 发起登录，发验证码给管理员
+export const login = async () => {
+    if(status.current !== Status.LOGGED_OUT){
+        return;
+    }
     const page = await browser.newPage();
-    // 订单查询页面地址
-    const orderUrl = `https://play.google.com/console/u/0/developers/${accountId}/orders?search=${orderId}&from=2008-01-01&to=${curDate()}`
-    // 登录地址
-    const loginPageUrl = 'https://accounts.google.com/ServiceLogin?service=androiddeveloper&passive=true&continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F';
-    // 先尝试直接跳转订单查询页面地址
-    await page.goto(orderUrl, {
-        timeout: 120 * 1000,
-        waitUntil: 'domcontentloaded',
-    });
-    // 获取当前页面地址
-    let curPageUrl = page.url();
-    // login required
-    // if (!curPageUrl.includes('https://play.google.com/console/developers')) {
-    // 如果页面并没有跳转到订单查询页面，则说明没有登录
-    if (!curPageUrl.includes(`https://play.google.com/console/u/0/developers/${accountId}/orders`)) {
-        await page.goto(loginPageUrl, {
+    await page.goto(loginPageUrl, { timeout: 120 * 1000});
+
+
+    await page.waitForSelector("#identifierId");
+    await page.type('#identifierId', process.env.USER_NAME);
+
+    await page.waitForSelector('#identifierNext > div > button');
+    await page.click('#identifierNext > div > button');
+    await page.waitForNavigation({ timeout: 120 * 1000}); // 等待导航完成
+    // 睡眠1s
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    await page.waitForSelector('#password input[type="password"]');
+    await page.type('#password input[type="password"]', process.env.USER_PASSWORD);
+
+    await page.waitForSelector('#passwordNext > div > button');
+    await page.click('#passwordNext > div > button');
+    await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // 等待导航完成
+
+    status.update(Status.AWAITING_VERIFICATION);
+    loginPage = page;
+    console.log('验证码已发送');
+}
+
+// 验证码校验
+export const verifyCode = async (verificationCode) => {
+    if(!loginPage) {
+        console.log('登陆页面不存在');
+        return {
+            data: null,
+            code: 404,
+            message: '登录页面不存在'
+        };
+    }
+    // 如果当前状态不是验证码验证
+    if (status.current !== Status.AWAITING_VERIFICATION) {
+        console.log('当前状态不是验证码验证状态，无法进行验证码校验');
+        return {
+            data: null,
+            code: 'NOT_IN_STEP',
+            message: '当前状态不是验证码验证，无法进行验证码校验'
+        };
+    }
+    status.update(Status.VERIFYING_CODE);
+    await loginPage.waitForSelector('#idvPin');
+    await loginPage.$eval('#idvPin', el => el.value = '');
+    await loginPage.type('#idvPin', verificationCode);
+    await loginPage.waitForSelector('#idvPreregisteredPhoneNext > div > button');
+    loginPage.click('#idvPreregisteredPhoneNext > div > button');
+
+    const errorSelector = '.Ekjuhf'; // 假设这是错误提示的类名
+    const result = await Promise.race([
+            loginPage.waitForNavigation({ timeout: 120 * 1000 }).then(() => {
+            return 'success';
+        }),
+        loginPage.waitForSelector(errorSelector, { timeout: 120 * 1000 }).then(async () => {
+            const errorMessage = await loginPage.$eval(errorSelector, el => el.innerText).catch(() => null);
+            return errorMessage;
+        })
+    ]);
+
+    if(result === 'success'){
+        await loginPage.goto(loginPageUrl, {
             timeout: 120 * 1000,
             waitUntil: 'domcontentloaded',
         });
-        await page.waitForSelector("#identifierId");
-        await page.type('#identifierId', usrName);
-        await page.waitForSelector('#identifierNext > div > button');
-        await Promise.all([
-            page.waitForNavigation({ timeout: 120 * 1000 }),
-            page.click('#identifierNext > div > button'),
-        ]);
-
-        await page.waitForSelector('#password input[type="password"]');
-        await page.click('#password input[type="password"]');
-        await page.type('#password input[type="password"]', usrPwd, {
-            delay: 100,
-        });
-
-        await page.waitForSelector('#passwordNext > div > button');
-        await Promise.all([
-            page.waitForNavigation({ timeout: 120 * 1000 }),
-            page.click('#passwordNext > div > button'),
-        ]);
-
-        await page.waitForSelector("#idvPin");
-        const verificationCode = await askQuestion("input 2-Step verification code: ");
-        await page.type('#idvPin', verificationCode);
-
-        await page.waitForSelector('#idvPreregisteredPhoneNext > div > button');
-        await Promise.all([
-            page.waitForNavigation({ timeout: 120 * 1000 }),
-            page.click('#idvPreregisteredPhoneNext > div > button'),
-        ]);
+        const curPageUrl = loginPage.url();
+        const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
+        if (isLoggedIn) {
+            status.update(Status.ONLINE);
+            loginPage.close();
+            loginPage = null;
+            return {
+                data: null,
+                code: 'VERIFY_SUCCESS',
+                message: '验证成功'
+            };
+        }
+        else {
+            status.update(Status.NO_AUTH_ONLINE);
+            return {
+                data: null,
+                code: 'NO_ORDER_AUTH',
+                message: '没有访问权限'
+            };
+        }
+    } else {
+        // 验证码错误重置为等待验证码状态，提示重试
+        status.update(Status.AWAITING_VERIFICATION);
+        // 移除报错元素，方便下次输入判断
+        await loginPage.$eval('.Ekjuhf', el => el.remove());
+        return {
+            code: 'CODE_ERROR',
+            data: null,
+            message: result
+        };
     }
-    // curPageUrl = page.url();
+}
 
-    // if(!curPageUrl.includes(accountId)){
-    //     await page.waitForSelector('material-list .item');
-    //     const accountItem = await page.$('material-list .item');
-    //     await Promise.all([
-    //         page.waitForSelector('.desktop-navigation-drawer', { timeout: 120 * 1000 }),
-    //         accountItem.click()
-    //     ]);
-    //
-    //     let curUrl = page.url();
-    //     const orderUrl = `${curUrl.split('/5185069862310717718')[0]}/5185069862310717718/orders?search=${orderId}&from=2008-01-01&to=${curDate()}`;
-    //     await page.goto(orderUrl, {
-    //         timeout: 120 * 1000,
-    //         waitUntil: 'domcontentloaded',
-    //     });
-    // }
-
+const fetchData = async (page) => {
+    if(status.current !== Status.ONLINE){
+        return {
+            data: {
+                error: 'Not logged in'
+            },
+            code: 'NOT_LOGGED_IN',
+            message: '当前未登录，无法获取数据'
+        }
+    }
     try {
         const result = await Promise.race([
             page.waitForSelector('.particle-table-placeholder', { timeout: 10000 }).then(() => {
-                // 数据获取失败的逻辑
                 console.log('数据获取失败');
                 return 'failure';
             }),
             page.waitForSelector('.particle-table-row', { timeout: 10000 }).then(() => {
-                // 数据获取成功的逻辑
                 console.log('数据获取成功');
                 return 'success';
             })
         ]);
 
-        // 如果获取失败，则关闭页面并返回null；数据获取成功则不处理，继续执行后续代码
-       if (result === 'failure') {
+        if (result === 'failure') {
             await page.close();
-            return null;
+            return {
+                data: null,
+                message: '暂无数据'
+            };
         }
-    } catch (error) {
-        console.log(`发生错误：${error}`);
-    }
 
-    //particle-table-placeholder
+        const rowData = await page.evaluate(() => {
+            const row = document.querySelector('.particle-table-row');
+            const cells = row.querySelectorAll('ess-cell');
+            const data = {};
 
-    const rowData = await page.evaluate(() => {
-        const row = document.querySelector('.particle-table-row');
-        const cells = row.querySelectorAll('ess-cell');
-        const data = {};
+            cells.forEach(cell => {
+                const columnName = cell.getAttribute('essfield');
+                let key = '';
+                let value = '';
 
-        cells.forEach(cell => {
-            const columnName = cell.getAttribute('essfield');
-            let value = '';
-
-            if (columnName === 'date_column') {
-                value = cell.querySelector('.main-text').innerText + '\n' + cell.querySelector('.secondary-line span').innerText;
-            } else if (columnName === 'app_column') {
-                value = cell.querySelector('img').src;
-            } else if (columnName === 'product_column') {
-                value = cell.querySelector('.main-text').innerText;
-            } else if (columnName === 'order_id_column') {
-                value = cell.querySelector('text-field').innerText.trim();
-            } else if (columnName === 'order_status_column') {
-                value = cell.querySelector('.main-text').innerText;
-            } else if (columnName === 'total_column') {
-                value = cell.querySelector('.main-text').innerText;
-            } else if (columnName === 'main_action_column') {
-                value = cell.querySelector('a').href;
-            }
-            data[columnName] = value;
+                if (columnName === 'date_column') {
+                    key = 'date';
+                    value = cell.querySelector('.main-text').innerText + '\n' + cell.querySelector('.secondary-line span').innerText;
+                } else if (columnName === 'app_column') {
+                    key = 'app';
+                    value = cell.querySelector('img').src;
+                } else if (columnName === 'product_column') {
+                    key = 'product';
+                    value = cell.querySelector('.main-text').innerText + '\n' + cell.querySelector('.secondary-line span').innerText;
+                } else if (columnName === 'order_id_column') {
+                    key = 'orderId';
+                    value = cell.querySelector('text-field').innerText.trim();
+                } else if (columnName === 'order_status_column') {
+                    key = 'orderStatus';
+                    value = cell.querySelector('.main-text').innerText;
+                } else if (columnName === 'total_column') {
+                    key = 'total';
+                    value = cell.querySelector('.main-text').innerText;
+                }
+                data[key] = value;
+            });
+            return data;
         });
-        return data;
-    });
+        return {
+            data: rowData,
+            message: '数据查询成功'
+        };
 
-    await page.close();
-    // clearAllCookies();
-    closeAskQuestion();
-    return rowData;
+    } catch (error) {
+        console.error(`发生错误：${error}`);
+        return null;
+    }
 };
 
 export const checkLoginStatus = async () => {
     const page = await browser.newPage();
-    const loginPageUrl = 'https://accounts.google.com/ServiceLogin?service=androiddeveloper&passive=true&continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F';
     await page.goto(loginPageUrl, {
         timeout: 120 * 1000,
         waitUntil: 'domcontentloaded',
     });
     const curPageUrl = page.url();
     await page.close();
-    return curPageUrl.includes('https://play.google.com/console/developers');
+    if(curPageUrl === 'https://play.google.com/console/signup'){
+        status.update(Status.NO_AUTH_ONLINE);
+        return true;
+    }
+    const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
+    if (isLoggedIn) {
+        status.update(Status.ONLINE);
+    }
+    return isLoggedIn;
+};
+// 删除 tmp 文件夹的函数
+export const clearLogin = async () => {
+    try {
+        // 递归删除文件夹其内容
+        await rm(folderToDelete, { recursive: true, force: true });
+        status.update(Status.LOGGED_OUT);
+        browser.close();
+        initializeBrowser();
+        console.log(`文件夹 ${folderToDelete} 已成功删除`);
+    } catch (error) {
+        console.error(`删除文件夹时发生错误: ${error}`);
+    }
 };

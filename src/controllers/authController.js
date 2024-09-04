@@ -1,4 +1,3 @@
-// src/controllers/authController.js
 import * as puppeteerService from '../services/puppeteerService.js';
 
 export const checkLogin = async (req, res) => {
@@ -7,6 +6,6 @@ export const checkLogin = async (req, res) => {
         res.json({ loggedIn: isLoggedIn });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Failed to check login status' });
+        res.status(200).json({ code: 500, data: null, message: '', success: false });
     }
 };

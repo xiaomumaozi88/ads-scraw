@@ -7,7 +7,9 @@
   "dependencies": {
     "cors": "^2.8.5",
     "puppeteer": "^23.1.0",
-    "readline": "^1.3.0"
+    "readline": "^1.3.0",
+    "log4js": "^6.9.1",
+    "dotenv": "^16.0.3"
   },
   "scripts": {
     "start": "node app.js",
@@ -17,9 +19,7 @@
     "shell": "node --experimental-repl-await ./shell.js",
     "generate-docs": "jsdoc --configure .jsdoc.json --verbose",
     "aics-docs": "node build/aicsDocs.js",
-    "start-docs": "live-server ./aicsDocs/",
-    "log4js": "^6.9.1",
-    "node-fetch": "^3.3.0",
+    "start-docs": "live-server ./aicsDocs/", "node-fetch": "^3.3.0",
     "start-quick": "cross-env QUICK=true node app.js",
     "update-ws": "git pull https://github.com/pedroslopez/whatsapp-web.js.git main"
   },

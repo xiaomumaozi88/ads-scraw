@@ -1,10 +1,29 @@
-// src/app.js
 import express from 'express';
+import dotenv from 'dotenv';
 import bodyParser from 'body-parser';
+// import log4js from 'log4js';
 import cors from 'cors';
 import apiRoutes from './src/routes/apiRoutes.js';
 import * as puppeteerService from './src/services/puppeteerService.js';
+dotenv.config();
 
+// 配置日志记录
+log4js.configure({
+    appenders: {
+        main: {
+            type: 'stdout',
+            layout: {
+                type: 'pattern',
+                pattern: '%x{date} %p [%c,1,2,false] %z --- [nio-4001-exec-1] server.index : %m%n',
+                tokens: {
+                    date: () => dayjs().format('YYYY-MM-DD HH:mm:ss.SSS'),
+                },
+            },
+        },
+    },
+    categories: { default: { appenders: ['main'], level: 'info' } },
+});
+global.logger = log4js.getLogger('gp-order-scraper');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,6 +35,15 @@ app.use(bodyParser.json());
 // 启动 Puppeteer 浏览器实例
 (async () => {
     await puppeteerService.initializeBrowser();
+    await puppeteerService.checkLoginStatus();
+    // 定时检查登录状态，每隔 5 分钟（300000 毫秒）执行一次
+    setInterval(async () => {
+        console.log('定时检查登录状态...');
+        const isLoggedIn = await puppeteerService.checkLoginStatus();
+        if (!isLoggedIn) {
+            console.log('登录状态已失效');
+        }
+    }, 300000); // 每 5 分钟检查一次
 })();
 
 // 使用 API 路由

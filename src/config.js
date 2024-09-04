@@ -4,7 +4,7 @@ export const puppeteerOptions = {
         width: 1000,
         height: 800,
     },
-    headless: false,
+    headless: true, // 是否不打开浏览器
     userDataDir: "tmp/gpc_order_spider_usr_dir3",
     args: [
         '--no-sandbox',
