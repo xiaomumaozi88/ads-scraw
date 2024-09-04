@@ -7,15 +7,11 @@ RUN apk add --no-cache \
     freetype \
     harfbuzz \
     ttf-freefont \
-    libxss \
     libx11 \
     libxcomposite \
     libxrandr \
     libxi \
     libxtst \
-    libxshmfence \
-    libxrender \
-    libxext \
     mesa-gl \
     fontconfig
 
@@ -29,8 +25,7 @@ WORKDIR /app
 COPY ./ /app/
 
 # 安装依赖
-RUN npm install
+RUN npm install --unsafe-perm=true
 
 # 启动应用
-
-CMD npm start
+CMD ["npm", "start"]
