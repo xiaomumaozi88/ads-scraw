@@ -1,7 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import bodyParser from 'body-parser';
-// import log4js from 'log4js';
+import log4js from 'log4js';
 import cors from 'cors';
 import apiRoutes from './src/routes/apiRoutes.js';
 import * as puppeteerService from './src/services/puppeteerService.js';
