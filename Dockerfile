@@ -7,13 +7,20 @@ RUN apk add --no-cache \
     freetype \
     harfbuzz \
     ttf-freefont \
+    libxss \
     libx11 \
     libxcomposite \
     libxrandr \
     libxi \
     libxtst \
+    libxshmfence \
+    libxrender \
+    libxext \
     mesa-gl \
     fontconfig
+
+# 设置环境变量以指定 Chrome 可执行文件的路径
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # 设置工作目录
 WORKDIR /app
