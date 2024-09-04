@@ -12,6 +12,7 @@
     "dotenv": "^16.0.3"
   },
   "scripts": {
+    "build": "",
     "start": "node app.js",
     "dev": "nodemon app.js",
     "test": "mocha tests --recursive --timeout 5000",
