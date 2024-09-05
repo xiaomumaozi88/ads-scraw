@@ -107,6 +107,8 @@ export const login = async () => {
     await page.waitForSelector("#identifierId");
     await page.type('#identifierId', process.env.USER_NAME);
     logger.info('已输入用户名', process.env.USER_NAME);
+    logger.info('页面地址', page.url());
+    logger.info('页面内容', await page.content());
     await page.waitForSelector('#identifierNext > div > button');
     await page.click('#identifierNext > div > button');
     await page.waitForNavigation({ timeout: 120 * 1000}); // 等待导航完成
@@ -115,7 +117,7 @@ export const login = async () => {
 
     await page.waitForSelector('#password input[type="password"]');
     await page.type('#password input[type="password"]', process.env.USER_PASSWORD);
-    logger.info('已输入用户名', process.env.USER_PASSWORD);
+    logger.info('已输入用户密码', process.env.USER_PASSWORD);
     await page.waitForSelector('#passwordNext > div > button');
     await page.click('#passwordNext > div > button');
     await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // 等待导航完成
