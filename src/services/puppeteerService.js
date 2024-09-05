@@ -49,6 +49,8 @@ const loginPageUrl = 'https://accounts.google.com/ServiceLogin?service=androidde
 // const accountId = process.env.ACCOUNT_ID;
 
 export const initializeBrowser = async () => {
+    console.log('初始化浏览器', process.env.NODE_ENV, puppeteerOptions);
+    logger.info('初始化浏览器', process.env.NODE_ENV, puppeteerOptions);
     browser = await puppeteer.launch(puppeteerOptions);
 };
 
@@ -104,7 +106,7 @@ export const login = async () => {
 
     await page.waitForSelector("#identifierId");
     await page.type('#identifierId', process.env.USER_NAME);
-
+    logger.info('已输入用户名', process.env.USER_NAME);
     await page.waitForSelector('#identifierNext > div > button');
     await page.click('#identifierNext > div > button');
     await page.waitForNavigation({ timeout: 120 * 1000}); // 等待导航完成
@@ -113,7 +115,7 @@ export const login = async () => {
 
     await page.waitForSelector('#password input[type="password"]');
     await page.type('#password input[type="password"]', process.env.USER_PASSWORD);
-
+    logger.info('已输入用户名', process.env.USER_PASSWORD);
     await page.waitForSelector('#passwordNext > div > button');
     await page.click('#passwordNext > div > button');
     await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // 等待导航完成

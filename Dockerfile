@@ -1,31 +1,27 @@
-FROM node:18.17.0-alpine
+FROM node:18-buster
 
-# 安装依赖库以支持 Chrome
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ttf-freefont \
-    libx11 \
-    libxcomposite \
-    libxrandr \
-    libxi \
-    libxtst \
-    mesa-gl \
-    fontconfig
+ENV BUILD=1
+ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
 
-# 设置环境变量以指定 Chrome 可执行文件的路径
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+RUN sed -i  's/http/https/g' /etc/apt/sources.list
+RUN apt-get clean
+RUN apt-get update
+RUN apt-get install -y wget gnupg ca-certificates procps libxss1 --fix-missing
+RUN wget -qO - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
+RUN sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
+RUN apt-get update
+RUN apt-get install -y google-chrome-stable
+RUN rm -rf /var/lib/apt/lists/*
 
-# 设置工作目录
+
 WORKDIR /app
 
-# 复制项目文件
 COPY ./ /app/
 
-# 安装依赖
-RUN npm install --unsafe-perm=true
+RUN npm install
 
-# 启动应用
-CMD ["npm", "start"]
+CMD npm start
+
+
+
+
