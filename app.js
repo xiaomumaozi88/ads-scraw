@@ -40,7 +40,7 @@ app.use(bodyParser.json());
     // 定时检查登录状态，每隔 5 分钟（300000 毫秒）执行一次
     setInterval(async () => {
         const data = await puppeteerService.getStatus();
-        logger.info(`当前登录状态: ${data.status}`)
+        logger.info(`当前登录状态: ${data.data}`)
     }, 300000); // 每 5 分钟检查一次
 })();
 
