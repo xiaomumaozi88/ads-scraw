@@ -170,6 +170,7 @@ export const verifyCode = async (verificationCode) => {
     try {
         await loginPage.waitForSelector(currentSelectors.verificationCodeInput);
         await loginPage.$eval(currentSelectors.verificationCodeInput, el => el.value = '');
+        await loginPage.$eval(currentSelectors.errorSelector, el => el.remove()).catch(()=> null);
         await loginPage.type(currentSelectors.verificationCodeInput, verificationCode);
         await loginPage.waitForSelector(currentSelectors.verificationCodeSubmitButton);
         await loginPage.click(currentSelectors.verificationCodeSubmitButton);
@@ -178,9 +179,22 @@ export const verifyCode = async (verificationCode) => {
             loginPage.waitForNavigation({timeout: 120 * 1000}).then(() => {
                 return 'success';
             }),
+            // // 睡眠5s
+            // new Promise(resolve => setTimeout(() => resolve('timeout'), 3 * 1000)).then(async()=>{
+            //     const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
+            //         console.log('el', el);
+            //         return el.innerText;
+            //     }).catch(() => null);
+            //     if(!errorMessage){
+            //         return 'success';
+            //     }
+            //     else {
+            //         return errorMessage;
+            //     }
+            // }),
             loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000}).then(async () => {
                 const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
-                    console.log('el', el);
+                    logger.info('验证报错', errorMessage)
                     return el.innerText;
                 }).catch(() => null);
                 return errorMessage;
@@ -207,7 +221,6 @@ export const verifyCode = async (verificationCode) => {
                     message: errorMessage || '验证码错误'
                 };
             }
-
             const curPageUrl = loginPage.url();
             const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
             if (isLoggedIn) {
