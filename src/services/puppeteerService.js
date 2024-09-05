@@ -166,77 +166,82 @@ export const verifyCode = async (verificationCode) => {
         };
     }
     status.update(LoginStatus.VERIFYING_CODE);
-    await loginPage.waitForSelector(currentSelectors.verificationCodeInput);
-    await loginPage.$eval(currentSelectors.verificationCodeInput, el => el.value = '');
-    await loginPage.type(currentSelectors.verificationCodeInput, verificationCode);
-    await loginPage.waitForSelector(currentSelectors.verificationCodeSubmitButton);
-    await loginPage.click(currentSelectors.verificationCodeSubmitButton);
 
-    const result = await Promise.race([
-        loginPage.waitForNavigation({timeout: 120 * 1000}).then(() => {
-            return 'success';
-        }),
-        loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000}).then(async () => {
-            const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
-                console.log('el', el);
-                return el.innerText;
-            }).catch(() => null);
-            return errorMessage;
-        })
-    ]);
+    try {
+        await loginPage.waitForSelector(currentSelectors.verificationCodeInput);
+        await loginPage.$eval(currentSelectors.verificationCodeInput, el => el.value = '');
+        await loginPage.type(currentSelectors.verificationCodeInput, verificationCode);
+        await loginPage.waitForSelector(currentSelectors.verificationCodeSubmitButton);
+        await loginPage.click(currentSelectors.verificationCodeSubmitButton);
 
+        const result = await Promise.race([
+            loginPage.waitForNavigation({timeout: 120 * 1000}).then(() => {
+                return 'success';
+            }),
+            loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000}).then(async () => {
+                const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
+                    console.log('el', el);
+                    return el.innerText;
+                }).catch(() => null);
+                return errorMessage;
+            })
+        ]);
+        if (result === 'success') {
+            logger.info('此时的页面内容', await loginPage.content());
+            await loginPage.goto(loginPageUrl, {
+                timeout: 120 * 1000,
+                waitUntil: 'domcontentloaded',
+            });
+            // 检查页面是否还有errorSelector
+            await loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000, hidden: true}).catch(() => null);
+            // 如果有还有errorSelector，则提取错误信息
+            const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
+            if(errorMessage) {
+                // 验证码错误重置为等待验证码状态，提示重试
+                status.update(LoginStatus.AWAITING_VERIFICATION);
+                // 移除报错元素，方便下次输入判断
+                await loginPage.$eval(currentSelectors.errorSelector, el => el.remove());
+                return {
+                    data: null,
+                    code: 'CODE_ERROR',
+                    message: errorMessage || '验证码错误'
+                };
+            }
 
-    if (result === 'success') {
-        logger.info('此时的页面内容', await loginPage.content());
-        await loginPage.goto(loginPageUrl, {
-            timeout: 120 * 1000,
-            waitUntil: 'domcontentloaded',
-        });
-        // 检查页面是否还有errorSelector
-        await loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000, hidden: true}).catch(() => null);
-        // 如果有还有errorSelector，则提取错误信息
-        const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
-        if(errorMessage) {
+            const curPageUrl = loginPage.url();
+            const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
+            if (isLoggedIn) {
+                status.update(LoginStatus.ONLINE);
+                loginPage.close();
+                loginPage = null;
+                return {
+                    data: null,
+                    code: 'VERIFY_SUCCESS',
+                    message: '验证成功'
+                };
+            } else {
+                status.update(LoginStatus.NO_AUTH_ONLINE);
+                return {
+                    data: null,
+                    code: 'NO_ORDER_AUTH',
+                    message: '没有访问权限'
+                };
+            }
+        }
+        else {
             // 验证码错误重置为等待验证码状态，提示重试
             status.update(LoginStatus.AWAITING_VERIFICATION);
             // 移除报错元素，方便下次输入判断
             await loginPage.$eval(currentSelectors.errorSelector, el => el.remove());
             return {
-                data: null,
                 code: 'CODE_ERROR',
-                message: errorMessage || '验证码错误'
+                data: null,
+                message: result
             };
         }
-
-        const curPageUrl = loginPage.url();
-        const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
-        if (isLoggedIn) {
-            status.update(LoginStatus.ONLINE);
-            loginPage.close();
-            loginPage = null;
-            return {
-                data: null,
-                code: 'VERIFY_SUCCESS',
-                message: '验证成功'
-            };
-        } else {
-            status.update(LoginStatus.NO_AUTH_ONLINE);
-            return {
-                data: null,
-                code: 'NO_ORDER_AUTH',
-                message: '没有访问权限'
-            };
-        }
-    } else {
-        // 验证码错误重置为等待验证码状态，提示重试
+    } catch (e){
         status.update(LoginStatus.AWAITING_VERIFICATION);
-        // 移除报错元素，方便下次输入判断
-        await loginPage.$eval(currentSelectors.errorSelector, el => el.remove());
-        return {
-            code: 'CODE_ERROR',
-            data: null,
-            message: result
-        };
+        logger.error(`验证码校验失败: ${e}`, loginPage.url(), await loginPage.content());
     }
 }
 
