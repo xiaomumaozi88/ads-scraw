@@ -37,8 +37,34 @@ const status = {
     }
 };
 
+const selectors = {
+    development: {
+        usernameInput: '#identifierId',
+        usernameSubmitButton: '#identifierNext > div > button',
+        passwordInput: '#password input[type="password"]',
+        passwordSubmitButton: '#passwordNext > div > button',
+        verificationCodeInput: '#idvPin',
+        verificationCodeSubmitButton: '#idvPreregisteredPhoneNext > div > button',
+        errorSelector: '.Ekjuhf' // 假设这是错误提示的类名
+    },
+    production: {
+        usernameInput: '#identifierId',
+        usernameSubmitButton: '#identifierNext',
+        passwordInput: '#password',
+        passwordSubmitButton: '#passwordNext',
+        verificationCodeInput: 'input[name="Pin"]',
+        verificationCodeSubmitButton: '#idvPreregisteredPhoneNext',
+        errorSelector: 'span[jsslot]' // 更新为新的错误提示选择器
+    }
+};
 
-const loginPageUrl = 'https://accounts.google.com/ServiceLogin?service=androiddeveloper&passive=true&continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F';
+// 根据环境选择合适的选择器
+const currentSelectors =
+    // process.env.NODE_ENV === 'development' ? selectors.development :
+        selectors.production;
+
+
+const loginPageUrl = 'https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F&ifkv=Ab5oB3qTeGDQYdneEkqmRRoaaURP81UbymbIP8Cnc6-_PLkMWVgUt6XN0ADIdNYy2QoJI6vb6h7ALw&passive=true&service=androiddeveloper&flowName=WebLiteSignIn&flowEntry=ServiceLogin&dsh=S-2044384168%3A1725514098543264';
 
 // const usrName = 'googleplay_web@nibirutech.com';
 // const usrPwd = 'GPweb2024';
@@ -97,30 +123,31 @@ const isLoggedIn = async (page) => {
 
 // 发起登录，发验证码给管理员
 export const login = async () => {
-    if(status.current !== Status.LOGGED_OUT){
+    if (status.current !== Status.LOGGED_OUT) {
         return;
     }
     const page = await browser.newPage();
-    await page.goto(loginPageUrl, { timeout: 120 * 1000});
+    await page.goto(loginPageUrl, { timeout: 120 * 1000 });
 
-
-    await page.waitForSelector("#identifierId");
-    await page.type('#identifierId', process.env.USER_NAME);
+    await page.waitForSelector(currentSelectors.usernameInput);
+    await page.type(currentSelectors.usernameInput, process.env.USER_NAME);
     logger.info('已输入用户名', process.env.USER_NAME);
-    logger.info('页面地址', page.url());
-    logger.info('页面内容', await page.content());
-    await page.waitForSelector('#identifierNext > div > button');
-    await page.click('#identifierNext > div > button');
-    await page.waitForNavigation({ timeout: 120 * 1000}); // 等待导航完成
-    // 睡眠1s
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    console.log('currentSelectors.usernameSubmitButton',currentSelectors);
 
-    await page.waitForSelector('#password input[type="password"]');
-    await page.type('#password input[type="password"]', process.env.USER_PASSWORD);
+    await page.waitForSelector(currentSelectors.usernameSubmitButton);
+    await page.click(currentSelectors.usernameSubmitButton);
+    logger.info('点击用户名提交', process.env.USER_NAME);
+    // await page.waitForNavigation({ timeout: 120 * 1000 }); // 等待导航完成
+
+    console.log('currentSelectors.passwordInput',currentSelectors.passwordInput);
+    await page.waitForSelector(currentSelectors.passwordInput);
+    // await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log('获取到密码输入框');
+    await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
     logger.info('已输入用户密码', process.env.USER_PASSWORD);
-    await page.waitForSelector('#passwordNext > div > button');
-    await page.click('#passwordNext > div > button');
-    await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // 等待导航完成
+    await page.waitForSelector(currentSelectors.passwordSubmitButton);
+    await page.click(currentSelectors.passwordSubmitButton);
+    // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // 等待导航完成
 
     status.update(Status.AWAITING_VERIFICATION);
     loginPage = page;
@@ -147,22 +174,22 @@ export const verifyCode = async (verificationCode) => {
         };
     }
     status.update(Status.VERIFYING_CODE);
-    await loginPage.waitForSelector('#idvPin');
-    await loginPage.$eval('#idvPin', el => el.value = '');
-    await loginPage.type('#idvPin', verificationCode);
-    await loginPage.waitForSelector('#idvPreregisteredPhoneNext > div > button');
-    loginPage.click('#idvPreregisteredPhoneNext > div > button');
+    await loginPage.waitForSelector(currentSelectors.verificationCodeInput);
+    await loginPage.$eval(currentSelectors.verificationCodeInput, el => el.value = '');
+    await loginPage.type(currentSelectors.verificationCodeInput, verificationCode);
+    await loginPage.waitForSelector(currentSelectors.verificationCodeSubmitButton);
+    await loginPage.click(currentSelectors.verificationCodeSubmitButton);
 
-    const errorSelector = '.Ekjuhf'; // 假设这是错误提示的类名
     const result = await Promise.race([
-            loginPage.waitForNavigation({ timeout: 120 * 1000 }).then(() => {
+        loginPage.waitForNavigation({ timeout: 120 * 1000 }).then(() => {
             return 'success';
         }),
-        loginPage.waitForSelector(errorSelector, { timeout: 120 * 1000 }).then(async () => {
-            const errorMessage = await loginPage.$eval(errorSelector, el => el.innerText).catch(() => null);
+        loginPage.waitForSelector(currentSelectors.errorSelector, { timeout: 120 * 1000 }).then(async () => {
+            const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
             return errorMessage;
         })
     ]);
+
 
     if(result === 'success'){
         await loginPage.goto(loginPageUrl, {
