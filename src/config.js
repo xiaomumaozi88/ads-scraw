@@ -6,7 +6,7 @@ export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
     },
     headless: true, // 是否不打开浏览器
     userDataDir: "tmp/gpc_order_spider_usr_dir3",
-    executablePath: 'google-chrome-stable', // 运用额外装置的谷歌浏览器
+    executablePath: '/usr/bin/google-chrome', // 运用额外装置的谷歌浏览器
     args: [
         '--no-sandbox',
         '--disable-client-side-phishing-detection',
