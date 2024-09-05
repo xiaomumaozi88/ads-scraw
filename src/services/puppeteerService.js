@@ -177,7 +177,6 @@ export const verifyCode = async (verificationCode) => {
             return 'success';
         }),
         loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000}).then(async () => {
-            logger.info('此时的页面内容2', await loginPage.content());
             const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
                 console.log('el', el);
                 return el.innerText;
@@ -188,13 +187,12 @@ export const verifyCode = async (verificationCode) => {
 
 
     if (result === 'success') {
+        logger.info('此时的页面内容', await loginPage.content());
         await loginPage.goto(loginPageUrl, {
             timeout: 120 * 1000,
             waitUntil: 'domcontentloaded',
         });
-        const curPageUrl = loginPage.url();
-        logger.info('此时的页面内容1', await loginPage.content());
-        const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
+        const curPageUrl = loginPage.url();const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
         if (isLoggedIn) {
             status.update(LoginStatus.ONLINE);
             loginPage.close();
