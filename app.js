@@ -39,11 +39,8 @@ app.use(bodyParser.json());
     await puppeteerService.checkLoginStatus();
     // 定时检查登录状态，每隔 5 分钟（300000 毫秒）执行一次
     setInterval(async () => {
-        console.log('定时检查登录状态...');
-        const isLoggedIn = await puppeteerService.checkLoginStatus();
-        if (!isLoggedIn) {
-            console.log('登录状态已失效');
-        }
+        const data = await puppeteerService.getStatus();
+        logger.info(`当前登录状态: ${data.status}`)
     }, 300000); // 每 5 分钟检查一次
 })();
 

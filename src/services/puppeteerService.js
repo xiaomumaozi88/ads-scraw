@@ -1,10 +1,12 @@
 import puppeteer from 'puppeteer';
-import { puppeteerOptions } from '../config.js';
-import { curDate } from '../utils/utils.js';
-import { rm } from 'fs/promises';
-import { join } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import {puppeteerOptions} from '../config.js';
+import {curDate} from '../utils/utils.js';
+import {rm} from 'fs/promises';
+import {join} from 'path';
+import {fileURLToPath} from 'url';
+import {dirname} from 'path';
+import {LoginStatus} from '../constants/index.js'
+
 const __filename = fileURLToPath(import.meta.url);
 // 获取当前目录的绝对路径
 const __dirname = dirname(__filename);
@@ -12,42 +14,34 @@ const __dirname = dirname(__filename);
 // 指定要删除的文件夹路径
 const folderToDelete = join(__dirname, '../../tmp');
 
-// import readline from 'readline';
 
 let browser;
-let loginPage;
+let loginPage; // 登录页面
+let lastSendTime = 0; // 上次发送验证码的时间
+let timeoutId = null; // 存储定时器 ID
 
-// 状态枚举
-const Status = Object.freeze({
-    LOGGED_OUT: 'LOGGED_OUT', // 未登录
-    LOGGING_IN: 'LOGGING_IN', // 发起登录中
-    AWAITING_VERIFICATION: 'AWAITING_VERIFICATION', // 验证码已发送等待填写中
-    VERIFYING_CODE: 'VERIFYING_CODE', // 验证码验证中
-    LOGIN_FAILED: 'LOGIN_FAILED', // 登录失败
-    ONLINE: 'ONLINE', // 已登录,
-    NO_AUTH_ONLINE: 'NO_AUTH_ONLINE', // 已登录但无查看订单权限
-});
 
 // 状态管理
 const status = {
-    current: Status.LOGGED_OUT, // 初始状态为未登录
+    current: LoginStatus.LOGGED_OUT, // 初始状态为未登录
     update(newStatus) {
         this.current = newStatus;
         logger.info(`当前状态: ${this.current}`);
     }
 };
 
+// 新版chrome 浏览器的选择器 & stable版本浏览器的选择器。由于服务容器用的是stable版本的chrome，因此暂时统一使用stableChrome
 const selectors = {
-    development: {
-        usernameInput: '#identifierId',
-        usernameSubmitButton: '#identifierNext > div > button',
-        passwordInput: '#password input[type="password"]',
-        passwordSubmitButton: '#passwordNext > div > button',
-        verificationCodeInput: '#idvPin',
-        verificationCodeSubmitButton: '#idvPreregisteredPhoneNext > div > button',
-        errorSelector: '.Ekjuhf' // 假设这是错误提示的类名
-    },
-    production: {
+    // new: {
+    //     usernameInput: '#identifierId',
+    //     usernameSubmitButton: '#identifierNext > div > button',
+    //     passwordInput: '#password input[type="password"]',
+    //     passwordSubmitButton: '#passwordNext > div > button',
+    //     verificationCodeInput: '#idvPin',
+    //     verificationCodeSubmitButton: '#idvPreregisteredPhoneNext > div > button',
+    //     errorSelector: '.Ekjuhf' // 假设这是错误提示的类名
+    // },
+    stableChrome: {
         usernameInput: '#identifierId',
         usernameSubmitButton: '#identifierNext',
         passwordInput: '#password',
@@ -58,25 +52,16 @@ const selectors = {
     }
 };
 
-// 根据环境选择合适的选择器
-const currentSelectors =
-    // process.env.NODE_ENV === 'development' ? selectors.development :
-        selectors.production;
+// 这里暂时用稳定版chrome的爬取方式
+const currentSelectors = selectors.stableChrome;
 
+// 新版本chrome登录地址
+// const loginPageUrl = 'https://accounts.google.com/ServiceLogin?service=androiddeveloper&passive=true&continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F';
 
+// stable版本登录地址
 const loginPageUrl = 'https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F&ifkv=Ab5oB3qTeGDQYdneEkqmRRoaaURP81UbymbIP8Cnc6-_PLkMWVgUt6XN0ADIdNYy2QoJI6vb6h7ALw&passive=true&service=androiddeveloper&flowName=WebLiteSignIn&flowEntry=ServiceLogin&dsh=S-2044384168%3A1725514098543264';
 
-// const usrName = 'googleplay_web@nibirutech.com';
-// const usrPwd = 'GPweb2024';
-// const usrName = 'huangyouchuan@nibirutech.com';
-// const usrPwd = 'Vdyulm0zo2';
-// const usrName = process.env.USER_NAME;
-// const usrPwd = process.env.USER_PASSWORD;
-// const accountId = process.env.ACCOUNT_ID;
-
 export const initializeBrowser = async () => {
-    console.log('初始化浏览器', process.env.NODE_ENV, puppeteerOptions);
-    logger.info('初始化浏览器', process.env.NODE_ENV, puppeteerOptions);
     browser = await puppeteer.launch(puppeteerOptions);
 };
 
@@ -90,14 +75,7 @@ export const scrapeData = async (orderId) => {
     try {
         const page = await browser.newPage();
         const orderUrl = `https://play.google.com/console/u/0/developers/${process.env.ACCOUNT_ID}/orders?search=${orderId}&from=2008-01-01&to=${curDate()}`;
-        await page.goto(orderUrl, { timeout: 120 * 1000, waitUntil: 'domcontentloaded' });
-
-        // 检查登录状态
-        if (!await isLoggedIn(page)) {
-            status.update(Status.LOGGING_IN);
-            await login(page);
-        }
-
+        await page.goto(orderUrl, {timeout: 120 * 1000, waitUntil: 'domcontentloaded'});
         const result = await fetchData(page);
         await page.close();
         return result;
@@ -123,49 +101,63 @@ const isLoggedIn = async (page) => {
 
 // 发起登录，发验证码给管理员
 export const login = async () => {
-    if (status.current !== Status.LOGGED_OUT) {
+    if (status.current !== LoginStatus.LOGGED_OUT) {
         return;
     }
     const page = await browser.newPage();
-    await page.goto(loginPageUrl, { timeout: 120 * 1000 });
+    await page.goto(loginPageUrl, {timeout: 120 * 1000});
 
     await page.waitForSelector(currentSelectors.usernameInput);
     await page.type(currentSelectors.usernameInput, process.env.USER_NAME);
     logger.info('已输入用户名', process.env.USER_NAME);
-    console.log('currentSelectors.usernameSubmitButton',currentSelectors);
 
     await page.waitForSelector(currentSelectors.usernameSubmitButton);
     await page.click(currentSelectors.usernameSubmitButton);
     logger.info('点击用户名提交', process.env.USER_NAME);
-    // await page.waitForNavigation({ timeout: 120 * 1000 }); // 等待导航完成
-
-    console.log('currentSelectors.passwordInput',currentSelectors.passwordInput);
+    // await page.waitForNavigation({ timeout: 120 * 1000 }); // stable版本的chrome展示不需要，注释
+    console.log('currentSelectors.passwordInput', currentSelectors.passwordInput);
     await page.waitForSelector(currentSelectors.passwordInput);
     // await new Promise(resolve => setTimeout(resolve, 2000));
-    console.log('获取到密码输入框');
     await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
     logger.info('已输入用户密码', process.env.USER_PASSWORD);
     await page.waitForSelector(currentSelectors.passwordSubmitButton);
     await page.click(currentSelectors.passwordSubmitButton);
-    // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // 等待导航完成
+    // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome展示不需要，注释
 
-    status.update(Status.AWAITING_VERIFICATION);
+    status.update(LoginStatus.AWAITING_VERIFICATION);
     loginPage = page;
+    lastSendTime = new Date().valueOf();
     logger.info('验证码已发送');
+
+    // 清除之前的定时器
+    if (timeoutId) {
+        clearTimeout(timeoutId);
+    }
+    // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
+    timeoutId = setTimeout(async () => {
+        if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - lastSendTime > 10 * 60 * 1000) {
+            logger.info('验证码超过十分钟未填写，重置登录流程');
+            await loginPage.close();
+            loginPage = null;
+            status.update(LoginStatus.LOGGED_OUT);
+        }
+    }, 10 * 60 * 1000);
 }
 
 // 验证码校验
 export const verifyCode = async (verificationCode) => {
-    if(!loginPage) {
+
+    if (!loginPage) {
         logger.info('登陆页面不存在');
+        status.update(LoginStatus.LOGGED_OUT);
         return {
             data: null,
-            code: 404,
-            message: '登录页面不存在'
+            code: 'NO_LOGIN_PAGE',
+            message: '登录页面不存在，请重新登录'
         };
     }
     // 如果当前状态不是验证码验证
-    if (status.current !== Status.AWAITING_VERIFICATION) {
+    if (status.current !== LoginStatus.AWAITING_VERIFICATION) {
         logger.info('当前状态不是验证码验证状态，无法进行验证码校验');
         return {
             data: null,
@@ -173,7 +165,7 @@ export const verifyCode = async (verificationCode) => {
             message: '当前状态不是验证码验证，无法进行验证码校验'
         };
     }
-    status.update(Status.VERIFYING_CODE);
+    status.update(LoginStatus.VERIFYING_CODE);
     await loginPage.waitForSelector(currentSelectors.verificationCodeInput);
     await loginPage.$eval(currentSelectors.verificationCodeInput, el => el.value = '');
     await loginPage.type(currentSelectors.verificationCodeInput, verificationCode);
@@ -181,17 +173,20 @@ export const verifyCode = async (verificationCode) => {
     await loginPage.click(currentSelectors.verificationCodeSubmitButton);
 
     const result = await Promise.race([
-        loginPage.waitForNavigation({ timeout: 120 * 1000 }).then(() => {
+        loginPage.waitForNavigation({timeout: 120 * 1000}).then(() => {
             return 'success';
         }),
-        loginPage.waitForSelector(currentSelectors.errorSelector, { timeout: 120 * 1000 }).then(async () => {
-            const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
+        loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000}).then(async () => {
+            const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
+                console.log('el', el);
+                return el.innerText;
+            }).catch(() => null);
             return errorMessage;
         })
     ]);
 
 
-    if(result === 'success'){
+    if (result === 'success') {
         await loginPage.goto(loginPageUrl, {
             timeout: 120 * 1000,
             waitUntil: 'domcontentloaded',
@@ -199,7 +194,7 @@ export const verifyCode = async (verificationCode) => {
         const curPageUrl = loginPage.url();
         const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
         if (isLoggedIn) {
-            status.update(Status.ONLINE);
+            status.update(LoginStatus.ONLINE);
             loginPage.close();
             loginPage = null;
             return {
@@ -207,9 +202,8 @@ export const verifyCode = async (verificationCode) => {
                 code: 'VERIFY_SUCCESS',
                 message: '验证成功'
             };
-        }
-        else {
-            status.update(Status.NO_AUTH_ONLINE);
+        } else {
+            status.update(LoginStatus.NO_AUTH_ONLINE);
             return {
                 data: null,
                 code: 'NO_ORDER_AUTH',
@@ -218,9 +212,9 @@ export const verifyCode = async (verificationCode) => {
         }
     } else {
         // 验证码错误重置为等待验证码状态，提示重试
-        status.update(Status.AWAITING_VERIFICATION);
+        status.update(LoginStatus.AWAITING_VERIFICATION);
         // 移除报错元素，方便下次输入判断
-        await loginPage.$eval('.Ekjuhf', el => el.remove());
+        await loginPage.$eval(currentSelectors.errorSelector, el => el.remove());
         return {
             code: 'CODE_ERROR',
             data: null,
@@ -230,7 +224,7 @@ export const verifyCode = async (verificationCode) => {
 }
 
 const fetchData = async (page) => {
-    if(status.current !== Status.ONLINE){
+    if (status.current !== LoginStatus.ONLINE) {
         return {
             data: {
                 error: 'Not logged in'
@@ -241,11 +235,11 @@ const fetchData = async (page) => {
     }
     try {
         const result = await Promise.race([
-            page.waitForSelector('.particle-table-placeholder', { timeout: 10000 }).then(() => {
+            page.waitForSelector('.particle-table-placeholder', {timeout: 10000}).then(() => {
                 logger.info('数据获取失败');
                 return 'failure';
             }),
-            page.waitForSelector('.particle-table-row', { timeout: 10000 }).then(() => {
+            page.waitForSelector('.particle-table-row', {timeout: 10000}).then(() => {
                 logger.info('数据获取成功');
                 return 'success';
             })
@@ -311,13 +305,13 @@ export const checkLoginStatus = async () => {
     });
     const curPageUrl = page.url();
     await page.close();
-    if(curPageUrl === 'https://play.google.com/console/signup'){
-        status.update(Status.NO_AUTH_ONLINE);
+    if (curPageUrl === 'https://play.google.com/console/signup') {
+        status.update(LoginStatus.NO_AUTH_ONLINE);
         return true;
     }
     const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
     if (isLoggedIn) {
-        status.update(Status.ONLINE);
+        status.update(LoginStatus.ONLINE);
     }
     return isLoggedIn;
 };
@@ -325,8 +319,8 @@ export const checkLoginStatus = async () => {
 export const clearLogin = async () => {
     try {
         // 递归删除文件夹其内容
-        await rm(folderToDelete, { recursive: true, force: true });
-        status.update(Status.LOGGED_OUT);
+        await rm(folderToDelete, {recursive: true, force: true});
+        status.update(LoginStatus.LOGGED_OUT);
         browser.close();
         initializeBrowser();
         logger.info(`文件夹 ${folderToDelete} 已成功删除`);
