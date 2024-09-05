@@ -206,21 +206,6 @@ export const verifyCode = async (verificationCode) => {
                 timeout: 120 * 1000,
                 waitUntil: 'domcontentloaded',
             });
-            // 检查页面是否还有errorSelector
-            await loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000, hidden: true}).catch(() => null);
-            // 如果有还有errorSelector，则提取错误信息
-            const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
-            if(errorMessage) {
-                // 验证码错误重置为等待验证码状态，提示重试
-                status.update(LoginStatus.AWAITING_VERIFICATION);
-                // 移除报错元素，方便下次输入判断
-                await loginPage.$eval(currentSelectors.errorSelector, el => el.remove());
-                return {
-                    data: null,
-                    code: 'CODE_ERROR',
-                    message: errorMessage || '验证码错误'
-                };
-            }
             const curPageUrl = loginPage.url();
             const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
             if (isLoggedIn) {
