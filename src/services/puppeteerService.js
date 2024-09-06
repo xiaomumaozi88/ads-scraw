@@ -176,22 +176,22 @@ export const verifyCode = async (verificationCode) => {
         await loginPage.click(currentSelectors.verificationCodeSubmitButton);
 
         const result = await Promise.race([
-            loginPage.waitForNavigation({timeout: 120 * 1000}).then(() => {
-                return 'success';
-            }),
-            // // 睡眠5s
-            // new Promise(resolve => setTimeout(() => resolve('timeout'), 3 * 1000)).then(async()=>{
-            //     const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
-            //         console.log('el', el);
-            //         return el.innerText;
-            //     }).catch(() => null);
-            //     if(!errorMessage){
-            //         return 'success';
-            //     }
-            //     else {
-            //         return errorMessage;
-            //     }
+            // loginPage.waitForNavigation({timeout: 120 * 1000}).then(() => {
+            //     return 'success';
             // }),
+            // // 睡眠5s
+            new Promise(resolve => setTimeout(() => resolve('timeout'), 4 * 1000)).then(async()=>{
+                const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
+                    console.log('el', el);
+                    return el.innerText;
+                }).catch(() => null);
+                if(!errorMessage){
+                    return 'success';
+                }
+                else {
+                    return errorMessage;
+                }
+            }),
             loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000}).then(async () => {
                 const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
                     logger.info('验证报错', errorMessage)
