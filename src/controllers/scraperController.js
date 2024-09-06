@@ -8,7 +8,7 @@ export const scrape = async (req, res) => {
 
     try {
         const data = await puppeteerService.scrapeData(orderId);
-        res.json({ data: data.data, success: true, code: data.code, message: data.message });
+        res.json(data);
     } catch (error) {
         console.error(error);
         logger.error(`爬取数据失败${error}`);

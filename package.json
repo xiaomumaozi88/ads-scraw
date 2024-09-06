@@ -1,7 +1,7 @@
 {
   "name": "gp-order",
   "version": "1.0.0",
-  "description": "gp order",
+  "description": "谷歌订单查询爬虫服务",
   "main": "app.js",
   "type": "module",
   "dependencies": {
@@ -18,7 +18,7 @@
   },
   "scripts": {
     "build": "",
-    "start": "cross-env node app.js ",
+    "start": "cross-env NODE_ENV=production node app.js ",
     "dev": "cross-env NODE_ENV=development nodemon app.js"
   },
   "engines": {
