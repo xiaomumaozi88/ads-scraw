@@ -1,10 +1,12 @@
 import puppeteer from 'puppeteer';
-import { puppeteerOptions } from '../config.js';
-import { curDate } from '../utils/utils.js';
-import { rm } from 'fs/promises';
-import { join } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import {puppeteerOptions} from '../config.js';
+import {curDate} from '../utils/utils.js';
+import {rm} from 'fs/promises';
+import {join} from 'path';
+import {fileURLToPath} from 'url';
+import {dirname} from 'path';
+import {LoginStatus} from '../constants/index.js'
+
 const __filename = fileURLToPath(import.meta.url);
 // 获取当前目录的绝对路径
 const __dirname = dirname(__filename);
@@ -12,41 +14,53 @@ const __dirname = dirname(__filename);
 // 指定要删除的文件夹路径
 const folderToDelete = join(__dirname, '../../tmp');
 
-// import readline from 'readline';
 
 let browser;
-let loginPage;
+let loginPage; // 登录页面
+let lastSendTime = 0; // 上次发送验证码的时间
+let timeoutId = null; // 存储定时器 ID
 
-// 状态枚举
-const Status = Object.freeze({
-    LOGGED_OUT: 'LOGGED_OUT', // 未登录
-    LOGGING_IN: 'LOGGING_IN', // 发起登录中
-    AWAITING_VERIFICATION: 'AWAITING_VERIFICATION', // 验证码已发送等待填写中
-    VERIFYING_CODE: 'VERIFYING_CODE', // 验证码验证中
-    LOGIN_FAILED: 'LOGIN_FAILED', // 登录失败
-    ONLINE: 'ONLINE', // 已登录,
-    NO_AUTH_ONLINE: 'NO_AUTH_ONLINE', // 已登录但无查看订单权限
-});
 
 // 状态管理
 const status = {
-    current: Status.LOGGED_OUT, // 初始状态为未登录
+    current: LoginStatus.LOGGED_OUT, // 初始状态为未登录
     update(newStatus) {
         this.current = newStatus;
-        console.log(`当前状态: ${this.current}`);
+        logger.info(`当前状态: ${this.current}`);
     }
 };
 
+// 新版chrome 浏览器的选择器 & stable版本浏览器的选择器。由于服务容器用的是stable版本的chrome，因此暂时统一使用stableChrome
+const selectors = {
+    // new: {
+    //     usernameInput: '#identifierId',
+    //     usernameSubmitButton: '#identifierNext > div > button',
+    //     passwordInput: '#password input[type="password"]',
+    //     passwordSubmitButton: '#passwordNext > div > button',
+    //     verificationCodeInput: '#idvPin',
+    //     verificationCodeSubmitButton: '#idvPreregisteredPhoneNext > div > button',
+    //     errorSelector: '.Ekjuhf' // 假设这是错误提示的类名
+    // },
+    stableChrome: {
+        usernameInput: '#identifierId',
+        usernameSubmitButton: '#identifierNext',
+        passwordInput: '#password',
+        passwordSubmitButton: '#passwordNext',
+        verificationCodeInput: 'input[name="Pin"]',
+        verificationCodeSubmitButton: '#idvPreregisteredPhoneNext',
+        errorSelector: 'span[jsslot]' // 更新为新的错误提示选择器
+    }
+};
 
-const loginPageUrl = 'https://accounts.google.com/ServiceLogin?service=androiddeveloper&passive=true&continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F';
+// 这里暂时用稳定版chrome的爬取方式
+const currentSelectors = selectors.stableChrome;
 
-// const usrName = 'googleplay_web@nibirutech.com';
-// const usrPwd = 'GPweb2024';
-// const usrName = 'huangyouchuan@nibirutech.com';
-// const usrPwd = 'Vdyulm0zo2';
-// const usrName = process.env.USER_NAME;
-// const usrPwd = process.env.USER_PASSWORD;
-// const accountId = process.env.ACCOUNT_ID;
+// 新版本chrome登录地址
+// const loginPageUrl = 'https://accounts.google.com/ServiceLogin?service=androiddeveloper&passive=true&continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F';
+
+const checkLoginUrl = 'https://accounts.google.com/ServiceLogin?service=androiddeveloper&passive=true&continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F';
+// stable版本登录地址
+const loginPageUrl = 'https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Fplay.google.com%2Fconsole%2Fdeveloper%2F&ifkv=Ab5oB3qTeGDQYdneEkqmRRoaaURP81UbymbIP8Cnc6-_PLkMWVgUt6XN0ADIdNYy2QoJI6vb6h7ALw&passive=true&service=androiddeveloper&flowName=WebLiteSignIn&flowEntry=ServiceLogin&dsh=S-2044384168%3A1725514098543264';
 
 export const initializeBrowser = async () => {
     browser = await puppeteer.launch(puppeteerOptions);
@@ -60,22 +74,16 @@ export const closeBrowser = async () => {
 
 export const scrapeData = async (orderId) => {
     try {
+        logger.info(`接收到订单号: ${orderId}`);
         const page = await browser.newPage();
         const orderUrl = `https://play.google.com/console/u/0/developers/${process.env.ACCOUNT_ID}/orders?search=${orderId}&from=2008-01-01&to=${curDate()}`;
-        await page.goto(orderUrl, { timeout: 120 * 1000, waitUntil: 'domcontentloaded' });
-
-        // 检查登录状态
-        if (!await isLoggedIn(page)) {
-            status.update(Status.LOGGING_IN);
-            await login(page);
-        }
-
+        await page.goto(orderUrl, {timeout: 120 * 1000, waitUntil: 'domcontentloaded'});
         const result = await fetchData(page);
-        await page.close();
+        page?.close && page.close();
         return result;
 
     } catch (error) {
-        console.error(`Error in scrapeData: ${error}`);
+        logger.error(`Error in scrapeData: ${error}`);
         return null;
     }
 };
@@ -88,146 +96,187 @@ export const getStatus = async () => {
     };
 };
 
-const isLoggedIn = async (page) => {
-    const curPageUrl = page.url();
-    return curPageUrl.includes(`https://play.google.com/console/u/0/developers/${process.env.ACCOUNT_ID}/orders`);
-};
-
 // 发起登录，发验证码给管理员
 export const login = async () => {
-    if(status.current !== Status.LOGGED_OUT){
-        return;
+    await checkLoginStatus();
+    if (status.current !== LoginStatus.LOGGED_OUT) {
+        return ;
     }
     const page = await browser.newPage();
-    await page.goto(loginPageUrl, { timeout: 120 * 1000});
+    await page.goto(loginPageUrl, {timeout: 120 * 1000});
 
+    await page.waitForSelector(currentSelectors.usernameInput);
+    await page.type(currentSelectors.usernameInput, process.env.USER_NAME);
+    logger.info('已输入用户名', process.env.USER_NAME);
 
-    await page.waitForSelector("#identifierId");
-    await page.type('#identifierId', process.env.USER_NAME);
+    await page.waitForSelector(currentSelectors.usernameSubmitButton);
+    await page.click(currentSelectors.usernameSubmitButton);
+    logger.info('点击用户名提交', process.env.USER_NAME);
+    // await page.waitForNavigation({ timeout: 120 * 1000 }); // stable版本的chrome展示不需要，注释
+    console.log('currentSelectors.passwordInput', currentSelectors.passwordInput);
+    await page.waitForSelector(currentSelectors.passwordInput);
+    await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
+    logger.info('已输入用户密码', process.env.USER_PASSWORD);
+    await page.waitForSelector(currentSelectors.passwordSubmitButton);
+    await page.click(currentSelectors.passwordSubmitButton);
+    // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
 
-    await page.waitForSelector('#identifierNext > div > button');
-    await page.click('#identifierNext > div > button');
-    await page.waitForNavigation({ timeout: 120 * 1000}); // 等待导航完成
-    // 睡眠1s
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    await page.waitForSelector('#password input[type="password"]');
-    await page.type('#password input[type="password"]', process.env.USER_PASSWORD);
-
-    await page.waitForSelector('#passwordNext > div > button');
-    await page.click('#passwordNext > div > button');
-    await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // 等待导航完成
-
-    status.update(Status.AWAITING_VERIFICATION);
+    status.update(LoginStatus.AWAITING_VERIFICATION);
     loginPage = page;
-    console.log('验证码已发送');
+    lastSendTime = new Date().valueOf();
+    logger.info('验证码已发送');
+
+    // 清除之前的定时器
+    if (timeoutId) {
+        clearTimeout(timeoutId);
+    }
+    // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
+    timeoutId = setTimeout(async () => {
+        if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - lastSendTime > 10 * 60 * 1000) {
+            logger.info('验证码超过十分钟未填写，重置登录流程');
+            await loginPage.close();
+            loginPage = null;
+            status.update(LoginStatus.LOGGED_OUT);
+        }
+    }, 10 * 60 * 1000);
 }
 
 // 验证码校验
 export const verifyCode = async (verificationCode) => {
-    if(!loginPage) {
-        console.log('登陆页面不存在');
+
+    if (!loginPage) {
+        logger.info('登陆页面不存在');
+        status.update(LoginStatus.LOGGED_OUT);
         return {
             data: null,
-            code: 404,
-            message: '登录页面不存在'
+            code: 'NO_LOGIN_PAGE',
+            success: false,
+            message: '登录页面不存在，请重新登录'
         };
     }
     // 如果当前状态不是验证码验证
-    if (status.current !== Status.AWAITING_VERIFICATION) {
-        console.log('当前状态不是验证码验证状态，无法进行验证码校验');
+    if (status.current !== LoginStatus.AWAITING_VERIFICATION) {
+        logger.info('当前状态不是验证码验证状态，无法进行验证码校验');
         return {
             data: null,
             code: 'NOT_IN_STEP',
+            success: false,
             message: '当前状态不是验证码验证，无法进行验证码校验'
         };
     }
-    status.update(Status.VERIFYING_CODE);
-    await loginPage.waitForSelector('#idvPin');
-    await loginPage.$eval('#idvPin', el => el.value = '');
-    await loginPage.type('#idvPin', verificationCode);
-    await loginPage.waitForSelector('#idvPreregisteredPhoneNext > div > button');
-    loginPage.click('#idvPreregisteredPhoneNext > div > button');
+    status.update(LoginStatus.VERIFYING_CODE);
 
-    const errorSelector = '.Ekjuhf'; // 假设这是错误提示的类名
-    const result = await Promise.race([
-            loginPage.waitForNavigation({ timeout: 120 * 1000 }).then(() => {
-            return 'success';
-        }),
-        loginPage.waitForSelector(errorSelector, { timeout: 120 * 1000 }).then(async () => {
-            const errorMessage = await loginPage.$eval(errorSelector, el => el.innerText).catch(() => null);
-            return errorMessage;
-        })
-    ]);
+    // 移除上次报错元素，方便下次输入判断
+    await loginPage.$eval(currentSelectors.errorSelector, el => el.remove()).catch(() => null);
+    try {
+        await loginPage.waitForSelector(currentSelectors.verificationCodeInput);
+        await loginPage.$eval(currentSelectors.verificationCodeInput, el => el.value = '');
+        await loginPage.type(currentSelectors.verificationCodeInput, verificationCode);
+        await loginPage.waitForSelector(currentSelectors.verificationCodeSubmitButton);
+        await loginPage.click(currentSelectors.verificationCodeSubmitButton);
 
-    if(result === 'success'){
-        await loginPage.goto(loginPageUrl, {
-            timeout: 120 * 1000,
-            waitUntil: 'domcontentloaded',
-        });
-        const curPageUrl = loginPage.url();
-        const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
-        if (isLoggedIn) {
-            status.update(Status.ONLINE);
-            loginPage.close();
-            loginPage = null;
-            return {
-                data: null,
-                code: 'VERIFY_SUCCESS',
-                message: '验证成功'
-            };
+        const result = await Promise.race([
+            // loginPage.waitForNavigation({timeout: 120 * 1000}).then(() => {
+            //     return 'success';
+            // }),
+            // 睡眠4s
+            new Promise(resolve => setTimeout(() => resolve('timeout'), 4 * 1000)).then(async()=>{
+                const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
+                if(!errorMessage){
+                    return 'success';
+                }
+                else {
+                    return errorMessage;
+                }
+            }),
+            loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000}).then(async () => {
+                const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
+                return errorMessage;
+            })
+        ]);
+        if (result === 'success') {
+            logger.info('此时的页面内容', await loginPage.url());
+            await loginPage.goto(checkLoginUrl, {
+                timeout: 120 * 1000,
+                waitUntil: 'domcontentloaded',
+            });
+            const curPageUrl = loginPage.url();
+            const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
+            if (isLoggedIn) {
+                if(timeoutId){
+                    clearTimeout(timeoutId);
+                }
+                status.update(LoginStatus.ONLINE);
+                loginPage.close();
+                loginPage = null;
+                return {
+                    data: null,
+                    success: true,
+                    code: 'VERIFY_SUCCESS',
+                    message: '验证成功'
+                };
+            } else {
+                if(timeoutId){
+                    clearTimeout(timeoutId);
+                }
+                // 验证码登录成功了，但是没有权限访问订单
+                status.update(LoginStatus.NO_AUTH_ONLINE);
+                return {
+                    success: true,
+                    data: null,
+                    code: 'NO_ORDER_AUTH',
+                    message: '没有访问权限'
+                };
+            }
         }
         else {
-            status.update(Status.NO_AUTH_ONLINE);
+            // 验证码错误重置为等待验证码状态，提示重试
+            status.update(LoginStatus.AWAITING_VERIFICATION);
             return {
+                code: 'CODE_ERROR',
                 data: null,
-                code: 'NO_ORDER_AUTH',
-                message: '没有访问权限'
+                success: false,
+                message: result || '验证码不正确'
             };
         }
-    } else {
-        // 验证码错误重置为等待验证码状态，提示重试
-        status.update(Status.AWAITING_VERIFICATION);
-        // 移除报错元素，方便下次输入判断
-        await loginPage.$eval('.Ekjuhf', el => el.remove());
-        return {
-            code: 'CODE_ERROR',
-            data: null,
-            message: result
-        };
+    } catch (e){
+        status.update(LoginStatus.AWAITING_VERIFICATION);
+        logger.error(`验证码校验失败: ${e}`, loginPage.url(), await loginPage.content());
     }
 }
 
 const fetchData = async (page) => {
-    if(status.current !== Status.ONLINE){
+    if (status.current !== LoginStatus.ONLINE) {
         return {
             data: {
                 error: 'Not logged in'
             },
+            success: false,
             code: 'NOT_LOGGED_IN',
             message: '当前未登录，无法获取数据'
         }
     }
     try {
         const result = await Promise.race([
-            page.waitForSelector('.particle-table-placeholder', { timeout: 10000 }).then(() => {
-                console.log('数据获取失败');
+            page.waitForSelector('.particle-table-placeholder', {timeout: 10000}).then(() => {
+                logger.info('暂无数据');
                 return 'failure';
             }),
-            page.waitForSelector('.particle-table-row', { timeout: 10000 }).then(() => {
-                console.log('数据获取成功');
+            page.waitForSelector('.particle-table-row', {timeout: 10000}).then(() => {
+                logger.info('数据已获取');
                 return 'success';
             })
         ]);
 
         if (result === 'failure') {
-            await page.close();
+            logger.info('该订单号未查询到数据');
             return {
                 data: null,
-                message: '暂无数据'
+                success: true,
+                message: '暂无数据',
+                code: ''
             };
         }
-
         const rowData = await page.evaluate(() => {
             const row = document.querySelector('.particle-table-row');
             const cells = row.querySelectorAll('ess-cell');
@@ -261,45 +310,54 @@ const fetchData = async (page) => {
             });
             return data;
         });
+        logger.info('该订单号查询到了数据', rowData);
         return {
             data: rowData,
-            message: '数据查询成功'
+            message: '数据查询成功',
+            code: '',
+            success: true,
         };
 
     } catch (error) {
-        console.error(`发生错误：${error}`);
-        return null;
+        logger.error(`发生错误：${error}`);
+        return {
+            data: null,
+            message: '数据查询发生错误',
+            code: 'DATA_SEARCH_ERROR',
+            success: false,
+        };
     }
 };
 
 export const checkLoginStatus = async () => {
     const page = await browser.newPage();
-    await page.goto(loginPageUrl, {
+    await page.goto(checkLoginUrl, {
         timeout: 120 * 1000,
         waitUntil: 'domcontentloaded',
     });
     const curPageUrl = page.url();
-    await page.close();
-    if(curPageUrl === 'https://play.google.com/console/signup'){
-        status.update(Status.NO_AUTH_ONLINE);
+    if (curPageUrl === 'https://play.google.com/console/signup') {
+        status.update(LoginStatus.NO_AUTH_ONLINE);
+        await page.close();
         return true;
     }
     const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
     if (isLoggedIn) {
-        status.update(Status.ONLINE);
+        status.update(LoginStatus.ONLINE);
     }
+    await page.close();
     return isLoggedIn;
 };
 // 删除 tmp 文件夹的函数
 export const clearLogin = async () => {
     try {
         // 递归删除文件夹其内容
-        await rm(folderToDelete, { recursive: true, force: true });
-        status.update(Status.LOGGED_OUT);
+        await rm(folderToDelete, {recursive: true, force: true});
+        status.update(LoginStatus.LOGGED_OUT);
         browser.close();
         initializeBrowser();
-        console.log(`文件夹 ${folderToDelete} 已成功删除`);
+        logger.info(`文件夹 ${folderToDelete} 已成功删除`);
     } catch (error) {
-        console.error(`删除文件夹时发生错误: ${error}`);
+        logger.error(`删除文件夹时发生错误: ${error}`);
     }
 };

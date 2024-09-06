@@ -14,6 +14,7 @@ export const getStatus = async (req, res) => {
         });
     } catch (error) {
         console.error(error);
+        logger.error(`获取状态失败: ${error}`)
         res.status(200).json({
             code: 500,
             data: null,
