@@ -153,6 +153,7 @@ export const verifyCode = async (verificationCode) => {
         return {
             data: null,
             code: 'NO_LOGIN_PAGE',
+            success: false,
             message: '登录页面不存在，请重新登录'
         };
     }
@@ -162,11 +163,14 @@ export const verifyCode = async (verificationCode) => {
         return {
             data: null,
             code: 'NOT_IN_STEP',
+            success: false,
             message: '当前状态不是验证码验证，无法进行验证码校验'
         };
     }
     status.update(LoginStatus.VERIFYING_CODE);
 
+    // 移除上次报错元素，方便下次输入判断
+    await loginPage.$eval(currentSelectors.errorSelector, el => el.remove()).catch(() => null);
     try {
         await loginPage.waitForSelector(currentSelectors.verificationCodeInput);
         await loginPage.$eval(currentSelectors.verificationCodeInput, el => el.value = '');
@@ -178,12 +182,9 @@ export const verifyCode = async (verificationCode) => {
             // loginPage.waitForNavigation({timeout: 120 * 1000}).then(() => {
             //     return 'success';
             // }),
-            // // 睡眠5s
+            // // 睡眠4s
             new Promise(resolve => setTimeout(() => resolve('timeout'), 4 * 1000)).then(async()=>{
-                const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
-                    console.log('el', el);
-                    return el.innerText;
-                }).catch(() => null);
+                const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
                 if(!errorMessage){
                     return 'success';
                 }
@@ -192,10 +193,7 @@ export const verifyCode = async (verificationCode) => {
                 }
             }),
             loginPage.waitForSelector(currentSelectors.errorSelector, {timeout: 120 * 1000}).then(async () => {
-                const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => {
-                    logger.info('验证报错', errorMessage)
-                    return el.innerText;
-                }).catch(() => null);
+                const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
                 return errorMessage;
             })
         ]);
@@ -213,12 +211,15 @@ export const verifyCode = async (verificationCode) => {
                 loginPage = null;
                 return {
                     data: null,
+                    success: true,
                     code: 'VERIFY_SUCCESS',
                     message: '验证成功'
                 };
             } else {
+                // 验证码登录成功了，但是没有权限访问订单
                 status.update(LoginStatus.NO_AUTH_ONLINE);
                 return {
+                    success: true,
                     data: null,
                     code: 'NO_ORDER_AUTH',
                     message: '没有访问权限'
@@ -228,12 +229,11 @@ export const verifyCode = async (verificationCode) => {
         else {
             // 验证码错误重置为等待验证码状态，提示重试
             status.update(LoginStatus.AWAITING_VERIFICATION);
-            // 移除报错元素，方便下次输入判断
-            await loginPage.$eval(currentSelectors.errorSelector, el => el.remove());
             return {
                 code: 'CODE_ERROR',
                 data: null,
-                message: result
+                success: false,
+                message: result || '验证码不正确'
             };
         }
     } catch (e){
@@ -248,6 +248,7 @@ const fetchData = async (page) => {
             data: {
                 error: 'Not logged in'
             },
+            success: false,
             code: 'NOT_LOGGED_IN',
             message: '当前未登录，无法获取数据'
         }
@@ -255,11 +256,11 @@ const fetchData = async (page) => {
     try {
         const result = await Promise.race([
             page.waitForSelector('.particle-table-placeholder', {timeout: 10000}).then(() => {
-                logger.info('数据获取失败');
+                logger.info('暂无数据');
                 return 'failure';
             }),
             page.waitForSelector('.particle-table-row', {timeout: 10000}).then(() => {
-                logger.info('数据获取成功');
+                logger.info('数据已获取');
                 return 'success';
             })
         ]);
@@ -268,7 +269,9 @@ const fetchData = async (page) => {
             await page.close();
             return {
                 data: null,
-                message: '暂无数据'
+                success: [],
+                message: '暂无数据',
+                code: ''
             };
         }
 
@@ -307,12 +310,19 @@ const fetchData = async (page) => {
         });
         return {
             data: rowData,
-            message: '数据查询成功'
+            message: '数据查询成功',
+            code: '',
+            success: true,
         };
 
     } catch (error) {
         logger.error(`发生错误：${error}`);
-        return null;
+        return {
+            data: null,
+            message: '数据查询发送错误',
+            code: 'DATA_SEARCH_ERROR',
+            success: false,
+        };
     }
 };
 
