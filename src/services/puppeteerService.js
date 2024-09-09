@@ -100,7 +100,12 @@ export const getStatus = async () => {
 export const login = async () => {
     await checkLoginStatus();
     if (status.current !== LoginStatus.LOGGED_OUT) {
-        return ;
+        return {
+            data: null,
+            success: false,
+            code: 'NOT_IN_LOGGED_OUT',
+            message: '当前不是未登录状态'
+        };
     }
     const page = await browser.newPage();
     await page.goto(loginPageUrl, {timeout: 120 * 1000});
@@ -115,8 +120,18 @@ export const login = async () => {
     // await page.waitForNavigation({ timeout: 120 * 1000 }); // stable版本的chrome展示不需要，注释
     console.log('currentSelectors.passwordInput', currentSelectors.passwordInput);
     await page.waitForSelector(currentSelectors.passwordInput).catch(async e => {
-        logger.info('未找到密码输入框错误', e);
-        logger.info('此刻页面打印', await page.content());
+        logger.info('未找到密码输入框，此刻页面打印', await page.content());
+        // 检查页面是否出现id 为playCaptchaButton的元素
+        const playCaptchaButton = await page.waitForSelector('#playCaptchaButton');
+        if (playCaptchaButton) {
+            logger.info('出现了图形验证码');
+            return {
+                data: null,
+                success: false,
+                code: 'LOGIN_TOO_MANY',
+                message: '今日登录次数过多已被限制'
+            }
+        }
     });
     await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
     logger.info('已输入用户密码', process.env.USER_PASSWORD);
@@ -142,6 +157,12 @@ export const login = async () => {
             status.update(LoginStatus.LOGGED_OUT);
         }
     }, 10 * 60 * 1000);
+    return {
+        data: null,
+        success: true,
+        code: 200,
+        message: '验证码已发送'
+    }
 }
 
 // 验证码校验
