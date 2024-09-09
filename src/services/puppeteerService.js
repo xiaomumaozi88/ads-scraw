@@ -114,7 +114,10 @@ export const login = async () => {
     logger.info('点击用户名提交', process.env.USER_NAME);
     // await page.waitForNavigation({ timeout: 120 * 1000 }); // stable版本的chrome展示不需要，注释
     console.log('currentSelectors.passwordInput', currentSelectors.passwordInput);
-    await page.waitForSelector(currentSelectors.passwordInput);
+    await page.waitForSelector(currentSelectors.passwordInput).catch(async e => {
+        logger.info('未找到密码输入框错误', e);
+        logger.info('此刻页面打印', await page.content());
+    });
     await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
     logger.info('已输入用户密码', process.env.USER_PASSWORD);
     await page.waitForSelector(currentSelectors.passwordSubmitButton);
