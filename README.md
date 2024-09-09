@@ -8,7 +8,7 @@
 npm run dev
 ```
 
-###.env 文件示例：<br/>
+### .env 文件示例：<br/>
 ```
 USER_NAME=XXX@nibirutech.com
 USER_PASSWORD=XXXX
