@@ -258,14 +258,18 @@ const fetchData = async (page) => {
     }
     try {
         const result = await Promise.race([
-            page.waitForSelector('.particle-table-placeholder', {timeout: 10000}).then(() => {
-                logger.info('暂无数据');
-                return 'failure';
-            }),
-            page.waitForSelector('.particle-table-row', {timeout: 10000}).then(() => {
+            page.waitForSelector('.particle-table-row', {timeout: 60 * 1000}).then(() => {
                 logger.info('数据已获取');
                 return 'success';
-            })
+            }).catch((e)=>{
+                logger.info('获取数据表格元素超时', e);
+            }),
+            page.waitForSelector('.particle-table-placeholder', {timeout: 60 * 1000}).then(() => {
+                logger.info('暂无数据');
+                return 'failure';
+            }).catch((e) => {
+                logger.info('获取空数据提示元素超时', e);
+            }),
         ]);
 
         if (result === 'failure') {
@@ -319,7 +323,7 @@ const fetchData = async (page) => {
         };
 
     } catch (error) {
-        logger.error(`发生错误：${error}`);
+        logger.error(`发生错误：${error}`, await page.content());
         return {
             data: null,
             message: '数据查询发生错误',
