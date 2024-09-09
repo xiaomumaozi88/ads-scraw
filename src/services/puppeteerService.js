@@ -118,10 +118,13 @@ export const login = async () => {
     await page.click(currentSelectors.usernameSubmitButton);
     logger.info('点击用户名提交', process.env.USER_NAME);
     // await page.waitForNavigation({ timeout: 120 * 1000 }); // stable版本的chrome展示不需要，注释
-    console.log('currentSelectors.passwordInput', currentSelectors.passwordInput);
-    await page.waitForSelector(currentSelectors.passwordInput).catch(async e => {
+    try {
+        await page.waitForSelector(currentSelectors.passwordInput);
+        await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
+        logger.info('已输入用户密码', process.env.USER_PASSWORD);
+    }
+    catch (e){
         logger.info('未找到密码输入框，此刻页面打印', await page.content());
-        // 检查页面是否出现id 为playCaptchaButton的元素
         const playCaptchaButton = await page.waitForSelector('#playCaptchaButton');
         if (playCaptchaButton) {
             logger.info('出现了图形验证码');
@@ -129,12 +132,11 @@ export const login = async () => {
                 data: null,
                 success: false,
                 code: 'LOGIN_TOO_MANY',
-                message: '今日登录次数过多已被限制'
+                message: '登录过于频繁已被限制'
             }
         }
-    });
-    await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
-    logger.info('已输入用户密码', process.env.USER_PASSWORD);
+        // logger.info('未出现图形验证码');
+    }
     await page.waitForSelector(currentSelectors.passwordSubmitButton);
     await page.click(currentSelectors.passwordSubmitButton);
     // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
