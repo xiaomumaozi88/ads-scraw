@@ -129,6 +129,16 @@ export const login = async () => {
         const playCaptchaButton = await page.waitForSelector('#playCaptchaButton');
         if (playCaptchaButton) {
             logger.info('出现了图形验证码');
+            //获取 id为 captchaimg 的图片的src属性
+            const captchaSrc = await page.$eval('#captchaimg', (el) => el.src);
+            logger.info('captchaSrc', captchaSrc);
+            // 获取 id 为 captchaAudio 的元素的src属性
+            const captchaAudioSrc = await page.$eval('#captchaAudio', (el) => el.src);
+            logger.info('captchaAudioSrc', captchaAudioSrc);
+
+            logger.info('此时url', await page.url());
+            loginPage = page;
+
             return {
                 data: null,
                 success: false,
@@ -167,6 +177,7 @@ export const login = async () => {
         message: '验证码已发送'
     }
 }
+
 
 // 验证码校验
 export const verifyCode = async (verificationCode) => {
