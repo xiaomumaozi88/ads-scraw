@@ -182,8 +182,8 @@ export const login = async () => {
     }
 }
 export const verifyImgCode = async (imgCode) =>{
-    await loginPage.waitForSelector('input[name="text"]');
-    await loginPage.type('input[name="text"]', imgCode);
+    await loginPage.waitForSelector('input[type="text"]');
+    await loginPage.type('input[type="text"]', imgCode);
 
     await loginPage.waitForSelector(currentSelectors.usernameSubmitButton);
     await loginPage.click(currentSelectors.usernameSubmitButton);
