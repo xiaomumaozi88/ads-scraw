@@ -124,7 +124,8 @@ export const login = async () => {
         logger.info('已输入用户密码', process.env.USER_PASSWORD);
     }
     catch (e){
-        logger.info('未找到密码输入框，此刻页面打印', await page.content());
+        logger.info('查找密码输入框超时了', await page.content());
+        // logger.info('未找到密码输入框，此刻页面打印', await page.content());
         const playCaptchaButton = await page.waitForSelector('#playCaptchaButton');
         if (playCaptchaButton) {
             logger.info('出现了图形验证码');
@@ -294,7 +295,7 @@ const fetchData = async (page) => {
                 logger.info('暂无数据');
                 return 'failure';
             }).catch((e) => {
-                logger.info('获取空数据提示元素超时', e);
+                logger.info('获取空数据提示元素超时');
             }),
         ]);
 
