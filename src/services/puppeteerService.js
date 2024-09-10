@@ -19,7 +19,7 @@ let browser;
 let loginPage; // 登录页面
 let lastSendTime = 0; // 上次发送验证码的时间
 let timeoutId = null; // 存储定时器 ID
-
+let context;
 
 // 状态管理
 const status = {
@@ -140,7 +140,11 @@ export const login = async () => {
             loginPage = page;
 
             return {
-                data: null,
+                data: {
+                    captchaSrc,
+                    captchaAudioSrc,
+                    url: await page.url()
+                },
                 success: false,
                 code: 'LOGIN_TOO_MANY',
                 message: '登录过于频繁已被限制'
@@ -177,6 +181,48 @@ export const login = async () => {
         message: '验证码已发送'
     }
 }
+export const verifyImgCode = async (imgCode) =>{
+    await loginPage.waitForSelector('input[name="text"]');
+    await loginPage.type('input[name="text"]', imgCode);
+
+    await loginPage.waitForSelector(currentSelectors.usernameSubmitButton);
+    await loginPage.click(currentSelectors.usernameSubmitButton);
+    logger.info('点击用户名提交', process.env.USER_NAME);
+    await loginPage.waitForSelector(currentSelectors.passwordInput);
+    await loginPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
+    logger.info('已输入用户密码', process.env.USER_PASSWORD);
+
+    await loginPage.waitForSelector(currentSelectors.passwordSubmitButton);
+    await loginPage.click(currentSelectors.passwordSubmitButton);
+    // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
+
+    status.update(LoginStatus.AWAITING_VERIFICATION);
+    loginPage = page;
+    lastSendTime = new Date().valueOf();
+    logger.info('验证码已发送');
+
+    // 清除之前的定时器
+    if (timeoutId) {
+        clearTimeout(timeoutId);
+    }
+    // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
+    timeoutId = setTimeout(async () => {
+        if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - lastSendTime > 10 * 60 * 1000) {
+            logger.info('验证码超过十分钟未填写，重置登录流程');
+            await loginPage.close();
+            loginPage = null;
+            status.update(LoginStatus.LOGGED_OUT);
+        }
+    }, 10 * 60 * 1000);
+    return {
+        data: null,
+        success: true,
+        code: 200,
+        message: '验证码已发送'
+    }
+
+}
+
 
 
 // 验证码校验
