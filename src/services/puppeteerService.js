@@ -100,7 +100,12 @@ export const getStatus = async () => {
 export const login = async () => {
     await checkLoginStatus();
     if (status.current !== LoginStatus.LOGGED_OUT) {
-        return ;
+        return {
+            data: null,
+            success: false,
+            code: 'NOT_IN_LOGGED_OUT',
+            message: '当前不是未登录状态'
+        };
     }
     const page = await browser.newPage();
     await page.goto(loginPageUrl, {timeout: 120 * 1000});
@@ -113,10 +118,26 @@ export const login = async () => {
     await page.click(currentSelectors.usernameSubmitButton);
     logger.info('点击用户名提交', process.env.USER_NAME);
     // await page.waitForNavigation({ timeout: 120 * 1000 }); // stable版本的chrome展示不需要，注释
-    console.log('currentSelectors.passwordInput', currentSelectors.passwordInput);
-    await page.waitForSelector(currentSelectors.passwordInput);
-    await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
-    logger.info('已输入用户密码', process.env.USER_PASSWORD);
+    try {
+        await page.waitForSelector(currentSelectors.passwordInput);
+        await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
+        logger.info('已输入用户密码', process.env.USER_PASSWORD);
+    }
+    catch (e){
+        logger.info('查找密码输入框超时了', await page.content());
+        // logger.info('未找到密码输入框，此刻页面打印', await page.content());
+        const playCaptchaButton = await page.waitForSelector('#playCaptchaButton');
+        if (playCaptchaButton) {
+            logger.info('出现了图形验证码');
+            return {
+                data: null,
+                success: false,
+                code: 'LOGIN_TOO_MANY',
+                message: '登录过于频繁已被限制'
+            }
+        }
+        // logger.info('未出现图形验证码');
+    }
     await page.waitForSelector(currentSelectors.passwordSubmitButton);
     await page.click(currentSelectors.passwordSubmitButton);
     // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
@@ -139,6 +160,12 @@ export const login = async () => {
             status.update(LoginStatus.LOGGED_OUT);
         }
     }, 10 * 60 * 1000);
+    return {
+        data: null,
+        success: true,
+        code: 200,
+        message: '验证码已发送'
+    }
 }
 
 // 验证码校验
@@ -268,7 +295,7 @@ const fetchData = async (page) => {
                 logger.info('暂无数据');
                 return 'failure';
             }).catch((e) => {
-                logger.info('获取空数据提示元素超时', e);
+                logger.info('获取空数据提示元素超时');
             }),
         ]);
 
