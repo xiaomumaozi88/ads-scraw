@@ -138,7 +138,7 @@ export const login = async () => {
             logger.info('captchaAudioSrc', captchaAudioSrc);
 
             logger.info('此时url', await page.url());
-            loginPage = page;
+            imgPage = page;
 
             return {
                 data: {
