@@ -17,6 +17,7 @@ const folderToDelete = join(__dirname, '../../tmp');
 
 let browser;
 let loginPage; // 登录页面
+let imgPage;
 let lastSendTime = 0; // 上次发送验证码的时间
 let timeoutId = null; // 存储定时器 ID
 let context;
@@ -182,22 +183,22 @@ export const login = async () => {
     }
 }
 export const verifyImgCode = async (imgCode) =>{
-    await loginPage.waitForSelector('input[type="text"]');
-    await loginPage.type('input[type="text"]', imgCode);
+    await imgPage.waitForSelector('input[type="text"]');
+    await imgPage.type('input[type="text"]', imgCode);
 
-    await loginPage.waitForSelector(currentSelectors.usernameSubmitButton);
-    await loginPage.click(currentSelectors.usernameSubmitButton);
+    await imgPage.waitForSelector(currentSelectors.usernameSubmitButton);
+    await imgPage.click(currentSelectors.usernameSubmitButton);
     logger.info('点击用户名提交', process.env.USER_NAME);
-    await loginPage.waitForSelector(currentSelectors.passwordInput);
-    await loginPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
+    await imgPage.waitForSelector(currentSelectors.passwordInput);
+    await imgPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
     logger.info('已输入用户密码', process.env.USER_PASSWORD);
 
-    await loginPage.waitForSelector(currentSelectors.passwordSubmitButton);
-    await loginPage.click(currentSelectors.passwordSubmitButton);
+    await imgPage.waitForSelector(currentSelectors.passwordSubmitButton);
+    await imgPage.click(currentSelectors.passwordSubmitButton);
     // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
 
     status.update(LoginStatus.AWAITING_VERIFICATION);
-    loginPage = page;
+    loginPage = imgPage;
     lastSendTime = new Date().valueOf();
     logger.info('验证码已发送');
 
