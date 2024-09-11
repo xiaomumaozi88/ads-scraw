@@ -5,7 +5,7 @@ import {rm} from 'fs/promises';
 import {join} from 'path';
 import {fileURLToPath} from 'url';
 import {dirname} from 'path';
-import {LoginStatus} from '../constants/index.js'
+import {LoginStatus} from '../constants/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 // 获取当前目录的绝对路径
@@ -73,11 +73,11 @@ export const closeBrowser = async () => {
     }
 };
 
-export const scrapeData = async (orderId) => {
+export const scrapeData = async (orderId, accountId) => {
     try {
-        logger.info(`接收到订单号: ${orderId}`);
+        logger.info(`接收到订单号: ${orderId}, accountId:${accountId}`);
         const page = await browser.newPage();
-        const orderUrl = `https://play.google.com/console/u/0/developers/${process.env.ACCOUNT_ID}/orders?search=${orderId}&from=2008-01-01&to=${curDate()}`;
+        const orderUrl = `https://play.google.com/console/u/0/developers/${accountId}/orders?search=${orderId}&from=2008-01-01&to=${curDate()}`;
         await page.goto(orderUrl, {timeout: 120 * 1000, waitUntil: 'domcontentloaded'});
         const result = await fetchData(page);
         page?.close && page.close();
@@ -224,8 +224,6 @@ export const verifyImgCode = async (imgCode) =>{
 
 }
 
-
-
 // 验证码校验
 export const verifyCode = async (verificationCode) => {
 
@@ -264,7 +262,7 @@ export const verifyCode = async (verificationCode) => {
             // loginPage.waitForNavigation({timeout: 120 * 1000}).then(() => {
             //     return 'success';
             // }),
-            // 睡眠4s
+            // 设置4s等待时间，如果4s后仍然没有检查到验证码错误提示，则认为验证成功
             new Promise(resolve => setTimeout(() => resolve('timeout'), 4 * 1000)).then(async()=>{
                 const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
                 if(!errorMessage){
