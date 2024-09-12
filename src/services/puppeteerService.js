@@ -94,16 +94,12 @@ export const getStatus = async () => {
     if(status.current === LoginStatus.AWAITING_IMG_CODE){
         const captchaImgSrc = imgPage? await imgPage.$eval('#captchaimg', (el) => el.src): '';
         return {
-            data: {
-                status: status.current,
-                captchaImgSrc
-            },
-            message: '当前状态为等待提交图形验证码状态'
+            status: status.current,
+            captchaImgSrc
         };
     }
     return {
-        data: status.current,
-        message: '当前状态'
+        status: status.current,
     };
 };
 
