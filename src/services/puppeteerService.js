@@ -91,11 +91,38 @@ export const scrapeData = async (orderId, accountId) => {
 
 // 查询当前状态
 export const getStatus = async () => {
+    if(status.current === LoginStatus.AWAITING_IMG_CODE){
+        const captchaImgSrc = imgPage? await imgPage.$eval('#captchaimg', (el) => el.src): '';
+        return {
+            data: {
+                status: status.current,
+                captchaImgSrc
+            },
+            message: '当前状态为等待提交图形验证码状态'
+        };
+    }
     return {
         data: status.current,
         message: '当前状态'
     };
 };
+
+
+const timerIdManage = () =>{
+    // 清除之前的定时器
+    if (timeoutId) {
+        clearTimeout(timeoutId);
+    }
+    // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
+    timeoutId = setTimeout(async () => {
+        if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - lastSendTime > 10 * 60 * 1000) {
+            logger.info('验证码超过十分钟未填写，重置登录流程');
+            await loginPage.close();
+            loginPage = null;
+            status.update(LoginStatus.LOGGED_OUT);
+        }
+    }, 10 * 60 * 1000);
+}
 
 // 发起登录，发验证码给管理员
 export const login = async () => {
@@ -130,25 +157,26 @@ export const login = async () => {
         const playCaptchaButton = await page.waitForSelector('#playCaptchaButton');
         if (playCaptchaButton) {
             logger.info('出现了图形验证码');
+
             //获取 id为 captchaimg 的图片的src属性
-            const captchaSrc = await page.$eval('#captchaimg', (el) => el.src);
-            logger.info('captchaSrc', captchaSrc);
-            // 获取 id 为 captchaAudio 的元素的src属性
-            const captchaAudioSrc = await page.$eval('#captchaAudio', (el) => el.src);
-            logger.info('captchaAudioSrc', captchaAudioSrc);
+            const captchaImgSrc = await page.$eval('#captchaimg', (el) => el.src);
+            logger.info('captchaSrc', captchaImgSrc);
 
             logger.info('此时url', await page.url());
             imgPage = page;
 
+            // 更新状态为等待图形验证码提交
+            status.update(LoginStatus.AWAITING_IMG_CODE);
+
+            timerIdManage();
+
             return {
                 data: {
-                    captchaSrc,
-                    captchaAudioSrc,
-                    url: await page.url()
+                    captchaImgSrc,
                 },
                 success: false,
-                code: 'LOGIN_TOO_MANY',
-                message: '登录过于频繁已被限制'
+                code: 'NEED_IMG_CODE',
+                message: '需要校验图形验证码'
             }
         }
         // logger.info('未出现图形验证码');
@@ -162,19 +190,20 @@ export const login = async () => {
     lastSendTime = new Date().valueOf();
     logger.info('验证码已发送');
 
-    // 清除之前的定时器
-    if (timeoutId) {
-        clearTimeout(timeoutId);
-    }
-    // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
-    timeoutId = setTimeout(async () => {
-        if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - lastSendTime > 10 * 60 * 1000) {
-            logger.info('验证码超过十分钟未填写，重置登录流程');
-            await loginPage.close();
-            loginPage = null;
-            status.update(LoginStatus.LOGGED_OUT);
-        }
-    }, 10 * 60 * 1000);
+    timerIdManage();
+    // // 清除之前的定时器
+    // if (timeoutId) {
+    //     clearTimeout(timeoutId);
+    // }
+    // // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
+    // timeoutId = setTimeout(async () => {
+    //     if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - lastSendTime > 10 * 60 * 1000) {
+    //         logger.info('验证码超过十分钟未填写，重置登录流程');
+    //         await loginPage.close();
+    //         loginPage = null;
+    //         status.update(LoginStatus.LOGGED_OUT);
+    //     }
+    // }, 10 * 60 * 1000);
     return {
         data: null,
         success: true,
@@ -182,44 +211,133 @@ export const login = async () => {
         message: '验证码已发送'
     }
 }
+
+export const refreshImgCode = async () =>{
+    if(!imgPage) return {
+        data: null,
+        success: false,
+        code: 500,
+        message: '未找到图形验证码页面'
+    }
+
+    await imgPage.goto(loginPageUrl, {timeout: 120 * 1000});
+
+    await imgPage.waitForSelector(currentSelectors.usernameInput);
+    await imgPage.type(currentSelectors.usernameInput, process.env.USER_NAME);
+    try{
+        const playCaptchaButton = await imgPage.waitForSelector('#playCaptchaButton');
+        if (playCaptchaButton) {
+            logger.info('刷新出了图形验证码');
+            //获取 id为 captchaimg 的图片的src属性
+            const captchaImgSrc = await imgPage.$eval('#captchaimg', (el) => el.src);
+            logger.info('captchaSrc', captchaImgSrc);
+            // 更新状态为等待图形验证码提交
+            status.update(LoginStatus.AWAITING_IMG_CODE);
+
+            timerIdManage();
+
+            return {
+                data: {
+                    captchaImgSrc,
+                },
+                success: true,
+                code: '',
+                message: '刷新验证码成功'
+            }
+        }
+    } catch (e){
+        return {
+            data: {
+                captchaImgSrc: '',
+            },
+            success: false,
+            code: '',
+            message: '刷新验证码失败'
+        }
+    }
+}
+
 export const verifyImgCode = async (imgCode) =>{
+
+    if(!imgPage){
+        return {
+            data: null,
+            success: false,
+            code: 500,
+            message: '未找到图形验证码页面'
+        }
+    }
+    if(status.current !== LoginStatus.AWAITING_IMG_CODE){
+        return {
+            data: null,
+            success: false,
+            code: 500,
+            message: '当前不是等待图形验证码状态'
+        }
+    }
     await imgPage.waitForSelector('input[type="text"]');
     await imgPage.type('input[type="text"]', imgCode);
 
-    await imgPage.waitForSelector(currentSelectors.usernameSubmitButton);
-    await imgPage.click(currentSelectors.usernameSubmitButton);
-    logger.info('点击用户名提交', process.env.USER_NAME);
-    await imgPage.waitForSelector(currentSelectors.passwordInput);
-    await imgPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
-    logger.info('已输入用户密码', process.env.USER_PASSWORD);
+    const result = await Promise.race([
+        // 设置4s等待时间，如果4s后仍然没有检查到密码输入框，则认为图形验证码验证失败;否则成功
+        new Promise(resolve => setTimeout(() => resolve('timeout'), 4 * 1000)).then(async()=>{
+            const messageInput = await imgPage.waitForSelector(currentSelectors.passwordInput).catch(() => null);
+            if(!messageInput){
+                return 'failed';
+            }
+            return 'success';
+        }),
+        imgPage.waitForSelector(currentSelectors.passwordInput, {timeout: 120 * 1000}).then(async () => {
+            return 'success';
+        })
+    ]);
+    if (result === 'success') {
+        await imgPage.waitForSelector(currentSelectors.usernameSubmitButton);
+        await imgPage.click(currentSelectors.usernameSubmitButton);
+        logger.info('点击用户名提交', process.env.USER_NAME);
+        await imgPage.waitForSelector(currentSelectors.passwordInput);
+        await imgPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
+        logger.info('已输入用户密码', process.env.USER_PASSWORD);
 
-    await imgPage.waitForSelector(currentSelectors.passwordSubmitButton);
-    await imgPage.click(currentSelectors.passwordSubmitButton);
-    // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
+        await imgPage.waitForSelector(currentSelectors.passwordSubmitButton);
+        await imgPage.click(currentSelectors.passwordSubmitButton);
+        // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
 
-    status.update(LoginStatus.AWAITING_VERIFICATION);
-    loginPage = imgPage;
-    lastSendTime = new Date().valueOf();
-    logger.info('验证码已发送');
-
-    // 清除之前的定时器
-    if (timeoutId) {
-        clearTimeout(timeoutId);
-    }
-    // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
-    timeoutId = setTimeout(async () => {
-        if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - lastSendTime > 10 * 60 * 1000) {
-            logger.info('验证码超过十分钟未填写，重置登录流程');
-            await loginPage.close();
-            loginPage = null;
-            status.update(LoginStatus.LOGGED_OUT);
+        status.update(LoginStatus.AWAITING_VERIFICATION);
+        loginPage = imgPage;
+        imgPage = null;
+        lastSendTime = new Date().valueOf();
+        logger.info('验证码已发送');
+        timerIdManage();
+        // // 清除之前的定时器
+        // if (timeoutId) {
+        //     clearTimeout(timeoutId);
+        // }
+        // // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
+        // timeoutId = setTimeout(async () => {
+        //     if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - lastSendTime > 10 * 60 * 1000) {
+        //         logger.info('验证码超过十分钟未填写，重置登录流程');
+        //         await loginPage.close();
+        //         loginPage = null;
+        //         status.update(LoginStatus.LOGGED_OUT);
+        //     }
+        // }, 10 * 60 * 1000);
+        return {
+            data: null,
+            success: true,
+            code: 200,
+            message: '验证码已发送'
         }
-    }, 10 * 60 * 1000);
-    return {
-        data: null,
-        success: true,
-        code: 200,
-        message: '验证码已发送'
+    }
+    else {
+        // 验证码错误重置为等待验证码状态，提示重试
+        status.update(LoginStatus.AWAITING_IMG_CODE);
+        return {
+            code: 'CODE_ERROR',
+            data: null,
+            success: false,
+            message: `填写图形验证码：${imgCode}不正确`
+        };
     }
 
 }

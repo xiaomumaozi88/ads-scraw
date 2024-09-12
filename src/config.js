@@ -4,7 +4,7 @@ export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
         width: 1000,
         height: 800,
     },
-    headless: true, // 是否不打开浏览器
+    headless: false, // 是否不打开浏览器
     userDataDir: "tmp/gpc_order_spider_usr_dir3",
     executablePath: '/usr/bin/google-chrome', // 运用额外装置的谷歌浏览器
     args: [
