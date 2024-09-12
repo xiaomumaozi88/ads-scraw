@@ -332,6 +332,7 @@ export const verifyImgCode = async (imgCode) =>{
     else {
         // 验证码错误重置为等待验证码状态，提示重试
         status.update(LoginStatus.AWAITING_IMG_CODE);
+        logger.info('图形验证码错误', await imgPage.content());
         return {
             code: 'CODE_ERROR',
             data: null,
