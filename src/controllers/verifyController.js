@@ -11,7 +11,7 @@ export const verify = async (req, res) => {
     }
     try {
         const data = await puppeteerService.verifyCode(code);
-        res.status(200).json({ data: data.data, success: true, code: data.code, message: data.message });
+        res.status(200).json({ ...data});
     } catch (error) {
         console.error(error);
         res.status(200).json({ data: null, success: false, code: 500, message: '' });

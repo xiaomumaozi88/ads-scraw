@@ -1,10 +1,41 @@
 // src/config.js
-export const puppeteerOptions = {
+export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
     defaultViewport: {
         width: 1000,
         height: 800,
     },
     headless: true, // 是否不打开浏览器
+    userDataDir: "tmp/gpc_order_spider_usr_dir3",
+    executablePath: '/usr/bin/google-chrome', // 运用额外装置的谷歌浏览器
+    args: [
+        '--no-sandbox',
+        '--disable-client-side-phishing-detection',
+        '--disable-setuid-sandbox',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-popup-blocking',
+        '--disable-offer-store-unmasked-wallet-cards',
+        '--disable-speech-api',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--no-zygote',
+        // '--single-process',
+        // '--disable-gpu',
+    ],
+} : {
+    defaultViewport: {
+        width: 1000,
+        height: 800,
+    },
+    headless: false, // 是否不打开浏览器
     userDataDir: "tmp/gpc_order_spider_usr_dir3",
     args: [
         '--no-sandbox',
@@ -26,5 +57,7 @@ export const puppeteerOptions = {
         '--password-store=basic',
         '--use-mock-keychain',
         '--no-zygote',
+        // '--single-process',
+        // '--disable-gpu',
     ],
 };

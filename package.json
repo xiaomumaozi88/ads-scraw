@@ -1,7 +1,7 @@
 {
   "name": "gp-order",
   "version": "1.0.0",
-  "description": "gp order",
+  "description": "谷歌订单查询爬虫服务",
   "main": "app.js",
   "type": "module",
   "dependencies": {
@@ -9,19 +9,17 @@
     "puppeteer": "^23.1.0",
     "readline": "^1.3.0",
     "log4js": "^6.9.1",
-    "dotenv": "^16.0.3"
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "dayjs": "^1.11.9",
+    "cross-env": "^5.2.0",
+    "chrome-finder": "^1.0.7",
+    "chrome-launcher": "^1.0.0"
   },
   "scripts": {
-    "start": "node app.js",
-    "dev": "nodemon app.js",
-    "test": "mocha tests --recursive --timeout 5000",
-    "test-single": "mocha",
-    "shell": "node --experimental-repl-await ./shell.js",
-    "generate-docs": "jsdoc --configure .jsdoc.json --verbose",
-    "aics-docs": "node build/aicsDocs.js",
-    "start-docs": "live-server ./aicsDocs/", "node-fetch": "^3.3.0",
-    "start-quick": "cross-env QUICK=true node app.js",
-    "update-ws": "git pull https://github.com/pedroslopez/whatsapp-web.js.git main"
+    "build": "",
+    "start": "cross-env NODE_ENV=production node app.js ",
+    "dev": "cross-env NODE_ENV=development nodemon app.js"
   },
   "engines": {
     "node": ">=16.0.0"
