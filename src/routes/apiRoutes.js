@@ -5,6 +5,7 @@ import * as statusController from '../controllers/statusController.js';
 import * as verifyController from '../controllers/verifyController.js';
 import * as loginController from '../controllers/loginController.js';
 import * as clearLoginController from '../controllers/clearLoginController.js';
+import * as verifyImgCodeController from '../controllers/verifyIngCodeController.js';
 
 const router = Router();
 
@@ -13,5 +14,6 @@ router.get('/status', statusController.getStatus);
 router.post('/verify_code', verifyController.verify);
 router.post('/login', loginController.login);
 router.post('/clearLogin', clearLoginController.clearLogin);
+router.post('/verifyImgCode', verifyImgCodeController.verifyImgCodeFn)
 
 export default router;
