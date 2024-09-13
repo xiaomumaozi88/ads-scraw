@@ -113,8 +113,14 @@ const timerIdManage = () =>{
     timeoutId = setTimeout(async () => {
         if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - lastSendTime > 10 * 60 * 1000) {
             logger.info('验证码超过十分钟未填写，重置登录流程');
-            await loginPage.close();
-            loginPage = null;
+            if(loginPage){
+                await loginPage.close();
+                loginPage = null;
+            }
+            if(imgPage){
+                await imgPage.close();
+                imgPage = null;
+            }
             status.update(LoginStatus.LOGGED_OUT);
         }
     }, 10 * 60 * 1000);
