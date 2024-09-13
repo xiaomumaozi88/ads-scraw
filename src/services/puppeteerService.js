@@ -222,10 +222,22 @@ export const refreshImgCode = async () =>{
         message: '未找到图形验证码页面'
     }
 
+    const captchaimg = await imgPage.waitForSelector('#captchaimg');
+
+    // 点击
+    await captchaimg.click();
+
+    logger.info('点击图形验证码后的验证码图片地址', await imgPage.$eval('#captchaimg', (el) => el.src))
+
     await imgPage.goto(loginPageUrl, {timeout: 120 * 1000});
+    logger.info('刷新图形验证码-跳转');
 
     await imgPage.waitForSelector(currentSelectors.usernameInput);
     await imgPage.type(currentSelectors.usernameInput, process.env.USER_NAME);
+    logger.info('刷新图形验证码-输入了用户名');
+    await imgPage.waitForSelector(currentSelectors.usernameSubmitButton);
+    await imgPage.click(currentSelectors.usernameSubmitButton);
+    logger.info('刷新图形验证码-点击了用户了提交按钮');
     try{
         const playCaptchaButton = await imgPage.waitForSelector('#playCaptchaButton');
         if (playCaptchaButton) {
@@ -248,6 +260,8 @@ export const refreshImgCode = async () =>{
             }
         }
     } catch (e){
+        console.log('刷新验证码失败', e);
+        console.log('刷新验证码失败时的页面', await imgPage.content());
         return {
             data: {
                 captchaImgSrc: '',
