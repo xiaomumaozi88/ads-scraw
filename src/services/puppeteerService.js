@@ -294,6 +294,9 @@ export const verifyImgCode = async (imgCode) =>{
     await imgPage.waitForSelector('input[type="text"]');
     await imgPage.type('input[type="text"]', imgCode);
 
+    await imgPage.waitForSelector(currentSelectors.usernameSubmitButton);
+    await imgPage.click(currentSelectors.usernameSubmitButton);
+    logger.info('yangz图形验证码-点击了用户了提交按钮');
     const result = await Promise.race([
         // 设置4s等待时间，如果4s后仍然没有检查到密码输入框，则认为图形验证码验证失败;否则成功
         new Promise(resolve => setTimeout(() => resolve('timeout'), 4 * 1000)).then(async()=>{
