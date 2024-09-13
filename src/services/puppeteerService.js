@@ -311,9 +311,6 @@ export const verifyImgCode = async (imgCode) =>{
         })
     ]);
     if (result === 'success') {
-        await imgPage.waitForSelector(currentSelectors.usernameSubmitButton);
-        await imgPage.click(currentSelectors.usernameSubmitButton);
-        logger.info('点击用户名提交', process.env.USER_NAME);
         await imgPage.waitForSelector(currentSelectors.passwordInput);
         await imgPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
         logger.info('已输入用户密码', process.env.USER_PASSWORD);
