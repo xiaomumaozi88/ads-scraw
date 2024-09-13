@@ -222,29 +222,21 @@ export const refreshImgCode = async () =>{
         message: '未找到图形验证码页面'
     }
 
-    const captchaimg = await imgPage.waitForSelector('#captchaimg');
-
-    // 点击
-    await captchaimg.click();
-
-    logger.info('点击图形验证码后的验证码图片地址', await imgPage.$eval('#captchaimg', (el) => el.src))
-
     await imgPage.goto(loginPageUrl, {timeout: 120 * 1000});
-    logger.info('刷新图形验证码-跳转');
 
     await imgPage.waitForSelector(currentSelectors.usernameInput);
     await imgPage.type(currentSelectors.usernameInput, process.env.USER_NAME);
-    logger.info('刷新图形验证码-输入了用户名');
+    logger.info('刷新图形验证码-重新载入页面后输入了用户名');
+
     await imgPage.waitForSelector(currentSelectors.usernameSubmitButton);
     await imgPage.click(currentSelectors.usernameSubmitButton);
-    logger.info('刷新图形验证码-点击了用户了提交按钮');
+    logger.info('刷新图形验证码-点击了用户名提交按钮');
     try{
         const playCaptchaButton = await imgPage.waitForSelector('#playCaptchaButton');
         if (playCaptchaButton) {
-            logger.info('刷新出了图形验证码');
             //获取 id为 captchaimg 的图片的src属性
             const captchaImgSrc = await imgPage.$eval('#captchaimg', (el) => el.src);
-            logger.info('captchaSrc', captchaImgSrc);
+            logger.info('刷新出了新的图形验证码', captchaImgSrc);
             // 更新状态为等待图形验证码提交
             status.update(LoginStatus.AWAITING_IMG_CODE);
 
@@ -296,7 +288,7 @@ export const verifyImgCode = async (imgCode) =>{
 
     await imgPage.waitForSelector(currentSelectors.usernameSubmitButton);
     await imgPage.click(currentSelectors.usernameSubmitButton);
-    logger.info('yangz图形验证码-点击了用户了提交按钮');
+    logger.info('验证图形验证码-点击了用户了提交按钮');
     const result = await Promise.race([
         // 设置4s等待时间，如果4s后仍然没有检查到密码输入框，则认为图形验证码验证失败;否则成功
         new Promise(resolve => setTimeout(() => resolve('timeout'), 4 * 1000)).then(async()=>{
@@ -313,8 +305,7 @@ export const verifyImgCode = async (imgCode) =>{
     if (result === 'success') {
         await imgPage.waitForSelector(currentSelectors.passwordInput);
         await imgPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
-        logger.info('已输入用户密码', process.env.USER_PASSWORD);
-
+        logger.info('图形验证码验证成功，已输入用户密码', process.env.USER_PASSWORD);
         await imgPage.waitForSelector(currentSelectors.passwordSubmitButton);
         await imgPage.click(currentSelectors.passwordSubmitButton);
         // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
@@ -323,21 +314,8 @@ export const verifyImgCode = async (imgCode) =>{
         loginPage = imgPage;
         imgPage = null;
         lastSendTime = new Date().valueOf();
-        logger.info('验证码已发送');
+        logger.info('图形验证码通过，验证码已发送到对应手机号');
         timerIdManage();
-        // // 清除之前的定时器
-        // if (timeoutId) {
-        //     clearTimeout(timeoutId);
-        // }
-        // // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
-        // timeoutId = setTimeout(async () => {
-        //     if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - lastSendTime > 10 * 60 * 1000) {
-        //         logger.info('验证码超过十分钟未填写，重置登录流程');
-        //         await loginPage.close();
-        //         loginPage = null;
-        //         status.update(LoginStatus.LOGGED_OUT);
-        //     }
-        // }, 10 * 60 * 1000);
         return {
             data: null,
             success: true,
@@ -394,9 +372,6 @@ export const verifyCode = async (verificationCode) => {
         await loginPage.click(currentSelectors.verificationCodeSubmitButton);
 
         const result = await Promise.race([
-            // loginPage.waitForNavigation({timeout: 120 * 1000}).then(() => {
-            //     return 'success';
-            // }),
             // 设置4s等待时间，如果4s后仍然没有检查到验证码错误提示，则认为验证成功
             new Promise(resolve => setTimeout(() => resolve('timeout'), 4 * 1000)).then(async()=>{
                 const errorMessage = await loginPage.$eval(currentSelectors.errorSelector, el => el.innerText).catch(() => null);
@@ -413,7 +388,6 @@ export const verifyCode = async (verificationCode) => {
             })
         ]);
         if (result === 'success') {
-            logger.info('此时的页面内容', await loginPage.url());
             await loginPage.goto(checkLoginUrl, {
                 timeout: 120 * 1000,
                 waitUntil: 'domcontentloaded',
