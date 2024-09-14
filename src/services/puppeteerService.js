@@ -176,7 +176,7 @@ export const login = async () => {
                 data: {
                     captchaImgSrc,
                 },
-                success: false,
+                success: true,
                 code: 'NEED_IMG_CODE',
                 message: '需要校验图形验证码'
             }
