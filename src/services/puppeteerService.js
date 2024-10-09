@@ -91,6 +91,8 @@ export const scrapeData = async (orderId, accountId) => {
 
 // 查询当前状态
 export const getStatus = async () => {
+    await checkLoginStatus();
+    logger.info(`当前登录状态: ${status.current}`)
     return {
         data: status.current,
         message: '当前状态'
