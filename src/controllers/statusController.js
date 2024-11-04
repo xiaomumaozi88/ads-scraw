@@ -3,7 +3,6 @@ import * as puppeteerService from '../services/puppeteerService.js';
 export const getStatus = async (req, res) => {
     try {
         const statusObj = await puppeteerService.getStatus();
-
         res.json({
             code: 200,
             data: statusObj,
