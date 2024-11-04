@@ -50,7 +50,7 @@ const selectors = {
         verificationCodeInput: 'input[name="Pin"]',
         verificationCodeSubmitButton: '#idvPreregisteredPhoneNext',
         errorSelector: 'span[jsslot]', // 更新为新的错误提示选择器
-        totpNext: 'totpNext'
+        totpNext: '#totpNext'
     }
 };
 
@@ -306,6 +306,7 @@ export const verifyImgCode = async (imgCode) =>{
         })
     ]);
     if (result === 'success') {
+
         await imgPage.waitForSelector(currentSelectors.passwordInput);
         await imgPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD);
         logger.info('图形验证码验证成功，已输入用户密码', process.env.USER_PASSWORD);
@@ -371,11 +372,9 @@ export const verifyCode = async (verificationCode) => {
         await loginPage.waitForSelector(currentSelectors.verificationCodeInput);
         await loginPage.$eval(currentSelectors.verificationCodeInput, el => el.value = '');
         await loginPage.type(currentSelectors.verificationCodeInput, verificationCode);
-        // 验证器验证码提交按钮
-        await loginPage.$eval(currentSelectors.totpNext, el => el.click()).catch(() => null);
-        // 手机验证码提交按钮
-        await loginPage.$eval(currentSelectors.verificationCodeSubmitButton, el => el.click()).catch(() => null);
 
+        await loginPage.waitForSelector(currentSelectors.totpNext);
+        await loginPage.click(currentSelectors.totpNext);
 
         const result = await Promise.race([
             // 设置4s等待时间，如果4s后仍然没有检查到验证码错误提示，则认为验证成功
@@ -394,6 +393,8 @@ export const verifyCode = async (verificationCode) => {
             })
         ]);
         if (result === 'success') {
+            // 睡眠3s
+            await new Promise(resolve => setTimeout(resolve, 3000));
             await loginPage.goto(checkLoginUrl, {
                 timeout: 120 * 1000,
                 waitUntil: 'domcontentloaded',
