@@ -37,11 +37,11 @@ app.use(bodyParser.json());
 (async () => {
     await puppeteerService.initializeBrowser();
     await puppeteerService.checkLoginStatus();
-    // 定时检查登录状态，每隔 10 分钟（600000 毫秒）执行一次
+    // 定时检查登录状态，每隔 1 分钟（60000 毫秒）执行一次
     setInterval(async () => {
         const data = await puppeteerService.getStatus();
-        logger.info(`当前登录状态: ${data.status}`)
-    }, 600000); // 每 10 分钟检查一次
+        logger.info(`自动更新当前登录状态: ${data.data}`)
+    }, 60000); // 每 1 分钟检查一次
 })();
 
 // 使用 API 路由

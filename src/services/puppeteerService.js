@@ -49,7 +49,8 @@ const selectors = {
         passwordSubmitButton: '#passwordNext',
         verificationCodeInput: 'input[name="Pin"]',
         verificationCodeSubmitButton: '#idvPreregisteredPhoneNext',
-        errorSelector: 'span[jsslot]' // 更新为新的错误提示选择器
+        errorSelector: 'span[jsslot]', // 更新为新的错误提示选择器
+        totpNext: 'totpNext'
     }
 };
 
@@ -91,6 +92,8 @@ export const scrapeData = async (orderId, accountId) => {
 
 // 查询当前状态
 export const getStatus = async () => {
+    await checkLoginStatus();
+    logger.info(`当前登录状态: ${status.current}`)
     if(status.current === LoginStatus.AWAITING_IMG_CODE){
         const captchaImgSrc = imgPage? await imgPage.$eval('#captchaimg', (el) => el.src): '';
         return {
@@ -368,8 +371,11 @@ export const verifyCode = async (verificationCode) => {
         await loginPage.waitForSelector(currentSelectors.verificationCodeInput);
         await loginPage.$eval(currentSelectors.verificationCodeInput, el => el.value = '');
         await loginPage.type(currentSelectors.verificationCodeInput, verificationCode);
-        await loginPage.waitForSelector(currentSelectors.verificationCodeSubmitButton);
-        await loginPage.click(currentSelectors.verificationCodeSubmitButton);
+        // 验证器验证码提交按钮
+        await loginPage.$eval(currentSelectors.totpNext, el => el.click()).catch(() => null);
+        // 手机验证码提交按钮
+        await loginPage.$eval(currentSelectors.verificationCodeSubmitButton, el => el.click()).catch(() => null);
+
 
         const result = await Promise.race([
             // 设置4s等待时间，如果4s后仍然没有检查到验证码错误提示，则认为验证成功
@@ -541,6 +547,17 @@ export const checkLoginStatus = async () => {
     if (isLoggedIn) {
         status.update(LoginStatus.ONLINE);
     }
+    // 查看页面有没有出现 data-value="googleplay_web@nibirutech.com" 的button, 且这个button包含 id为 'signin_status'且包含文本内容为'Signed out'的span元素
+    // 有则认为登录过期
+    const isSignedOut = await page.evaluate(() => {
+        const button = document.querySelector('button[data-value="googleplay_web@nibirutech.com"]');
+        const span = button?.querySelector('#signin_status');
+        return button && span && span.textContent.includes('Signed out');
+    });
+    if(isSignedOut){
+        status.update(LoginStatus.LOGGED_OUT);
+    }
+
     await page.close();
     return isLoggedIn;
 };
