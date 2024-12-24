@@ -14,7 +14,6 @@ const __dirname = dirname(__filename);
 // 指定要删除的文件夹路径
 const folderToDelete = join(__dirname, '../../tmp');
 
-
 let browser;
 let loginPage; // 登录页面
 let imgPage;
