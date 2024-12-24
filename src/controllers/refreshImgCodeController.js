@@ -1,9 +1,14 @@
 import * as puppeteerService from '../services/puppeteerService.js';
+import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
 
 export const refreshImgCodeFn = async (req, res) => {
-
+    const {body: {account = 't4f'}} = req;
+    const puppeteerServiceTemp =
+        account === 'A3' ?
+            puppeteerServiceA3
+            : puppeteerService;
     try {
-        const data = await puppeteerService.refreshImgCode();
+        const data = await puppeteerServiceTemp.refreshImgCode();
         res.status(200).json({ ...data});
     } catch (error) {
         console.error(error);

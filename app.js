@@ -6,6 +6,7 @@ import cors from 'cors';
 import apiRoutes from './src/routes/apiRoutes.js';
 import dayjs from 'dayjs';
 import * as puppeteerService from './src/services/puppeteerService.js';
+import * as puppeteerServiceA3 from './src/services/puppeteerServiceA3.js';
 dotenv.config();
 
 // 配置日志记录
@@ -44,6 +45,16 @@ app.use(bodyParser.json());
     }, 120000); // 每 2 分钟检查一次
 })();
 
+(async () => {
+    await puppeteerServiceA3.initializeBrowser();
+    await puppeteerServiceA3.checkLoginStatus();
+    // 定时检查登录状态，每隔 2 分钟（120000 毫秒）执行一次
+    setInterval(async () => {
+        const data = await puppeteerServiceA3.getStatus();
+        logger.info(`自动更新当前登录状态: ${data.data}`)
+    }, 120000); // 每 2 分钟检查一次
+})();
+
 
 // 使用 API 路由
 app.use('/api', apiRoutes);
@@ -56,5 +67,6 @@ app.listen(PORT, () => {
 // 关闭浏览器实例
 process.on('SIGINT', async () => {
     await puppeteerService.closeBrowser();
+    await puppeteerServiceA3.closeBrowser();
     process.exit();
 });

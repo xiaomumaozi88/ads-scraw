@@ -1,7 +1,12 @@
 import * as puppeteerService from '../services/puppeteerService.js';
+import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
 
 export const scrape = async (req, res) => {
-    const { orderId, accountId } = req.body;
+    const { orderId, accountId, account} = req.body;
+    const puppeteerServiceTemp =
+        account === 'A3' ?
+            puppeteerServiceA3
+            : puppeteerService;
     if (!orderId) {
         return res.status(400).json({ data: null, success: false, code: 400, message: '缺少orderId参数'});
     }
@@ -10,7 +15,7 @@ export const scrape = async (req, res) => {
     }
 
     try {
-        const data = await puppeteerService.scrapeData(orderId, accountId);
+        const data = await puppeteerServiceTemp.scrapeData(orderId, accountId);
         res.json(data);
     } catch (error) {
         console.error(error);
