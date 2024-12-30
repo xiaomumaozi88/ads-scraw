@@ -41,7 +41,7 @@ app.use(bodyParser.json());
     // 定时检查登录状态，每隔 2 分钟（120000 毫秒）执行一次
     setInterval(async () => {
         const data = await puppeteerService.getStatus();
-        logger.info(`自动更新当前登录状态: ${data.data}`)
+        logger.info(`自动更新t4f当前登录状态: ${data.status}`)
     }, 120000); // 每 2 分钟检查一次
 })();
 
@@ -51,7 +51,7 @@ app.use(bodyParser.json());
     // 定时检查登录状态，每隔 2 分钟（120000 毫秒）执行一次
     setInterval(async () => {
         const data = await puppeteerServiceA3.getStatus();
-        logger.info(`自动更新当前登录状态: ${data.data}`)
+        logger.info(`自动更新a3当前登录状态: ${data.status}`)
     }, 120000); // 每 2 分钟检查一次
 })();
 

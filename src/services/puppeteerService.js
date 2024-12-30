@@ -69,7 +69,6 @@ export const initializeBrowser = async () => {
     console.log('准备启动t4f浏览器');
     try{
         browser = await puppeteer.launch(puppeteerOptions);
-        console.log('t4f浏览器已启动');
     }catch (e){
         console.log('e', e);
     }
@@ -91,7 +90,6 @@ export const scrapeData = async (orderId, accountId) => {
         const result = await fetchData(page);
         page?.close && page.close();
         return result;
-
     } catch (error) {
         logger.error(`Error in scrapeData: ${error}`);
         return null;

@@ -99,7 +99,6 @@ export const scrapeData = async (orderId, accountId) => {
 export const getStatus = async () => {
     logger.info(`当前${process.env.USER_NAME_2}登录状态: ${status.current}`)
     await checkLoginStatus();
-    logger.info(`当前登录状态: ${status.current}`)
     if(status.current === LoginStatus.AWAITING_IMG_CODE){
         const captchaImgSrc = a3_imgPage? await a3_imgPage.$eval('#captchaimg', (el) => el.src): '';
         return {
