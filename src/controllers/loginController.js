@@ -3,7 +3,7 @@ import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
 
 export const login = async (req, res) => {
     try {
-        const {body: {account = 't4f'}} = req;
+        const {query: {account}} = req;
         const puppeteerServiceTemp =
             account === 'A3' ?
                 puppeteerServiceA3

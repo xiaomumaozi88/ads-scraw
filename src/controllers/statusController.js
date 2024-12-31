@@ -2,7 +2,7 @@ import * as puppeteerService from '../services/puppeteerService.js';
 import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
 
 export const getStatus = async (req, res) => {
-    const { account = 't4f' } = req.query;
+    const { account } = req.query;
     const puppeteerServiceTemp =
         account === 'A3' ?
             puppeteerServiceA3

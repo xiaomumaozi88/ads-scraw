@@ -3,6 +3,7 @@ import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
 
 export const verify = async (req, res) => {
     const { code, account } = req.body;
+    console.log('req', req);
     const puppeteerServiceTemp =
         account === 'A3' ?
             puppeteerServiceA3

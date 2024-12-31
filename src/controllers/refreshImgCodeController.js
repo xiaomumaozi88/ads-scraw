@@ -2,7 +2,7 @@ import * as puppeteerService from '../services/puppeteerService.js';
 import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
 
 export const refreshImgCodeFn = async (req, res) => {
-    const {body: {account = 't4f'}} = req;
+    const {query: {account = 't4f'}} = req;
     const puppeteerServiceTemp =
         account === 'A3' ?
             puppeteerServiceA3

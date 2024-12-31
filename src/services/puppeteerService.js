@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // 指定要删除的文件夹路径
-const folderToDelete = join(__dirname, '../../tmp');
+const folderToDelete = join(__dirname, '../../tmp/gpc_order_spider_usr_dir3');
 
 let browser;
 let loginPage; // 登录页面
@@ -452,6 +452,7 @@ export const verifyCode = async (verificationCode) => {
 }
 
 const fetchData = async (page) => {
+    console.log('爬取t4f订单数据');
     if (status.current !== LoginStatus.ONLINE) {
         return {
             data: {

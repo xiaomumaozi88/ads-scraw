@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // 指定要删除的文件夹路径
-const folderToDelete = join(__dirname, '../../tmp');
+const folderToDelete = join(__dirname, '../../tmp/gpc_order_spider_usr_a3');
 
 let a3_browser;
 let a3_loginPage; // 登录页面
@@ -20,9 +20,8 @@ let a3_imgPage;
 let a3_lastSendTime = 0; // 上次发送验证码的时间
 let a3_timeoutId = null; // 存储定时器 ID
 
-
 // 状态管理
-const status = {
+const status_A3 = {
     current: LoginStatus.LOGGED_OUT, // 初始状态为未登录
     update(newStatus) {
         this.current = newStatus;
@@ -88,7 +87,6 @@ export const scrapeData = async (orderId, accountId) => {
         const result = await fetchData(page);
         page?.close && page.close();
         return result;
-
     } catch (error) {
         logger.error(`Error in scrapeData: ${error}`);
         return null;
@@ -97,17 +95,17 @@ export const scrapeData = async (orderId, accountId) => {
 
 // 查询当前状态
 export const getStatus = async () => {
-    logger.info(`当前${process.env.USER_NAME_2}登录状态: ${status.current}`)
     await checkLoginStatus();
-    if(status.current === LoginStatus.AWAITING_IMG_CODE){
+    console.log('获取a3状态', status_A3);
+    if(status_A3.current === LoginStatus.AWAITING_IMG_CODE){
         const captchaImgSrc = a3_imgPage? await a3_imgPage.$eval('#captchaimg', (el) => el.src): '';
         return {
-            status: status.current,
+            status: status_A3.current,
             captchaImgSrc
         };
     }
     return {
-        status: status.current,
+        status: status_A3.current,
     };
 };
 
@@ -119,7 +117,7 @@ const timerIdManage = () =>{
     }
     // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
     a3_timeoutId = setTimeout(async () => {
-        if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - a3_lastSendTime > 10 * 60 * 1000) {
+        if (status_A3.current !== LoginStatus.ONLINE && new Date().valueOf() - a3_lastSendTime > 10 * 60 * 1000) {
             logger.info('验证码超过十分钟未填写，重置登录流程');
             if(a3_loginPage){
                 await a3_loginPage.close();
@@ -129,7 +127,7 @@ const timerIdManage = () =>{
                 await a3_imgPage.close();
                 a3_imgPage = null;
             }
-            status.update(LoginStatus.LOGGED_OUT);
+            status_A3.update(LoginStatus.LOGGED_OUT);
         }
     }, 10 * 60 * 1000);
 }
@@ -138,7 +136,7 @@ const timerIdManage = () =>{
 export const login = async () => {
     console.log('a3登录');
     await checkLoginStatus();
-    if (status.current !== LoginStatus.LOGGED_OUT) {
+    if (status_A3.current !== LoginStatus.LOGGED_OUT) {
         return {
             data: null,
             success: false,
@@ -177,7 +175,7 @@ export const login = async () => {
             a3_imgPage = page;
 
             // 更新状态为等待图形验证码提交
-            status.update(LoginStatus.AWAITING_IMG_CODE);
+            status_A3.update(LoginStatus.AWAITING_IMG_CODE);
 
             timerIdManage();
 
@@ -196,25 +194,12 @@ export const login = async () => {
     await page.click(currentSelectors.passwordSubmitButton);
     // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
 
-    status.update(LoginStatus.AWAITING_VERIFICATION);
+    status_A3.update(LoginStatus.AWAITING_VERIFICATION);
     a3_loginPage = page;
     a3_lastSendTime = new Date().valueOf();
     logger.info('验证码已发送');
 
     timerIdManage();
-    // // 清除之前的定时器
-    // if (a3_timeoutId) {
-    //     clearTimeout(a3_timeoutId);
-    // }
-    // // 设置一个定时器，十分钟后检查一下：距离上次发送验证码的时间是否"超过10分钟且status状态未改变"，如果是，则清空loginPage 且重置status
-    // a3_timeoutId = setTimeout(async () => {
-    //     if (status.current !== LoginStatus.ONLINE && new Date().valueOf() - a3_lastSendTime > 10 * 60 * 1000) {
-    //         logger.info('验证码超过十分钟未填写，重置登录流程');
-    //         await a3_loginPage.close();
-    //         a3_loginPage = null;
-    //         status.update(LoginStatus.LOGGED_OUT);
-    //     }
-    // }, 10 * 60 * 1000);
     return {
         data: null,
         success: true,
@@ -247,7 +232,7 @@ export const refreshImgCode = async () =>{
             const captchaImgSrc = await a3_imgPage.$eval('#captchaimg', (el) => el.src);
             logger.info('刷新出了新的图形验证码', captchaImgSrc);
             // 更新状态为等待图形验证码提交
-            status.update(LoginStatus.AWAITING_IMG_CODE);
+            status_A3.update(LoginStatus.AWAITING_IMG_CODE);
 
             timerIdManage();
 
@@ -284,7 +269,7 @@ export const verifyImgCode = async (imgCode) =>{
             message: '未找到图形验证码页面'
         }
     }
-    if(status.current !== LoginStatus.AWAITING_IMG_CODE){
+    if(status_A3.current !== LoginStatus.AWAITING_IMG_CODE){
         return {
             data: null,
             success: false,
@@ -320,7 +305,7 @@ export const verifyImgCode = async (imgCode) =>{
         await a3_imgPage.click(currentSelectors.passwordSubmitButton);
         // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
 
-        status.update(LoginStatus.AWAITING_VERIFICATION);
+        status_A3.update(LoginStatus.AWAITING_VERIFICATION);
         a3_loginPage = a3_imgPage;
         a3_imgPage = null;
         a3_lastSendTime = new Date().valueOf();
@@ -335,7 +320,7 @@ export const verifyImgCode = async (imgCode) =>{
     }
     else {
         // 验证码错误重置为等待验证码状态，提示重试
-        status.update(LoginStatus.AWAITING_IMG_CODE);
+        status_A3.update(LoginStatus.AWAITING_IMG_CODE);
         logger.info('图形验证码错误', await a3_imgPage.content());
         return {
             code: 'CODE_ERROR',
@@ -352,7 +337,7 @@ export const verifyCode = async (verificationCode) => {
 
     if (!a3_loginPage) {
         logger.info('登陆页面不存在');
-        status.update(LoginStatus.LOGGED_OUT);
+        status_A3.update(LoginStatus.LOGGED_OUT);
         return {
             data: null,
             code: 'NO_LOGIN_PAGE',
@@ -361,7 +346,7 @@ export const verifyCode = async (verificationCode) => {
         };
     }
     // 如果当前状态不是验证码验证
-    if (status.current !== LoginStatus.AWAITING_VERIFICATION) {
+    if (status_A3.current !== LoginStatus.AWAITING_VERIFICATION) {
         logger.info('当前状态不是验证码验证状态，无法进行验证码校验');
         return {
             data: null,
@@ -370,7 +355,7 @@ export const verifyCode = async (verificationCode) => {
             message: '当前状态不是验证码验证，无法进行验证码校验'
         };
     }
-    status.update(LoginStatus.VERIFYING_CODE);
+    status_A3.update(LoginStatus.VERIFYING_CODE);
 
     // 移除上次报错元素，方便下次输入判断
     await a3_loginPage.$eval(currentSelectors.errorSelector, el => el.remove()).catch(() => null);
@@ -411,7 +396,7 @@ export const verifyCode = async (verificationCode) => {
                 if(a3_timeoutId){
                     clearTimeout(a3_timeoutId);
                 }
-                status.update(LoginStatus.ONLINE);
+                status_A3.update(LoginStatus.ONLINE);
                 a3_loginPage.close();
                 a3_loginPage = null;
                 return {
@@ -425,7 +410,7 @@ export const verifyCode = async (verificationCode) => {
                     clearTimeout(a3_timeoutId);
                 }
                 // 验证码登录成功了，但是没有权限访问订单
-                status.update(LoginStatus.NO_AUTH_ONLINE);
+                status_A3.update(LoginStatus.NO_AUTH_ONLINE);
                 return {
                     success: true,
                     data: null,
@@ -436,7 +421,7 @@ export const verifyCode = async (verificationCode) => {
         }
         else {
             // 验证码错误重置为等待验证码状态，提示重试
-            status.update(LoginStatus.AWAITING_VERIFICATION);
+            status_A3.update(LoginStatus.AWAITING_VERIFICATION);
             return {
                 code: 'CODE_ERROR',
                 data: null,
@@ -445,13 +430,14 @@ export const verifyCode = async (verificationCode) => {
             };
         }
     } catch (e){
-        status.update(LoginStatus.AWAITING_VERIFICATION);
+        status_A3.update(LoginStatus.AWAITING_VERIFICATION);
         logger.error(`验证码校验失败: ${e}`, a3_loginPage.url(), await a3_loginPage.content());
     }
 }
 
 const fetchData = async (page) => {
-    if (status.current !== LoginStatus.ONLINE) {
+    console.log('爬取A3订单数据');
+    if (status_A3.current !== LoginStatus.ONLINE) {
         return {
             data: {
                 error: 'Not logged in'
@@ -546,13 +532,13 @@ export const checkLoginStatus = async () => {
     });
     const curPageUrl = page.url();
     if (curPageUrl === 'https://play.google.com/console/signup') {
-        status.update(LoginStatus.NO_AUTH_ONLINE);
+        status_A3.update(LoginStatus.NO_AUTH_ONLINE);
         await page.close();
         return true;
     }
     const isLoggedIn = curPageUrl.includes('https://play.google.com/console/developers');
     if (isLoggedIn) {
-        status.update(LoginStatus.ONLINE);
+        status_A3.update(LoginStatus.ONLINE);
     }
     // 查看页面有没有出现 data-value="googleplay_web@nibirutech.com" 的button, 且这个button包含 id为 'signin_status'且包含文本内容为'Signed out'的span元素
     // 有则认为登录过期
@@ -562,7 +548,7 @@ export const checkLoginStatus = async () => {
         return button && span && span.textContent.includes('Signed out');
     });
     if(isSignedOut){
-        status.update(LoginStatus.LOGGED_OUT);
+        status_A3.update(LoginStatus.LOGGED_OUT);
     }
 
     await page.close();
@@ -573,7 +559,7 @@ export const clearLogin = async () => {
     try {
         // 递归删除文件夹其内容
         await rm(folderToDelete, {recursive: true, force: true});
-        status.update(LoginStatus.LOGGED_OUT);
+        status_A3.update(LoginStatus.LOGGED_OUT);
         a3_browser.close();
         initializeBrowser();
         logger.info(`文件夹 ${folderToDelete} 已成功删除`);
