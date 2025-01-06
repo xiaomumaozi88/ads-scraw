@@ -8,4 +8,3 @@ export const LoginStatus = Object.freeze({
     AWAITING_IMG_CODE: 'AWAITING_IMG_CODE', // 图形验证码等待填写中
 });
 
-export const A3_GOOGLE_ACCOUNT = 'infocenter@a3games.com';

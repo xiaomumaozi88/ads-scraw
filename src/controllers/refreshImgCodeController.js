@@ -1,6 +1,7 @@
 import * as puppeteerService from '../services/puppeteerService.js';
 import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
-import {A3_GOOGLE_ACCOUNT} from "../constants";
+
+const A3_GOOGLE_ACCOUNT = 'infocenter@a3games.com';
 
 export const refreshImgCodeFn = async (req, res) => {
     const {query: {account = 't4f'}} = req;
