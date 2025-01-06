@@ -1,10 +1,11 @@
 import * as puppeteerService from '../services/puppeteerService.js';
 import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
+import {A3_GOOGLE_ACCOUNT} from "../constants";
 
 export const scrape = async (req, res) => {
     const { orderId, accountId, account} = req.body;
     const puppeteerServiceTemp =
-        account === 'a3' ?
+        account === A3_GOOGLE_ACCOUNT ?
             puppeteerServiceA3
             : puppeteerService;
     if (!orderId) {

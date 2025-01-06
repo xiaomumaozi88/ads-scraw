@@ -99,7 +99,7 @@ export const scrapeData = async (orderId, accountId) => {
 // 查询当前状态
 export const getStatus = async () => {
     await checkLoginStatus();
-    // logger.info(`当前${process.env.USER_NAME_1}登录状态: ${status.current}`)
+    // logger.info(`当前${process.env.USER_NAME_NIBIRUTECH}登录状态: ${status.current}`)
     if(status.current === LoginStatus.AWAITING_IMG_CODE){
         const captchaImgSrc = imgPage? await imgPage.$eval('#captchaimg', (el) => el.src): '';
         return {
@@ -151,17 +151,17 @@ export const login = async () => {
     await page.goto(loginPageUrl, {timeout: 120 * 1000});
 
     await page.waitForSelector(currentSelectors.usernameInput);
-    await page.type(currentSelectors.usernameInput, process.env.USER_NAME_1);
-    logger.info('已输入用户名', process.env.USER_NAME_1);
+    await page.type(currentSelectors.usernameInput, process.env.USER_NAME_NIBIRUTECH);
+    logger.info('已输入用户名', process.env.USER_NAME_NIBIRUTECH);
 
     await page.waitForSelector(currentSelectors.usernameSubmitButton);
     await page.click(currentSelectors.usernameSubmitButton);
-    logger.info('点击用户名提交', process.env.USER_NAME_1);
+    logger.info('点击用户名提交', process.env.USER_NAME_NIBIRUTECH);
     // await page.waitForNavigation({ timeout: 120 * 1000 }); // stable版本的chrome展示不需要，注释
     try {
         await page.waitForSelector(currentSelectors.passwordInput);
-        await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD_1);
-        logger.info('已输入用户密码', process.env.USER_PASSWORD_1);
+        await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD_NIBIRUTECH);
+        logger.info('已输入用户密码', process.env.USER_PASSWORD_NIBIRUTECH);
     }
     catch (e){
         logger.info('查找密码输入框超时了', await page.content());
@@ -235,7 +235,7 @@ export const refreshImgCode = async () =>{
     await imgPage.goto(loginPageUrl, {timeout: 120 * 1000});
 
     await imgPage.waitForSelector(currentSelectors.usernameInput);
-    await imgPage.type(currentSelectors.usernameInput, process.env.USER_NAME_1);
+    await imgPage.type(currentSelectors.usernameInput, process.env.USER_NAME_NIBIRUTECH);
     logger.info('刷新图形验证码-重新载入页面后输入了用户名');
 
     await imgPage.waitForSelector(currentSelectors.usernameSubmitButton);
@@ -315,8 +315,8 @@ export const verifyImgCode = async (imgCode) =>{
     if (result === 'success') {
 
         await imgPage.waitForSelector(currentSelectors.passwordInput);
-        await imgPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD_1);
-        logger.info('图形验证码验证成功，已输入用户密码', process.env.USER_PASSWORD_1);
+        await imgPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD_NIBIRUTECH);
+        logger.info('图形验证码验证成功，已输入用户密码', process.env.USER_PASSWORD_NIBIRUTECH);
         await imgPage.waitForSelector(currentSelectors.passwordSubmitButton);
         await imgPage.click(currentSelectors.passwordSubmitButton);
         // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释

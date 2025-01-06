@@ -148,17 +148,17 @@ export const login = async () => {
     await page.goto(loginPageUrl, {timeout: 120 * 1000});
 
     await page.waitForSelector(currentSelectors.usernameInput);
-    await page.type(currentSelectors.usernameInput, process.env.USER_NAME_2);
-    logger.info('已输入用户名', process.env.USER_NAME_2);
+    await page.type(currentSelectors.usernameInput, process.env.USER_NAME_A3);
+    logger.info('已输入用户名', process.env.USER_NAME_A3);
 
     await page.waitForSelector(currentSelectors.usernameSubmitButton);
     await page.click(currentSelectors.usernameSubmitButton);
-    logger.info('点击用户名提交', process.env.USER_NAME_2);
+    logger.info('点击用户名提交', process.env.USER_NAME_A3);
     // await page.waitForNavigation({ timeout: 120 * 1000 }); // stable版本的chrome展示不需要，注释
     try {
         await page.waitForSelector(currentSelectors.passwordInput);
-        await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD_2);
-        logger.info('已输入用户密码', process.env.USER_PASSWORD_2);
+        await page.type(currentSelectors.passwordInput, process.env.USER_PASSWORD_A3);
+        logger.info('已输入用户密码', process.env.USER_PASSWORD_A3);
     }
     catch (e){
         logger.info('查找密码输入框超时了', await page.content());
@@ -219,7 +219,7 @@ export const refreshImgCode = async () =>{
     await a3_imgPage.goto(loginPageUrl, {timeout: 120 * 1000});
 
     await a3_imgPage.waitForSelector(currentSelectors.usernameInput);
-    await a3_imgPage.type(currentSelectors.usernameInput, process.env.USER_NAME_2);
+    await a3_imgPage.type(currentSelectors.usernameInput, process.env.USER_NAME_A3);
     logger.info('刷新图形验证码-重新载入页面后输入了用户名');
 
     await a3_imgPage.waitForSelector(currentSelectors.usernameSubmitButton);
@@ -299,8 +299,8 @@ export const verifyImgCode = async (imgCode) =>{
     if (result === 'success') {
 
         await a3_imgPage.waitForSelector(currentSelectors.passwordInput);
-        await a3_imgPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD_2);
-        logger.info('图形验证码验证成功，已输入用户密码', process.env.USER_PASSWORD_2);
+        await a3_imgPage.type(currentSelectors.passwordInput, process.env.USER_PASSWORD_A3);
+        logger.info('图形验证码验证成功，已输入用户密码', process.env.USER_PASSWORD_A3);
         await a3_imgPage.waitForSelector(currentSelectors.passwordSubmitButton);
         await a3_imgPage.click(currentSelectors.passwordSubmitButton);
         // await page.waitForNavigation({ timeout: 120 * 1000, waitUntil: 'domcontentloaded' }); // stable版本的chrome不需要，注释
