@@ -5,7 +5,7 @@ export const verify = async (req, res) => {
     const { code, account } = req.body;
     console.log('req', req);
     const puppeteerServiceTemp =
-        account === 'A3' ?
+        account === 'a3' ?
             puppeteerServiceA3
             : puppeteerService;
     console.log('接受到验证码参数', code);

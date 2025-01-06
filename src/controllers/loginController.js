@@ -5,7 +5,7 @@ export const login = async (req, res) => {
     try {
         const {query: {account}} = req;
         const puppeteerServiceTemp =
-            account === 'A3' ?
+            account === 'a3' ?
                 puppeteerServiceA3
                 : puppeteerService;
         const data = await puppeteerServiceTemp.login();

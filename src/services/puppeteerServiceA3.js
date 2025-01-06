@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // 指定要删除的文件夹路径
-const folderToDelete = join(__dirname, '../../tmp/gpc_order_spider_usr_a3');
+const folderToDeleteA3 = join(__dirname, '../../tmp/gpc_order_spider_usr_a3');
 
 let a3_browser;
 let a3_loginPage; // 登录页面
@@ -558,11 +558,11 @@ export const checkLoginStatus = async () => {
 export const clearLogin = async () => {
     try {
         // 递归删除文件夹其内容
-        await rm(folderToDelete, {recursive: true, force: true});
+        await rm(folderToDeleteA3, {recursive: true, force: true});
         status_A3.update(LoginStatus.LOGGED_OUT);
         a3_browser.close();
         initializeBrowser();
-        logger.info(`文件夹 ${folderToDelete} 已成功删除`);
+        logger.info(`文件夹 ${folderToDeleteA3} 已成功删除`);
     } catch (error) {
         logger.error(`删除文件夹时发生错误: ${error}`);
     }

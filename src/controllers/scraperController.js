@@ -4,7 +4,7 @@ import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
 export const scrape = async (req, res) => {
     const { orderId, accountId, account} = req.body;
     const puppeteerServiceTemp =
-        account === 'A3' ?
+        account === 'a3' ?
             puppeteerServiceA3
             : puppeteerService;
     if (!orderId) {

@@ -4,7 +4,7 @@ import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
 export const verifyImgCodeFn = async (req, res) => {
     const { code, account } = req.body;
     const puppeteerServiceTemp =
-        account === 'A3' ?
+        account === 'a3' ?
             puppeteerServiceA3
             : puppeteerService;
     console.log('接受到图形验证码参数', code);
