@@ -1,8 +1,14 @@
 import * as puppeteerService from '../services/puppeteerService.js';
+import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
 
 export const getStatus = async (req, res) => {
+    const { account } = req.query;
+    const puppeteerServiceTemp =
+        account === 'a3' ?
+            puppeteerServiceA3
+            : puppeteerService;
     try {
-        const statusObj = await puppeteerService.getStatus();
+        const statusObj = await puppeteerServiceTemp.getStatus();
         res.json({
             code: 200,
             data: statusObj,
