@@ -16,7 +16,7 @@ RUN apt-get install -y wget gnupg ca-certificates procps libxss1 --fix-missing
 RUN wget -qO - https://dl.google.com/linux/linux_signing_key.pub | tee /etc/apt/trusted.gpg.d/google.asc
 
 # 添加 Google Chrome 的仓库
-RUN echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google.list
+RUN sh -c 'echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google.list'
 
 # 更新包列表并安装 Google Chrome
 RUN apt-get update && apt-get install -y google-chrome-stable
