@@ -200,7 +200,7 @@ export const login = async () => {
     status.update(LoginStatus.AWAITING_VERIFICATION);
     loginPage = page;
     lastSendTime = new Date().valueOf();
-    logger.info('验证码已发送');
+    logger.info('已进入登录流程');
 
     timerIdManage();
     // // 清除之前的定时器
@@ -220,7 +220,7 @@ export const login = async () => {
         data: null,
         success: true,
         code: 200,
-        message: '验证码已发送'
+        message: '已进入登录流程'
     }
 }
 
@@ -325,13 +325,13 @@ export const verifyImgCode = async (imgCode) =>{
         loginPage = imgPage;
         imgPage = null;
         lastSendTime = new Date().valueOf();
-        logger.info('图形验证码通过，验证码已发送到对应手机号');
+        logger.info('图形验证码通过，已进入登录流程');
         timerIdManage();
         return {
             data: null,
             success: true,
             code: 200,
-            message: '验证码已发送'
+            message: '已进入登录流程'
         }
     }
     else {
