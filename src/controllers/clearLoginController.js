@@ -1,5 +1,5 @@
 import * as puppeteerService from '../services/puppeteerService.js';
-import * as puppeteerServiceA3 from "../services/puppeteerServiceA3";
+import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
 
 export const clearLogin = async (req, res) => {
     const { account } = req.body;
