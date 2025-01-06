@@ -10,9 +10,10 @@ npm run dev
 
 ### .env 文件示例：<br/>
 ```
-USER_NAME=XXX@nibirutech.com
-USER_PASSWORD=XXXX
-ACCOUNT_ID=5185069862310717718
+USER_NAME_NIBIRUTECH=XXX
+USER_PASSWORD_NIBIRUTECH=XXX
+USER_NAME_A3=XXX
+USER_PASSWORD_A3=XXX
 ```
 
 ##功能描述
@@ -22,5 +23,4 @@ ACCOUNT_ID=5185069862310717718
 Git 仓库地址：https://git.tap4fun.com/bi-web/gporder
 接格式**: 将 Git 仓库地址放在单独的部分，并使用超链接格式，使其更易于访问和识别。
 
-##注意
-🚫不可登录过于频繁，否则会导致绑定的手机号收不到验证码 或 登录时需要识别图像验证码。
+
