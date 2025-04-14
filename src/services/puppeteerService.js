@@ -572,7 +572,7 @@ export const checkLoginStatus = async () => {
     // 查看页面有没有出现 id为 'signin_status'且包含文本内容为'Signed out'的span元素
     // 有则认为登录过期
     const isSignedOut = await page.evaluate(() => {
-        return document.querySelector('#signin_status').textContent.includes('Signed out')
+        return document.querySelector('#signin_status')?.textContent.includes('Signed out')
     });
     if(isSignedOut){
         status.update(LoginStatus.LOGGED_OUT);
