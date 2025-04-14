@@ -514,7 +514,20 @@ const fetchData = async (page) => {
         };
 
     } catch (error) {
-        logger.error(`发生错误：${error}`, await page.content());
+        const str = await page.content();
+        logger.error(`发生错误：${error}`, str);
+        if(str.includes('Signed out')){
+            logger.info('infocenter@a3games.com：页面包含了 Signed out ，登录已过期');
+            status_A3.update(LoginStatus.LOGGED_OUT);
+            clearLogin();
+            logger.info('登陆信息已清除');
+            return {
+                data: null,
+                message: '登录过期',
+                code: 'NOT_LOGGED_IN',
+                success: false,
+            };
+        }
         return {
             data: null,
             message: '数据查询发生错误',
@@ -540,12 +553,10 @@ export const checkLoginStatus = async () => {
     if (isLoggedIn) {
         status_A3.update(LoginStatus.ONLINE);
     }
-    // 查看页面有没有出现 data-value="googleplay_web@nibirutech.com" 的button, 且这个button包含 id为 'signin_status'且包含文本内容为'Signed out'的span元素
+    // 查看页面有没有出现 id为 'signin_status'且包含文本内容为'Signed out'的span元素
     // 有则认为登录过期
     const isSignedOut = await page.evaluate(() => {
-        const button = document.querySelector('button[data-value="googleplay_web@nibirutech.com"]');
-        const span = button?.querySelector('#signin_status');
-        return button && span && span.textContent.includes('Signed out');
+        return document.querySelector('#signin_status').textContent.includes('Signed out')
     });
     if(isSignedOut){
         status_A3.update(LoginStatus.LOGGED_OUT);
