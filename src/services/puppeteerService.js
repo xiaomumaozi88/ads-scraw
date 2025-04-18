@@ -1,10 +1,8 @@
 import puppeteer from 'puppeteer';
 import {puppeteerOptions} from '../config.js';
-import {curDate} from '../utils/utils.js';
 import {rm} from 'fs/promises';
-import {join} from 'path';
+import {dirname, join} from 'path';
 import {fileURLToPath} from 'url';
-import {dirname} from 'path';
 import {LoginStatus} from '../constants/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -475,8 +473,7 @@ const fetchData = async (page) => {
                     return navigator.clipboard.readText();
 
                 })
-                console.log('clipboard', clipboard);
-                        return 'success';
+                return 'success';
             }).catch((e) => {
                 logger.info('获取详情数据数据元素超时', e);
             }),
@@ -518,29 +515,7 @@ const fetchData = async (page) => {
             cells.forEach(cell => {
                 const columnName = cell.getAttribute('label') || cell.querySelector('simple-html').innerText;
                 const target = cell.querySelector('[field-value]')?.querySelector('[tooltiptarget]');
-
-                const value = target? target?.innerText: cell.querySelector('[field-value]').innerText;
-                data[columnName] = value;
-            //     if (columnName === 'Order status') {
-            //         key = 'date';
-            //         value = cell.querySelector('.main-text').innerText + '\n' + cell.querySelector('.secondary-line span').innerText;
-            //     } else if (columnName === 'Order ID') {
-            //         key = 'app';
-            //         value = cell.querySelector('img').src;
-            //     } else if (columnName === 'Date') {
-            //         key = 'product';
-            //         value = cell.querySelector('.main-text').innerText + '\n' + cell.querySelector('.secondary-line span').innerText;
-            //     } else if (columnName === 'order_id_column') {
-            //         key = 'orderId';
-            //         value = cell.querySelector('text-field').innerText.trim();
-            //     } else if (columnName === 'order_status_column') {
-            //         key = 'orderStatus';
-            //         value = cell.querySelector('.main-text').innerText;
-            //     } else if (columnName === 'total_column') {
-            //         key = 'total';
-            //         value = cell.querySelector('.main-text').innerText;
-            //     }
-            //     data[key] = value;
+                data[columnName] = target ? target?.innerText : cell.querySelector('[field-value]').innerText;
             });
 
             const tableData = [];
@@ -571,8 +546,6 @@ const fetchData = async (page) => {
                     data: tableDataItem.data
                 });
             });
-            console.log('tableData', tableData);
-
             return {
                 orderDetail:data,
                 tableData: tableData

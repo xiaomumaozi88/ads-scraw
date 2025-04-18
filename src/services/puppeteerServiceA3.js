@@ -1,10 +1,8 @@
 import puppeteer from 'puppeteer';
 import {puppeteerOptionsA3} from '../config.js';
-import {curDate} from '../utils/utils.js';
 import {rm} from 'fs/promises';
-import {join} from 'path';
+import {dirname, join} from 'path';
 import {fileURLToPath} from 'url';
-import {dirname} from 'path';
 import {LoginStatus} from '../constants/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -82,7 +80,7 @@ export const scrapeData = async (orderId, accountId) => {
     try {
         logger.info(`接收到订单号: ${orderId}, accountId:${accountId}`);
         const page = await a3_browser.newPage();
-        const orderUrl = `https://play.google.com/console/u/0/developers/${accountId}/orders?search=${orderId}&from=2008-01-01&to=${curDate()}`;
+        const orderUrl = `https://play.google.com/console/u/0/developers/${accountId}/orders/${orderId}`
         await page.goto(orderUrl, {timeout: 120 * 1000, waitUntil: 'domcontentloaded'});
         const result = await fetchData(page);
         page?.close && page.close();
@@ -436,7 +434,7 @@ export const verifyCode = async (verificationCode) => {
 }
 
 const fetchData = async (page) => {
-    console.log('爬取A3订单数据');
+    console.log('爬取a3订单数据');
     if (status_A3.current !== LoginStatus.ONLINE) {
         return {
             data: {
@@ -448,18 +446,28 @@ const fetchData = async (page) => {
         }
     }
     try {
+        // 获取页面上 aria-label="Search by order ID or email" 的input元素
+
+        const inputSelector = 'input[aria-label="Search by order ID or email"]';
+        let purchaseToken = '';
+
         const result = await Promise.race([
-            page.waitForSelector('.particle-table-row', {timeout: 60 * 1000}).then(() => {
+            page.waitForSelector('[debug-id="copy-purchase-token-button"]', {timeout: 60 * 1000}).then(async () => {
                 logger.info('数据已获取');
+                await page.click('[debug-id="copy-purchase-token-button"]')
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                purchaseToken = await page.evaluate(() => {
+                    return navigator.clipboard.readText();
+                })
                 return 'success';
-            }).catch((e)=>{
-                logger.info('获取数据表格元素超时', e);
+            }).catch((e) => {
+                logger.info('获取详情数据数据元素超时', e);
             }),
-            page.waitForSelector('.particle-table-placeholder', {timeout: 60 * 1000}).then(() => {
+            page.waitForSelector(inputSelector, {timeout: 60 * 1000}).then(() => {
                 logger.info('暂无数据');
                 return 'failure';
             }).catch((e) => {
-                logger.info('获取空数据提示元素超时');
+                logger.info('没有订单，已跳回列表页');
             }),
         ]);
 
@@ -473,41 +481,71 @@ const fetchData = async (page) => {
             };
         }
         const rowData = await page.evaluate(() => {
-            const row = document.querySelector('.particle-table-row');
-            const cells = row.querySelectorAll('ess-cell');
+
             const data = {};
+            const row = document.querySelector('.page-container');
+            const cells = row.querySelectorAll('labelled-field');
+            const orderItemsTable = document.querySelector('order-items').querySelector('.ess-table-canvas');
+            const orderHistoryTable = document.querySelector('order-history').querySelector('.ess-table-canvas');
+            const tables = [
+                {
+                    title: 'History',
+                    table: orderItemsTable
+                },
+                {
+                    title: 'Latest orders from this customer',
+                    table: orderHistoryTable
+                }
+            ].filter(i => i.table);
 
             cells.forEach(cell => {
-                const columnName = cell.getAttribute('essfield');
-                let key = '';
-                let value = '';
+                const columnName = cell.getAttribute('label') || cell.querySelector('simple-html').innerText;
+                const target = cell.querySelector('[field-value]')?.querySelector('[tooltiptarget]');
 
-                if (columnName === 'date_column') {
-                    key = 'date';
-                    value = cell.querySelector('.main-text').innerText + '\n' + cell.querySelector('.secondary-line span').innerText;
-                } else if (columnName === 'app_column') {
-                    key = 'app';
-                    value = cell.querySelector('img').src;
-                } else if (columnName === 'product_column') {
-                    key = 'product';
-                    value = cell.querySelector('.main-text').innerText + '\n' + cell.querySelector('.secondary-line span').innerText;
-                } else if (columnName === 'order_id_column') {
-                    key = 'orderId';
-                    value = cell.querySelector('text-field').innerText.trim();
-                } else if (columnName === 'order_status_column') {
-                    key = 'orderStatus';
-                    value = cell.querySelector('.main-text').innerText;
-                } else if (columnName === 'total_column') {
-                    key = 'total';
-                    value = cell.querySelector('.main-text').innerText;
-                }
-                data[key] = value;
+                data[columnName] = target ? target?.innerText : cell.querySelector('[field-value]').innerText;
             });
-            return data;
+
+            const tableData = [];
+
+            Array.from(tables).forEach((tableItem, tableIndex) => {
+                const tableDataItem = {
+                    data: []
+                };
+                const rows = tableItem.table.querySelectorAll('.particle-table-row');
+                if (rows.length > 0) {
+                    rows.forEach(row => {
+                        const rowData = {};
+                        const cells = row.querySelectorAll('ess-cell');
+
+                        cells.forEach((cell, index) => {
+                            const cellName = cell.getAttribute('essfield').split('_').slice(0, -1).map(name => name.charAt(0).toUpperCase() + name.slice(1)).join(' ');
+                            let cellValue = cell.innerText;
+                            if(cellName === 'Status'){
+                                cellValue = cellValue.split('\n')[1];
+                            }
+                            rowData[cellName] = cellValue;
+                        })
+                        tableDataItem.data.push(rowData);
+                    })
+                }
+                tableData.push({
+                    title: tableItem.title,
+                    data: tableDataItem.data
+                });
+            });
+
+            return {
+                orderDetail:data,
+                tableData: tableData
+            };
         });
+
         logger.info('该订单号查询到了数据', rowData);
         return {
-            data: rowData,
+            data: {
+                ...rowData,
+                purchaseToken
+            },
             message: '数据查询成功',
             code: '',
             success: true,
@@ -515,9 +553,10 @@ const fetchData = async (page) => {
 
     } catch (error) {
         const str = await page.content();
-        logger.error(`发生错误：${error}`, str);
-        if(str.includes('Signed out')){
-            logger.info('infocenter@a3games.com：页面包含了 Signed out ，登录已过期');
+        logger.error(`发生错误：${error}`);
+        // logger.error(`发生错误：${error}`, str);
+        if (str.includes('Signed out')) {
+            logger.info('googleplay_web@nibirutech.com：页面包含了 Signed out ，登录已过期');
             status_A3.update(LoginStatus.LOGGED_OUT);
             clearLogin();
             logger.info('登陆信息已清除');
@@ -536,6 +575,7 @@ const fetchData = async (page) => {
         };
     }
 };
+
 
 export const checkLoginStatus = async () => {
     const page = await a3_browser.newPage();
