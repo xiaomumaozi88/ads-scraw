@@ -472,10 +472,6 @@ const fetchData = async (page) => {
                 await page.waitForSelector('[debug-id="copy-purchase-token-button"]');
                 await page.click('[debug-id="copy-purchase-token-button"]')
                 logger.info('Token 按钮已点击');
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                purchaseToken = await page.evaluate(() => {
-                    return navigator.clipboard.readText();
-                })
 
                 return 'success';
             }).catch((e) => {
@@ -564,7 +560,9 @@ const fetchData = async (page) => {
             };
         });
 
-
+        purchaseToken = await page.evaluate(() => {
+            return navigator.clipboard.readText();
+        })
 
         logger.info('该订单号查询到了数据', rowData, `purchaseToken:`, purchaseToken);
         return {
