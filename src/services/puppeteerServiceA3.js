@@ -542,7 +542,6 @@ const fetchData = async (page) => {
             return {
                 orderDetail:data,
                 tableData: tableData,
-                purchaseToken: purchaseToken
             };
         });
 
