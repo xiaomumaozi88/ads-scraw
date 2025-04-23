@@ -67,6 +67,8 @@ export const initializeBrowser = async () => {
     console.log('准备启动t4f浏览器');
     try {
         browser = await puppeteer.launch(puppeteerOptions);
+        const context = await browser.defaultBrowserContext();
+        await context.overridePermissions('https://play.google.com/', ['clipboard-read', 'clipboard-write']);
     } catch (e) {
         console.log('e', e);
     }
@@ -470,6 +472,11 @@ const fetchData = async (page) => {
                 await page.waitForSelector('[debug-id="copy-purchase-token-button"]');
                 await page.click('[debug-id="copy-purchase-token-button"]')
                 logger.info('Token 按钮已点击');
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                purchaseToken = await page.evaluate(() => {
+                    return navigator.clipboard.readText();
+                })
+
                 return 'success';
             }).catch((e) => {
                 logger.info('获取详情数据数据元素超时', e);
@@ -493,15 +500,15 @@ const fetchData = async (page) => {
         }
 
 
+        // 等待1秒，等待复制到剪贴板
+        await new Promise(resolve => setTimeout(resolve, 1000));
         await page.waitForSelector('order-details-page');
         logger.info('获取详情数据数据元素成功');
         const rowData = await page.evaluate(async () => {
 
             const data = {};
             const row = document.querySelector('.page-container');
-            logger.info('获取page-container元素成功');
             const cells = row.querySelectorAll('labelled-field');
-            logger.info('获取labelled-fields元素成功');
             const orderItemsTable = document.querySelector('order-items').querySelector('.ess-table-canvas');
             const orderHistoryTable = document.querySelector('order-history').querySelector('.ess-table-canvas');
             const tables = [
@@ -514,7 +521,6 @@ const fetchData = async (page) => {
                     table: orderHistoryTable
                 }
             ].filter(i => i.table);
-            logger.info('tables', tables);
 
             cells.forEach(cell => {
                 const columnName = cell.getAttribute('label') || cell.querySelector('simple-html').innerText;
@@ -522,7 +528,6 @@ const fetchData = async (page) => {
                 data[columnName] = target ? target?.innerText : cell.querySelector('[field-value]').innerText;
             });
 
-            logger.info('获取订单详情数据成功', data)
 
             const tableData = [];
 
@@ -553,22 +558,19 @@ const fetchData = async (page) => {
                 });
             });
 
-            logger.info('获取表格数据成功：',tableData);
             return {
                 orderDetail:data,
                 tableData: tableData,
             };
         });
 
-        // purchaseToken = await page.evaluate(() => {
-        //     return navigator.clipboard.readText();
-        // })
+
 
         logger.info('该订单号查询到了数据', rowData, `purchaseToken:`, purchaseToken);
         return {
             data: {
                 ...rowData,
-                purchaseToken: '-'
+                purchaseToken: purchaseToken || '-'
             },
             message: '数据查询成功',
             code: '',
