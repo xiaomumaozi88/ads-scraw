@@ -499,7 +499,9 @@ const fetchData = async (page) => {
 
             const data = {};
             const row = document.querySelector('.page-container');
+            logger.info('获取page-container元素成功');
             const cells = row.querySelectorAll('labelled-field');
+            logger.info('获取labelled-fields元素成功');
             const orderItemsTable = document.querySelector('order-items').querySelector('.ess-table-canvas');
             const orderHistoryTable = document.querySelector('order-history').querySelector('.ess-table-canvas');
             const tables = [
@@ -512,12 +514,15 @@ const fetchData = async (page) => {
                     table: orderHistoryTable
                 }
             ].filter(i => i.table);
+            logger.info('tables', tables);
 
             cells.forEach(cell => {
                 const columnName = cell.getAttribute('label') || cell.querySelector('simple-html').innerText;
                 const target = cell.querySelector('[field-value]')?.querySelector('[tooltiptarget]');
                 data[columnName] = target ? target?.innerText : cell.querySelector('[field-value]').innerText;
             });
+
+            logger.info('获取订单详情数据成功', data)
 
             const tableData = [];
 
@@ -548,21 +553,22 @@ const fetchData = async (page) => {
                 });
             });
 
+            logger.info('获取表格数据成功：',tableData);
             return {
                 orderDetail:data,
                 tableData: tableData,
             };
         });
 
-        purchaseToken = await page.evaluate(() => {
-            return navigator.clipboard.readText();
-        })
+        // purchaseToken = await page.evaluate(() => {
+        //     return navigator.clipboard.readText();
+        // })
 
         logger.info('该订单号查询到了数据', rowData, `purchaseToken:`, purchaseToken);
         return {
             data: {
                 ...rowData,
-                purchaseToken
+                purchaseToken: '-'
             },
             message: '数据查询成功',
             code: '',
