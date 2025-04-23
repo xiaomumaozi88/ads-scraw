@@ -478,7 +478,8 @@ const fetchData = async (page) => {
                 code: ''
             };
         }
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await page.waitForSelector('order-details-page');
+        logger.info('获取详情数据数据元素成功');
         const rowData = await page.evaluate(() => {
 
             const data = {};

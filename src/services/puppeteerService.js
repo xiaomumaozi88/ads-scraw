@@ -491,7 +491,11 @@ const fetchData = async (page) => {
                 code: ''
             };
         }
-        const rowData = await page.evaluate(() => {
+
+
+        await page.waitForSelector('order-details-page');
+        logger.info('获取详情数据数据元素成功');
+        const rowData = await page.evaluate(async () => {
 
             const data = {};
             const row = document.querySelector('.page-container');
