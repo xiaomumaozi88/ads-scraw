@@ -453,8 +453,10 @@ const fetchData = async (page) => {
 
         const result = await Promise.race([
             page.waitForSelector('[debug-id="copy-purchase-token-button"]', {timeout: 60 * 1000}).then(async () => {
-                logger.info('数据已获取');
+                logger.info('按钮已获取');
+                await page.waitForSelector('[debug-id="copy-purchase-token-button"]');
                 await page.click('[debug-id="copy-purchase-token-button"]')
+                logger.info('Token 按钮已点击');
                 return 'success';
             }).catch((e) => {
                 logger.info('获取详情数据数据元素超时', e);
