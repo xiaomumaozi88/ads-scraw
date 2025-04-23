@@ -67,8 +67,7 @@ export const initializeBrowser = async () => {
     console.log('准备启动t4f浏览器');
     try {
         browser = await puppeteer.launch(puppeteerOptions);
-        const context = await browser.defaultBrowserContext();
-        await context.overridePermissions('https://play.google.com/', ['clipboard-read', 'clipboard-write']);
+        await browser.defaultBrowserContext().overridePermissions('https://play.google.com/', ['clipboard-read', 'clipboard-write']);
     } catch (e) {
         console.log('e', e);
     }
@@ -465,6 +464,11 @@ const fetchData = async (page) => {
 
         const inputSelector = 'input[aria-label="Search by order ID or email"]';
         let purchaseToken = '';
+        const client = await page.target().createCDPSession();
+        await client.send('Browser.grantPermissions', {
+            origin: "https://play.google.com",
+            permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'],
+        });
 
         const result = await Promise.race([
             page.waitForSelector('[debug-id="copy-purchase-token-button"]', {timeout: 60 * 1000}).then(async () => {
@@ -472,7 +476,8 @@ const fetchData = async (page) => {
                 await page.waitForSelector('[debug-id="copy-purchase-token-button"]');
                 await page.click('[debug-id="copy-purchase-token-button"]')
                 logger.info('Token 按钮已点击');
-
+                // 等待1秒，等待复制到剪贴板
+                // await new Promise(resolve => setTimeout(resolve, 1000));
                 return 'success';
             }).catch((e) => {
                 logger.info('获取详情数据数据元素超时', e);
@@ -560,10 +565,16 @@ const fetchData = async (page) => {
             };
         });
 
+        // await page.waitForSelector('[debug-id="copy-purchase-token-button"]');
+        // await page.click('[debug-id="copy-purchase-token-button"]')
+        // 等待3秒
+        const granted = await page.evaluate(async () => {
+            return (await navigator.permissions.query({name: 'clipboard-read'})).state;
+        });
+        console.log('Granted:', granted);
         purchaseToken = await page.evaluate(() => {
             return navigator.clipboard.readText();
         })
-
         logger.info('该订单号查询到了数据', rowData, `purchaseToken:`, purchaseToken);
         return {
             data: {
