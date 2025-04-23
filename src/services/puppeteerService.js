@@ -468,11 +468,6 @@ const fetchData = async (page) => {
             page.waitForSelector('[debug-id="copy-purchase-token-button"]', {timeout: 60 * 1000}).then(async () => {
                 logger.info('数据已获取');
                 await page.click('[debug-id="copy-purchase-token-button"]')
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                purchaseToken = await page.evaluate(() => {
-                    return navigator.clipboard.readText();
-
-                })
                 return 'success';
             }).catch((e) => {
                 logger.info('获取详情数据数据元素超时', e);
@@ -494,6 +489,7 @@ const fetchData = async (page) => {
                 code: ''
             };
         }
+        await new Promise(resolve => setTimeout(resolve, 1000));
         const rowData = await page.evaluate(() => {
 
             const data = {};
@@ -546,13 +542,18 @@ const fetchData = async (page) => {
                     data: tableDataItem.data
                 });
             });
+
             return {
                 orderDetail:data,
-                tableData: tableData
+                tableData: tableData,
             };
         });
 
-        logger.info('该订单号查询到了数据', rowData);
+        purchaseToken = await page.evaluate(() => {
+            return navigator.clipboard.readText();
+        })
+
+        logger.info('该订单号查询到了数据', rowData, `purchaseToken:`, purchaseToken);
         return {
             data: {
                 ...rowData,
