@@ -460,7 +460,6 @@ const fetchData = async (page) => {
         }
     }
     try {
-        // 获取页面上 aria-label="Search by order ID or email" 的input元素
 
         const inputSelector = 'input[aria-label="Search by order ID or email"]';
         let purchaseToken = '';
@@ -476,8 +475,6 @@ const fetchData = async (page) => {
                 await page.waitForSelector('[debug-id="copy-purchase-token-button"]');
                 await page.click('[debug-id="copy-purchase-token-button"]')
                 logger.info('Token 按钮已点击');
-                // 等待1秒，等待复制到剪贴板
-                // await new Promise(resolve => setTimeout(resolve, 1000));
                 return 'success';
             }).catch((e) => {
                 logger.info('获取详情数据数据元素超时', e);
@@ -565,13 +562,11 @@ const fetchData = async (page) => {
             };
         });
 
-        // await page.waitForSelector('[debug-id="copy-purchase-token-button"]');
-        // await page.click('[debug-id="copy-purchase-token-button"]')
         // 等待3秒
         const granted = await page.evaluate(async () => {
             return (await navigator.permissions.query({name: 'clipboard-read'})).state;
         });
-        console.log('Granted:', granted);
+        console.log('是否授权读取剪贴板:', granted);
         purchaseToken = await page.evaluate(() => {
             return navigator.clipboard.readText();
         })

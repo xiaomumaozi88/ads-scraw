@@ -64,6 +64,7 @@ export const initializeBrowser = async () => {
     console.log('准备启动a3浏览器');
     try{
         a3_browser = await puppeteer.launch(puppeteerOptionsA3);
+        await a3_browser.defaultBrowserContext().overridePermissions('https://play.google.com/', ['clipboard-read', 'clipboard-write']);
         console.log('a3浏览器已启动');
     }catch (e){
         console.log('e', e);
@@ -446,10 +447,13 @@ const fetchData = async (page) => {
         }
     }
     try {
-        // 获取页面上 aria-label="Search by order ID or email" 的input元素
-
         const inputSelector = 'input[aria-label="Search by order ID or email"]';
         let purchaseToken = '';
+        const client = await page.target().createCDPSession();
+        await client.send('Browser.grantPermissions', {
+            origin: "https://play.google.com",
+            permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'],
+        });
 
         const result = await Promise.race([
             page.waitForSelector('[debug-id="copy-purchase-token-button"]', {timeout: 60 * 1000}).then(async () => {
@@ -542,6 +546,11 @@ const fetchData = async (page) => {
             };
         });
 
+        // 等待3秒
+        const granted = await page.evaluate(async () => {
+            return (await navigator.permissions.query({name: 'clipboard-read'})).state;
+        });
+        console.log('是否授权读取剪贴板:', granted);
         purchaseToken = await page.evaluate(() => {
             return navigator.clipboard.readText();
         })
@@ -550,7 +559,7 @@ const fetchData = async (page) => {
         return {
             data: {
                 ...rowData,
-                purchaseToken
+                purchaseToken: purchaseToken || '-'
             },
             message: '数据查询成功',
             code: '',
