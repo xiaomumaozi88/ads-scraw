@@ -493,11 +493,11 @@ const fetchData = async (page) => {
             const orderHistoryTable = document.querySelector('order-history').querySelector('.ess-table-canvas');
             const tables = [
                 {
-                    title: 'History',
+                    title: 'Products in this order',
                     table: orderItemsTable
                 },
                 {
-                    title: 'Latest orders from this customer',
+                    title: 'History',
                     table: orderHistoryTable
                 }
             ].filter(i => i.table);
@@ -511,6 +511,17 @@ const fetchData = async (page) => {
 
             const tableData = [];
 
+            const columnKey = {
+                'product_column': 'Product',
+                'type_column': 'Type',
+                'quantity_column': 'Quantity',
+                'listed_price_column': 'List Price',
+                'tax_column': 'Tax',
+                'date_column': 'Date',
+                'status_column': 'Status',
+                'description_column': 'Event'
+            };
+
             Array.from(tables).forEach((tableItem, tableIndex) => {
                 const tableDataItem = {
                     data: []
@@ -522,7 +533,7 @@ const fetchData = async (page) => {
                         const cells = row.querySelectorAll('ess-cell');
 
                         cells.forEach((cell, index) => {
-                            const cellName = cell.getAttribute('essfield').split('_').slice(0, -1).map(name => name.charAt(0).toUpperCase() + name.slice(1)).join(' ');
+                            const cellName = columnKey[cell.getAttribute('essfield')];
                             let cellValue = cell.innerText;
                             if(cellName === 'Status'){
                                 cellValue = cellValue.split('\n')[1];
