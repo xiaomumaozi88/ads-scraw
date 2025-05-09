@@ -1,8 +1,8 @@
 // src/config.js
 export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
     defaultViewport: {
-        width: 1000,
-        height: 800,
+        width: 1920,
+        height: 1280,
     },
     headless: true, // 是否不打开浏览器
     userDataDir: "tmp/gpc_order_spider_usr_dir3",
@@ -32,8 +32,8 @@ export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
     ],
 } : {
     defaultViewport: {
-        width: 1000,
-        height: 800,
+        width: 1920,
+        height: 1280,
     },
     headless: false, // 是否不打开浏览器
     userDataDir: "tmp/gpc_order_spider_usr_dir3",
@@ -65,8 +65,8 @@ export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
 // src/config.js
 export const puppeteerOptionsA3 = process.env.NODE_ENV !== 'development' ? {
     defaultViewport: {
-        width: 1000,
-        height: 800,
+        width: 1920,
+        height: 1280,
     },
     headless: true, // 是否不打开浏览器
     userDataDir: "tmp/gpc_order_spider_usr_dir3_a3",
@@ -96,8 +96,8 @@ export const puppeteerOptionsA3 = process.env.NODE_ENV !== 'development' ? {
     ],
 } : {
     defaultViewport: {
-        width: 1000,
-        height: 800,
+        width: 1920,
+        height: 1280,
     },
     headless: false, // 是否不打开浏览器
     userDataDir: "tmp/gpc_order_spider_usr_dir3_a3",

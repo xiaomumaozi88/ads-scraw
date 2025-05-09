@@ -1,9 +1,10 @@
-import puppeteer from 'puppeteer';
+import puppeteer,{TimeoutError} from 'puppeteer';
 import {puppeteerOptions} from '../config.js';
 import {rm} from 'fs/promises';
 import {dirname, join} from 'path';
 import {fileURLToPath} from 'url';
 import {LoginStatus} from '../constants/index.js';
+import {upload} from '../utils/utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 // 获取当前目录的绝对路径
@@ -87,6 +88,11 @@ export const scrapeData = async (orderId, accountId) => {
         // const orderUrl = `https://play.google.com/console/u/0/developers/${accountId}/orders?search=${orderId}&from=2008-01-01&to=${curDate()}`;
         const orderUrl = `https://play.google.com/console/u/0/developers/${accountId}/orders/${orderId}`
         await page.goto(orderUrl, {timeout: 120 * 1000, waitUntil: 'domcontentloaded'});
+        await page.waitForFunction(() => document.readyState === 'complete', { timeout: 60 * 1000 });
+        if(!page.url().includes(orderUrl)){
+            logger.error('订单链接被重定向了', page.url());
+        }
+
         const result = await fetchData(page);
         page?.close && page.close();
         return result;
@@ -476,16 +482,30 @@ const fetchData = async (page) => {
                 await page.click('[debug-id="copy-purchase-token-button"]')
                 logger.info('Token 按钮已点击');
                 return 'success';
-            }).catch((e) => {
+            }).catch(async (e) => {
                 logger.info('获取详情数据数据元素超时', e);
+                if (e instanceof TimeoutError || e?.message?.includes('Timeout')) {
+                        //截屏并生成blob file 文件
+                        const screenshot = await page.screenshot({path: 'screenshot.png'});
+                        const buffer = Buffer.from(screenshot, 'base64');
+                        const file =new Blob([buffer], { type: 'image/png' });
+                        const fileKey = await upload(file);
+                        logger.info('超时截图链接', fileKey);
+
+                        //获取html结构，并上传为html文件
+                        const html = await page.content();
+                        const htmlFile = new Blob([html], { type: 'text/html' });
+                        const htmlFileKey = await upload(htmlFile);
+                        logger.info('html结构链接', htmlFileKey);
+                }
             }),
-        page.waitForSelector(inputSelector, {timeout: 60 * 1000}).then(() => {
-            logger.info('暂无数据');
-            return 'failure';
-        }).catch((e) => {
-            logger.info('没有订单，已跳回列表页');
-        }),
-    ]);
+            page.waitForSelector(inputSelector, {timeout: 60 * 1000}).then(() => {
+                logger.info('暂无数据');
+                return 'failure';
+            }).catch((e) => {
+                logger.info('没有订单，已跳回列表页');
+            }),
+        ]);
 
         if (result === 'failure') {
             logger.info('该订单号未查询到数据');
@@ -595,6 +615,20 @@ const fetchData = async (page) => {
     } catch (error) {
         const str = await page.content();
         logger.error(`发生错误：${error}`);
+        if (error instanceof TimeoutError || error?.message?.includes('Timeout')) {
+            //截屏并生成blob file 文件
+            const screenshot = await page.screenshot({path: 'screenshot.png'});
+            const buffer = Buffer.from(screenshot, 'base64');
+            const file =new Blob([buffer], { type: 'image/png' });
+            const fileKey = await upload(file);
+            logger.info('超时截图链接', fileKey);
+
+            //获取html结构，并上传为html文件
+            const html = await page.content();
+            const htmlFile = new Blob([html], { type: 'text/html' });
+            const htmlFileKey = await upload(htmlFile);
+            logger.info('html结构链接', htmlFileKey);
+        }
         // logger.error(`发生错误：${error}`, str);
         if (str.includes('Signed out')) {
             logger.info('googleplay_web@nibirutech.com：页面包含了 Signed out ，登录已过期');
