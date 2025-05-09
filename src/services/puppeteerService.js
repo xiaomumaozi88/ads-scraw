@@ -94,7 +94,7 @@ export const scrapeData = async (orderId, accountId) => {
         }
 
         const result = await fetchData(page);
-        // page?.close && page.close();
+        page?.close && page.close();
         return result;
     } catch (error) {
         logger.error(`Error in scrapeData: ${error}`);
