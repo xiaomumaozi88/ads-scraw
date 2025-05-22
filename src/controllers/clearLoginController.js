@@ -1,8 +1,16 @@
 import * as puppeteerService from '../services/puppeteerService.js';
+import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
+
+const A3_GOOGLE_ACCOUNT = 'infocenter@a3games.com';
 
 export const clearLogin = async (req, res) => {
+    const { account } = req.body;
+    const puppeteerServiceTemp =
+        account === A3_GOOGLE_ACCOUNT ?
+            puppeteerServiceA3
+            : puppeteerService;
     try {
-        await puppeteerService.clearLogin();
+        await puppeteerServiceTemp.clearLogin();
         res.json({ data: null, success: true, code: 200, message: '登录状态已清除'});
     } catch (error) {
         console.error(error);
