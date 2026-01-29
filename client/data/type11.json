@@ -1,0 +1,43 @@
+{
+    "code": 200,
+    "data": [
+        {
+            "elementType": 3007,
+            "elementCode": "付费_0_1",
+            "nameCn": "付费",
+            "nameEn": "Pay",
+            "nameJp": "Pay",
+            "nameKr": "Pay",
+            "searchName": null,
+            "orderNum": 1,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 1,
+            "abbreviation": null,
+            "ccode": "1"
+        },
+        {
+            "elementType": 3007,
+            "elementCode": "免费_0_2",
+            "nameCn": "免费",
+            "nameEn": "Free",
+            "nameJp": "Free",
+            "nameKr": "Free",
+            "searchName": null,
+            "orderNum": 2,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 1,
+            "abbreviation": null,
+            "ccode": "2"
+        }
+    ],
+    "traceId": "1889614970918741589",
+    "message": "成功",
+    "msg": "成功",
+    "jPath": null
+}

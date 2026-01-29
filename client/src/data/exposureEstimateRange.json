@@ -1,0 +1,60 @@
+{
+    "code": 200,
+    "data": [
+        {
+            "elementType": 5009,
+            "elementCode": "5009_top100",
+            "nameCn": "top100",
+            "nameEn": "top100",
+            "nameJp": null,
+            "nameKr": null,
+            "searchName": null,
+            "orderNum": 3,
+            "colorIcon": null,
+            "level": 1,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 0,
+            "abbreviation": null,
+            "ccode": "100"
+        },
+        {
+            "elementType": 5009,
+            "elementCode": "5009_top500",
+            "nameCn": "top500",
+            "nameEn": "top500",
+            "nameJp": null,
+            "nameKr": null,
+            "searchName": null,
+            "orderNum": 2,
+            "colorIcon": null,
+            "level": 1,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 0,
+            "abbreviation": null,
+            "ccode": "500"
+        },
+        {
+            "elementType": 5009,
+            "elementCode": "5009_top2000",
+            "nameCn": "top2000",
+            "nameEn": "top2000",
+            "nameJp": null,
+            "nameKr": null,
+            "searchName": null,
+            "orderNum": 1,
+            "colorIcon": null,
+            "level": 1,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 0,
+            "abbreviation": null,
+            "ccode": "2000"
+        }
+    ],
+    "traceId": "117798211773017584",
+    "message": "成功",
+    "msg": "成功",
+    "jPath": null
+}

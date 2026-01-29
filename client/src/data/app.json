@@ -1,0 +1,443 @@
+{
+    "code": 200,
+    "data": {
+        "f82e900d73af4cb2c17e7b52218de97d": [
+            {
+                "id": "com.kidga.gravity.race",
+                "cnt": 24,
+                "impression": 37813,
+                "name": "Gravity Race",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/pkg_basic_update/logo/15ac86d245857619b15cc09e1ee1e927.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=IrK3JXh2njl7RqY545H6GUYldDI%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "com.kidga.gravity.race",
+                "developer": "Kidga",
+                "developerId": "66397376",
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "f82e900d73af4cb2c17e7b52218de97d",
+                "productType": [
+                    1
+                ],
+                "tradeLevel1": [
+                    "602"
+                ],
+                "tradeLevel2": [
+                    "60205"
+                ],
+                "tradeLevel3": [
+                    "6020501"
+                ],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    3
+                ],
+                "subjectType": [
+                    90031
+                ],
+                "selling": 1
+            }
+        ],
+        "37377bbbabb2208d5dc481f589a4678b": [
+            {
+                "id": "com.mohadigital.regentplay",
+                "cnt": 18,
+                "impression": 18870,
+                "name": "Regent Play",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/app_icon/android/2025/01/23/com.mohadigital.regentplay.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=LqLfEd%2Bfq2ZwGA4yeACnK5TiM2Q%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "com.mohadigital.regentplay",
+                "developer": "MohaDigital",
+                "developerId": "543730977",
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "37377bbbabb2208d5dc481f589a4678b",
+                "productType": [
+                    1
+                ],
+                "tradeLevel1": [
+                    "602"
+                ],
+                "tradeLevel2": [
+                    "60206"
+                ],
+                "tradeLevel3": [
+                    "6020601"
+                ],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    0
+                ],
+                "subjectType": null,
+                "selling": 1
+            },
+            {
+                "id": "b6b2cb811c72a4cbe532f7e92963d99b",
+                "cnt": 4,
+                "impression": 5579,
+                "name": "Astrosnout.com",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/ad_union/domain/icon/2024/07/22/b6b2cb811c72a4cbe532f7e92963d99b.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=z6TPDnGNdMQIUDcpFHPfTeyn1KM%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "b6b2cb811c72a4cbe532f7e92963d99b",
+                "developer": "",
+                "developerId": null,
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "37377bbbabb2208d5dc481f589a4678b",
+                "productType": [
+                    14
+                ],
+                "tradeLevel1": [
+                    "-1"
+                ],
+                "tradeLevel2": [],
+                "tradeLevel3": [],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    0
+                ],
+                "subjectType": null,
+                "selling": 1
+            },
+            {
+                "id": "cl.treceradios.janus.player.sonarfm",
+                "cnt": 3,
+                "impression": 616,
+                "name": "Sonar FM",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/pkg_basic_update/logo/28066072e0ef1cd44f28f91d21f29194.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=iDh9ttXdG%2FREXZN0wRiBlZPe9x0%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "cl.treceradios.janus.player.sonarfm",
+                "developer": "13 radios",
+                "developerId": "1161207402",
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "37377bbbabb2208d5dc481f589a4678b",
+                "productType": [
+                    1
+                ],
+                "tradeLevel1": [
+                    "604"
+                ],
+                "tradeLevel2": [
+                    "60405"
+                ],
+                "tradeLevel3": [
+                    "6040503"
+                ],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    0
+                ],
+                "subjectType": null,
+                "selling": 0
+            }
+        ],
+        "d19491059b2c22d9579869f2997663f1": [
+            {
+                "id": "com.luishumberto.cartdash2",
+                "cnt": 105,
+                "impression": 26656,
+                "name": "Cart Dash 2",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/pkg_basic_update/logo/65e91d9b60c995b2f4fbb905be4efad1.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=e%2F7NEcwBXvlvRmL%2BfIcGbep0Ih0%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "com.luishumberto.cartdash2",
+                "developer": "Luis Humberto",
+                "developerId": "967961522",
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "d19491059b2c22d9579869f2997663f1",
+                "productType": [
+                    1
+                ],
+                "tradeLevel1": [
+                    "602"
+                ],
+                "tradeLevel2": [
+                    "60205"
+                ],
+                "tradeLevel3": [
+                    "6020501"
+                ],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    0
+                ],
+                "subjectType": null,
+                "selling": 1
+            }
+        ],
+        "2bb989f0ce885e6e40cddd61183d4efd": [
+            {
+                "id": "6739204408",
+                "cnt": 60,
+                "impression": 446841,
+                "name": "Yandex Search: Find with AI",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/pkg_basic_update/logo/abc97a17873b329831796d7928dc6eb8.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=O8nypFUawO3Ht%2FNcM5VwIeeMHuo%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "6739204408",
+                "developer": "Direct Cursus Computer Systems Trading",
+                "developerId": "1587007751",
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "2bb989f0ce885e6e40cddd61183d4efd",
+                "productType": [
+                    1
+                ],
+                "tradeLevel1": [
+                    "601"
+                ],
+                "tradeLevel2": [
+                    "60110"
+                ],
+                "tradeLevel3": [
+                    "6011003"
+                ],
+                "payType": [
+                    1
+                ],
+                "monetization": [
+                    0
+                ],
+                "subjectType": null,
+                "selling": 1
+            }
+        ],
+        "cf692697bb17cc039267d3e55136cce0": [
+            {
+                "id": "com.yajox.app",
+                "cnt": 19,
+                "impression": 42365,
+                "name": "YAJOX",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/pkg_basic_update/logo/3e2767ba6561bfcb32d350ff84df8d7b.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=HiFxqDR2Cv5CT5uASgmNoiLDktU%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "com.yajox.app",
+                "developer": "Flayer Studio",
+                "developerId": "1412484203",
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "cf692697bb17cc039267d3e55136cce0",
+                "productType": [
+                    1
+                ],
+                "tradeLevel1": [
+                    "602"
+                ],
+                "tradeLevel2": [
+                    "60226"
+                ],
+                "tradeLevel3": [
+                    "6022601"
+                ],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    0
+                ],
+                "subjectType": null,
+                "selling": 1
+            },
+            {
+                "id": "com.kezi10.app",
+                "cnt": 0,
+                "impression": 0,
+                "name": "KEZI10 Games",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/pkg_basic_update/logo/2c27ddf59ad6f09a00b0fbadcfc1c2cd.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=pZvh4ExXySa8RhOiyuRFT6NZ44Y%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "com.kezi10.app",
+                "developer": "SunDev Group",
+                "developerId": "612888570",
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "cf692697bb17cc039267d3e55136cce0",
+                "productType": [
+                    1
+                ],
+                "tradeLevel1": [
+                    "602"
+                ],
+                "tradeLevel2": [
+                    "60226"
+                ],
+                "tradeLevel3": [
+                    "6022601"
+                ],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    0
+                ],
+                "subjectType": null,
+                "selling": 1
+            }
+        ],
+        "cda606e28b5ce464198c535ba50db486": [
+            {
+                "id": "b6b2cb811c72a4cbe532f7e92963d99b",
+                "cnt": 121,
+                "impression": 107240,
+                "name": "Astrosnout.com",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/ad_union/domain/icon/2024/07/22/b6b2cb811c72a4cbe532f7e92963d99b.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=z6TPDnGNdMQIUDcpFHPfTeyn1KM%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "b6b2cb811c72a4cbe532f7e92963d99b",
+                "developer": "",
+                "developerId": null,
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "cda606e28b5ce464198c535ba50db486",
+                "productType": [
+                    14
+                ],
+                "tradeLevel1": [
+                    "-1"
+                ],
+                "tradeLevel2": [],
+                "tradeLevel3": [],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    0
+                ],
+                "subjectType": null,
+                "selling": 1
+            }
+        ],
+        "da89f4de6fd208c732cfc3abad43dacb": [
+            {
+                "id": "com.kidga.gravity.race",
+                "cnt": 64,
+                "impression": 43989,
+                "name": "Gravity Race",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/pkg_basic_update/logo/15ac86d245857619b15cc09e1ee1e927.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=IrK3JXh2njl7RqY545H6GUYldDI%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "com.kidga.gravity.race",
+                "developer": "Kidga",
+                "developerId": "66397376",
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "da89f4de6fd208c732cfc3abad43dacb",
+                "productType": [
+                    1
+                ],
+                "tradeLevel1": [
+                    "602"
+                ],
+                "tradeLevel2": [
+                    "60205"
+                ],
+                "tradeLevel3": [
+                    "6020501"
+                ],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    3
+                ],
+                "subjectType": [
+                    90031
+                ],
+                "selling": 1
+            }
+        ],
+        "cbcc34e2e939775df691dce4ac5a44a4": [
+            {
+                "id": "com.astapp.biology_1st_paper_hsc",
+                "cnt": 6,
+                "impression": 51966,
+                "name": "এইচএসসি জীববিজ্ঞান প্রথম পত্র",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/pkg_basic_update/logo/c3a94647193b68a343713b7294945fdd.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=LfaLSs5QuZQ8eiY3gu0C3I1HgQQ%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "com.astapp.biology_1st_paper_hsc",
+                "developer": "AST Apps LTD.",
+                "developerId": "792321392",
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "cbcc34e2e939775df691dce4ac5a44a4",
+                "productType": [
+                    1
+                ],
+                "tradeLevel1": [
+                    "606"
+                ],
+                "tradeLevel2": [
+                    "60603"
+                ],
+                "tradeLevel3": [
+                    "6060302"
+                ],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    2
+                ],
+                "subjectType": null,
+                "selling": 0
+            }
+        ],
+        "39e5c4e817f75f76f74e4cdd43bb4d28": [
+            {
+                "id": "com.sood.droptheegg",
+                "cnt": 535,
+                "impression": 4679623,
+                "name": "DropTheEgg",
+                "logo": "https://adinsights-1258892624.oss-accelerate.aliyuncs.com/pkg_basic_update/logo/76f6df5689f3264917c1a87b4a1f20dd.png?Expires=1769507982&OSSAccessKeyId=LTAI5tHWzf4ZNhfdSN9byaJb&Signature=LVk5SYK3UzxXX8H3IVkKEp%2F3cZc%3D&x-oss-process=image%2Fresize%2Cl_96",
+                "geo": null,
+                "pkg": "com.sood.droptheegg",
+                "developer": "SooD Entertainment",
+                "developerId": "1512354909",
+                "appCategory": null,
+                "percent": null,
+                "deviceList": null,
+                "bizId": "39e5c4e817f75f76f74e4cdd43bb4d28",
+                "productType": [
+                    1
+                ],
+                "tradeLevel1": [
+                    "602"
+                ],
+                "tradeLevel2": [
+                    "60203"
+                ],
+                "tradeLevel3": [
+                    "6020302"
+                ],
+                "payType": [
+                    2
+                ],
+                "monetization": [
+                    2
+                ],
+                "subjectType": null,
+                "selling": 1
+            }
+        ]
+    },
+    "traceId": "1346820340827213108",
+    "message": null,
+    "msg": null,
+    "jPath": null
+}

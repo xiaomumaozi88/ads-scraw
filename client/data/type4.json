@@ -1,0 +1,43 @@
+{
+    "code": 200,
+    "data": [
+        {
+            "elementType": 2004,
+            "elementCode": "Android_2_1",
+            "nameCn": "Android",
+            "nameEn": "Android",
+            "nameJp": "Android",
+            "nameKr": "Android",
+            "searchName": null,
+            "orderNum": 1,
+            "colorIcon": "android",
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 2,
+            "abbreviation": null,
+            "ccode": "1"
+        },
+        {
+            "elementType": 2004,
+            "elementCode": "iOS_2_2",
+            "nameCn": "iOS",
+            "nameEn": "IOS",
+            "nameJp": "iOS",
+            "nameKr": "iOS",
+            "searchName": null,
+            "orderNum": 2,
+            "colorIcon": "ios",
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 2,
+            "abbreviation": null,
+            "ccode": "2"
+        }
+    ],
+    "traceId": "2050268654836584355",
+    "message": "成功",
+    "msg": "成功",
+    "jPath": null
+}

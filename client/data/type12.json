@@ -1,0 +1,43 @@
+{
+    "code": 200,
+    "data": [
+        {
+            "elementType": 3005,
+            "elementCode": "预约_2_1",
+            "nameCn": "正常",
+            "nameEn": "Listing",
+            "nameJp": null,
+            "nameKr": null,
+            "searchName": null,
+            "orderNum": 10,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 2,
+            "abbreviation": null,
+            "ccode": "1,-1"
+        },
+        {
+            "elementType": 3005,
+            "elementCode": "非预约_2_2",
+            "nameCn": "下架",
+            "nameEn": "Delisting",
+            "nameJp": null,
+            "nameKr": null,
+            "searchName": null,
+            "orderNum": 8,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 2,
+            "abbreviation": null,
+            "ccode": "0"
+        }
+    ],
+    "traceId": "1462854753423586919",
+    "message": "成功",
+    "msg": "成功",
+    "jPath": null
+}

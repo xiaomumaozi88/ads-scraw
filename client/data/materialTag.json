@@ -1,0 +1,43 @@
+{
+    "code": 200,
+    "data": [
+        {
+            "elementType": 3000,
+            "elementCode": "gold_0_1",
+            "nameCn": "金币",
+            "nameEn": "Gold",
+            "nameJp": "gold",
+            "nameKr": "gold",
+            "searchName": "gold",
+            "orderNum": 2,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": "",
+            "authHidden": null,
+            "sysTag": 0,
+            "abbreviation": null,
+            "ccode": "1"
+        },
+        {
+            "elementType": 3000,
+            "elementCode": "real_person_0_2",
+            "nameCn": "真人",
+            "nameEn": "Real Person",
+            "nameJp": "real person",
+            "nameKr": "real person",
+            "searchName": "real person",
+            "orderNum": 2,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": "",
+            "authHidden": null,
+            "sysTag": 0,
+            "abbreviation": null,
+            "ccode": "2"
+        }
+    ],
+    "traceId": "1816799150355231835",
+    "message": "成功",
+    "msg": "成功",
+    "jPath": null
+}

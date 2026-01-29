@@ -1,0 +1,60 @@
+{
+    "code": 200,
+    "data": [
+        {
+            "elementType": 3004,
+            "elementCode": "内购（IAP）_2_1",
+            "nameCn": "内购（IAP）",
+            "nameEn": "IAP",
+            "nameJp": null,
+            "nameKr": null,
+            "searchName": null,
+            "orderNum": 10,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 2,
+            "abbreviation": null,
+            "ccode": "1"
+        },
+        {
+            "elementType": 3004,
+            "elementCode": "广告(IAA)（NoIAP）_2_0",
+            "nameCn": "广告(IAA)",
+            "nameEn": "IAA",
+            "nameJp": null,
+            "nameKr": null,
+            "searchName": null,
+            "orderNum": 9,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 2,
+            "abbreviation": null,
+            "ccode": "2"
+        },
+        {
+            "elementType": 3004,
+            "elementCode": "混合(IAP)（IAA）_2_3",
+            "nameCn": "混合(IAP+IAA)",
+            "nameEn": "IAA/IAP",
+            "nameJp": null,
+            "nameKr": null,
+            "searchName": null,
+            "orderNum": 8,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 2,
+            "abbreviation": null,
+            "ccode": "3"
+        }
+    ],
+    "traceId": "3846227344512209686",
+    "message": "成功",
+    "msg": "成功",
+    "jPath": null
+}

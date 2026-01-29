@@ -1,0 +1,43 @@
+{
+    "code": 200,
+    "data": [
+        {
+            "elementType": 3013,
+            "elementCode": "creative_视频_0_2,3",
+            "nameCn": "视频",
+            "nameEn": "Video",
+            "nameJp": "Video",
+            "nameKr": "Video",
+            "searchName": null,
+            "orderNum": 10,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 0,
+            "abbreviation": null,
+            "ccode": "2"
+        },
+        {
+            "elementType": 3013,
+            "elementCode": "creative_图片_0_1,4,5,6,7,9",
+            "nameCn": "图片",
+            "nameEn": "Image",
+            "nameJp": "Image",
+            "nameKr": "Image",
+            "searchName": null,
+            "orderNum": 8,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 0,
+            "abbreviation": null,
+            "ccode": "1"
+        }
+    ],
+    "traceId": "8173439123394784894",
+    "message": "成功",
+    "msg": "成功",
+    "jPath": null
+}

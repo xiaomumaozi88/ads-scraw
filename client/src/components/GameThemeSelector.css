@@ -1,0 +1,58 @@
+.game-theme-dropdown {
+  background: white;
+  border-radius: 8px;
+  min-width: 600px;
+  max-height: 500px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-search {
+  padding: 12px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.dropdown-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  max-height: 350px;
+}
+
+.themes-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.theme-checkbox-item {
+  width: 100%;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.theme-checkbox-item:hover {
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+.dropdown-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid #e8e8e8;
+}
+
+.game-theme-selector-trigger {
+  width: 100%;
+}
+
+.game-theme-input {
+  cursor: pointer;
+}
+
+.game-theme-input.ant-input {
+  height: 32px;
+  line-height: 30px;
+}

@@ -1,0 +1,43 @@
+{
+    "code": 200,
+    "data": [
+        {
+            "elementType": 2008,
+            "elementCode": "AI_0_1",
+            "nameCn": "AI",
+            "nameEn": "AI",
+            "nameJp": "AI",
+            "nameKr": "AI",
+            "searchName": "AI",
+            "orderNum": 1,
+            "colorIcon": "",
+            "level": 3,
+            "parentElementCode": null,
+            "authHidden": null,
+            "sysTag": 1,
+            "abbreviation": null,
+            "ccode": "001"
+        },
+        {
+            "elementType": 2008,
+            "elementCode": "Fishing_0_2",
+            "nameCn": "捕鱼",
+            "nameEn": "Fishing",
+            "nameJp": "Fishing",
+            "nameKr": "Fishing",
+            "searchName": "Fishing",
+            "orderNum": 2,
+            "colorIcon": null,
+            "level": 3,
+            "parentElementCode": "",
+            "authHidden": null,
+            "sysTag": 0,
+            "abbreviation": null,
+            "ccode": "002"
+        }
+    ],
+    "traceId": "6200106780483843480",
+    "message": "成功",
+    "msg": "成功",
+    "jPath": null
+}

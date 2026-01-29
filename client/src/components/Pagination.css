@@ -1,0 +1,113 @@
+.pagination-container {
+  margin-top: 24px;
+  padding: 16px 0;
+  border-top: 1px solid #e8e8e8;
+}
+
+.pagination-stats {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 16px;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-label {
+  color: #666;
+  font-size: 14px;
+}
+
+.stat-value {
+  color: #1890ff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.pagination-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  border-color: #40a9ff;
+  color: #1890ff;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-btn.active {
+  background: #1890ff;
+  border-color: #1890ff;
+  color: #fff;
+}
+
+.pagination-btn.active:hover {
+  background: #40a9ff;
+  border-color: #40a9ff;
+}
+
+.ellipsis-btn {
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+
+.ellipsis-btn:hover {
+  border: none;
+  color: #333;
+}
+
+.pagination-goto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 16px;
+}
+
+.goto-label {
+  color: #666;
+  font-size: 14px;
+}
+
+.goto-input {
+  width: 60px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.goto-input:focus {
+  outline: none;
+  border-color: #40a9ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}

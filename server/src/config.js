@@ -1,0 +1,133 @@
+// src/config.js
+export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
+    defaultViewport: {
+        width: 1920,
+        height: 1280,
+    },
+    headless: true, // 是否不打开浏览器
+    userDataDir: "tmp/guangdada_spider_usr_dir",
+    executablePath: '/usr/bin/google-chrome', // 运用额外装置的谷歌浏览器
+    args: [
+        '--no-sandbox',
+        '--disable-client-side-phishing-detection',
+        '--disable-setuid-sandbox',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-popup-blocking',
+        '--disable-offer-store-unmasked-wallet-cards',
+        '--disable-speech-api',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--no-zygote',
+        // '--single-process',
+        // '--disable-gpu',
+    ],
+} : {
+    defaultViewport: {
+        width: 1920,
+        height: 1280,
+    },
+    headless: false, // 是否不打开浏览器
+    userDataDir: "tmp/guangdada_spider_usr_dir",
+    // macOS Chrome 路径
+    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--disable-blink-features=AutomationControlled', // 禁用自动化控制特征
+        '--disable-client-side-phishing-detection',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-popup-blocking',
+        '--disable-offer-store-unmasked-wallet-cards',
+        '--disable-speech-api',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--no-zygote',
+        '--window-size=1920,1080',
+        // '--single-process',
+        // '--disable-gpu',
+    ],
+};
+
+// src/config.js
+export const puppeteerOptionsA3 = process.env.NODE_ENV !== 'development' ? {
+    defaultViewport: {
+        width: 1920,
+        height: 1280,
+    },
+    headless: true, // 是否不打开浏览器
+    userDataDir: "tmp/gpc_order_spider_usr_dir3_a3",
+    executablePath: '/usr/bin/google-chrome', // 运用额外装置的谷歌浏览器
+    args: [
+        '--no-sandbox',
+        '--disable-client-side-phishing-detection',
+        '--disable-setuid-sandbox',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-popup-blocking',
+        '--disable-offer-store-unmasked-wallet-cards',
+        '--disable-speech-api',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--no-zygote',
+        // '--single-process',
+        // '--disable-gpu',
+    ],
+} : {
+    defaultViewport: {
+        width: 1920,
+        height: 1280,
+    },
+    headless: false, // 是否不打开浏览器
+    userDataDir: "tmp/gpc_order_spider_usr_dir3_a3",
+    args: [
+        '--no-sandbox',
+        '--disable-client-side-phishing-detection',
+        '--disable-setuid-sandbox',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-popup-blocking',
+        '--disable-offer-store-unmasked-wallet-cards',
+        '--disable-speech-api',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--no-zygote',
+        // '--single-process',
+        // '--disable-gpu',
+    ],
+};

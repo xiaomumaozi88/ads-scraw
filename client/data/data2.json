@@ -1,0 +1,579 @@
+{
+    "code": 200,
+    "data": {
+        "com.robtopx.geometrydashworld": [
+            {
+                "id": "105",
+                "cnt": 138,
+                "impression": 0,
+                "find_cnt": 138,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "110",
+                "cnt": 2,
+                "impression": 0,
+                "find_cnt": 2,
+                "name": "Unity",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/UnityAds.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "df4b683432366faf82ebc3a839288890": [
+            {
+                "id": "104",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 5
+            }
+        ],
+        "com.bcaapps.anime.puzzle.games": [
+            {
+                "id": "105",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 5
+            }
+        ],
+        "com.robtopx.geometrydashsubzero": [
+            {
+                "id": "110",
+                "cnt": 1,
+                "impression": 0,
+                "find_cnt": 1,
+                "name": "Unity",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/UnityAds.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            },
+            {
+                "id": "104",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            },
+            {
+                "id": "105",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "com.magicjigsaw.puzzles.game": [
+            {
+                "id": "108",
+                "cnt": 75257,
+                "impression": 0,
+                "find_cnt": 75257,
+                "name": "Mintegral",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Mintegral.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "105",
+                "cnt": 292,
+                "impression": 0,
+                "find_cnt": 292,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "102",
+                "cnt": 82,
+                "impression": 0,
+                "find_cnt": 82,
+                "name": "Applovin",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Applovin.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "110",
+                "cnt": 27,
+                "impression": 0,
+                "find_cnt": 27,
+                "name": "Unity",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/UnityAds.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "106",
+                "cnt": 19,
+                "impression": 0,
+                "find_cnt": 19,
+                "name": "IronSource",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/IronSource.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "109",
+                "cnt": 14,
+                "impression": 0,
+                "find_cnt": 14,
+                "name": "TikTok Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/media/TikTok.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "358",
+                "cnt": 6,
+                "impression": 0,
+                "find_cnt": 6,
+                "name": "Bigo",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/media/Bigo.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "357",
+                "cnt": 5,
+                "impression": 0,
+                "find_cnt": 5,
+                "name": "Fyber",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Fyber.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "111",
+                "cnt": 1,
+                "impression": 0,
+                "find_cnt": 1,
+                "name": "Vungle",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Vungle.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "com.rainbow.geometryjumpworld": [
+            {
+                "id": "105",
+                "cnt": 12046,
+                "impression": 0,
+                "find_cnt": 12046,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "com.ForeverBlessing.PengPeng": [
+            {
+                "id": "110",
+                "cnt": 185,
+                "impression": 0,
+                "find_cnt": 185,
+                "name": "Unity",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/UnityAds.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "105",
+                "cnt": 56,
+                "impression": 0,
+                "find_cnt": 56,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "com.robtopx.geometryjumplite": [
+            {
+                "id": "102",
+                "cnt": 23555,
+                "impression": 0,
+                "find_cnt": 23555,
+                "name": "Applovin",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Applovin.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            },
+            {
+                "id": "105",
+                "cnt": 3421,
+                "impression": 0,
+                "find_cnt": 3421,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            },
+            {
+                "id": "110",
+                "cnt": 478,
+                "impression": 0,
+                "find_cnt": 478,
+                "name": "Unity",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/UnityAds.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            },
+            {
+                "id": "104",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "com.robtopx.geometryjump": [
+            {
+                "id": "105",
+                "cnt": 112974,
+                "impression": 0,
+                "find_cnt": 112974,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            },
+            {
+                "id": "104",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "com.ToasterRepair.GeometryJumpWorldEpic": [
+            {
+                "id": "343",
+                "cnt": 28767,
+                "impression": 0,
+                "find_cnt": 28767,
+                "name": "Yandex",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/media/Yandex.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "6451107811": [
+            {
+                "id": "105",
+                "cnt": 9,
+                "impression": 0,
+                "find_cnt": 9,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "com.GL.GeometryDashJump": [
+            {
+                "id": "105",
+                "cnt": 1,
+                "impression": 0,
+                "find_cnt": 1,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "1112307917": [
+            {
+                "id": "110",
+                "cnt": 1,
+                "impression": 0,
+                "find_cnt": 1,
+                "name": "Unity",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/UnityAds.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            },
+            {
+                "id": "111",
+                "cnt": 1,
+                "impression": 0,
+                "find_cnt": 1,
+                "name": "Vungle",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Vungle.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "6451107895": [
+            {
+                "id": "105",
+                "cnt": 437,
+                "impression": 0,
+                "find_cnt": 437,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "036fa94eb7fb5c63921a46ebe96b1bd6": [
+            {
+                "id": "104",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 5
+            }
+        ],
+        "com.GL.AvatarGame": [
+            {
+                "id": "105",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 5
+            }
+        ],
+        "com.ForeverBlessing.RollingDisc": [
+            {
+                "id": "105",
+                "cnt": 8,
+                "impression": 0,
+                "find_cnt": 8,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            },
+            {
+                "id": "104",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "com.rainbow.foxdash.geometryrun": [
+            {
+                "id": "105",
+                "cnt": 1890,
+                "impression": 0,
+                "find_cnt": 1890,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "com.rainbow.block.geo.dash.rythm.action.platform.jump.games": [
+            {
+                "id": "105",
+                "cnt": 9560,
+                "impression": 0,
+                "find_cnt": 9560,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "com.art23.geometryhide": [
+            {
+                "id": "105",
+                "cnt": 11,
+                "impression": 0,
+                "find_cnt": 11,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "com.robtopx.geometrydashmeltdown": [
+            {
+                "id": "110",
+                "cnt": 1,
+                "impression": 0,
+                "find_cnt": 1,
+                "name": "Unity",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/UnityAds.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "com.bouncy.cube.classic.chain": [
+            {
+                "id": "105",
+                "cnt": 117,
+                "impression": 0,
+                "find_cnt": 117,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "com.wave.dash": [
+            {
+                "id": "104",
+                "cnt": 37,
+                "impression": 0,
+                "find_cnt": 37,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            },
+            {
+                "id": "105",
+                "cnt": 32,
+                "impression": 0,
+                "find_cnt": 32,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "com.brawlfans.GeometryPlatformerDash": [
+            {
+                "id": "105",
+                "cnt": 4251,
+                "impression": 0,
+                "find_cnt": 4251,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            },
+            {
+                "id": "110",
+                "cnt": 24,
+                "impression": 0,
+                "find_cnt": 24,
+                "name": "Unity",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/UnityAds.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            },
+            {
+                "id": "104",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "com.Enterosoft.MoveOnFaster": [
+            {
+                "id": "104",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 5
+            }
+        ],
+        "com.rainbow.geometryplatformdash": [
+            {
+                "id": "105",
+                "cnt": 9102,
+                "impression": 0,
+                "find_cnt": 9102,
+                "name": "Google Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Google_Ads.png",
+                "adSourceMin": 5,
+                "adSourceMax": 9
+            }
+        ],
+        "698255242": [
+            {
+                "id": "111",
+                "cnt": 6,
+                "impression": 0,
+                "find_cnt": 6,
+                "name": "Vungle",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Vungle.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "501c76604a6f86063517b94ead9a3c76": [
+            {
+                "id": "104",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 5
+            }
+        ],
+        "625334537": [
+            {
+                "id": "102",
+                "cnt": 2,
+                "impression": 0,
+                "find_cnt": 2,
+                "name": "Applovin",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Applovin.png",
+                "adSourceMin": 9,
+                "adSourceMax": 9
+            }
+        ],
+        "com.Dopamine.RunCube": [
+            {
+                "id": "104",
+                "cnt": 0,
+                "impression": 0,
+                "find_cnt": 0,
+                "name": "Facebook Ads",
+                "logo": "https://cas-logo.oss-cn-hongkong.aliyuncs.com/oversea/adfunction/Meta.png",
+                "adSourceMin": 5,
+                "adSourceMax": 5
+            }
+        ]
+    },
+    "traceId": "5872808703683523165",
+    "message": null,
+    "msg": null,
+    "jPath": null
+}

@@ -1,0 +1,136 @@
+.traffic-channel-selector-trigger {
+  width: 100%;
+}
+
+.traffic-channel-input {
+  cursor: pointer;
+}
+
+.traffic-channel-input.ant-input {
+  height: 32px;
+  line-height: 30px;
+}
+
+.traffic-channel-dropdown {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 500px;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-header {
+  padding: 16px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.dropdown-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.dropdown-search {
+  width: 100%;
+}
+
+.dropdown-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  max-height: 400px;
+}
+
+.traffic-channel-tree {
+  background: transparent;
+}
+
+.tree-platform-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tree-platform-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.tree-platform-name {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.tree-platform-note {
+  font-size: 12px;
+  color: #999;
+  margin-left: 8px;
+  font-weight: normal;
+}
+
+.tree-channel-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 24px;
+}
+
+.tree-channel-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.tree-channel-name {
+  font-size: 14px;
+  color: #333;
+}
+
+.dropdown-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid #e8e8e8;
+}
+
+/* 覆盖 antd Tree 的样式 */
+.traffic-channel-tree .ant-tree-node-content-wrapper {
+  padding: 2px 8px;
+  border-radius: 4px;
+  min-height: 24px;
+  line-height: 20px;
+}
+
+.traffic-channel-tree .ant-tree-node-content-wrapper:hover {
+  background: #f5f5f5;
+}
+
+.traffic-channel-tree .ant-tree-checkbox {
+  margin-right: 8px;
+}
+
+.traffic-channel-tree .ant-tree-node-selected {
+  background: transparent;
+}
+
+.traffic-channel-tree .ant-tree-node-selected .ant-tree-node-content-wrapper {
+  background: transparent;
+}
+
+.traffic-channel-tree .ant-tree-treenode {
+  padding: 2px 0;
+}
+
+.traffic-channel-tree .tree-platform-item,
+.traffic-channel-tree .tree-channel-item {
+  line-height: 20px;
+  min-height: 24px;
+}
