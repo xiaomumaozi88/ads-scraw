@@ -138,6 +138,53 @@ function CreativeCardGuangdada({ item }) {
   // 格式化最后看见日期
   const lastSeenDisplay = item.last_seen ? formatDate(item.last_seen) : 'N/A';
 
+  // 下载素材：从 URL 解析后缀、安全文件名、触发下载
+  const getExtensionFromUrl = (urlString) => {
+    if (!urlString || typeof urlString !== 'string') return '';
+    const pathOnly = urlString.split('?')[0];
+    const lastSegment = pathOnly.split('/').pop() || '';
+    const match = lastSegment.match(/\.([a-zA-Z0-9]+)$/);
+    return match ? match[1].toLowerCase() : '';
+  };
+  const sanitizeFileName = (str) => {
+    if (str == null || typeof str !== 'string') return '';
+    return String(str)
+      .replace(/[\\/:*?"<>|\x00-\x1f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120) || '';
+  };
+  const getDownloadBaseName = () => {
+    const t = title && title.trim();
+    if (t) return sanitizeFileName(t);
+    if (appName && appName !== 'N/A') return sanitizeFileName(appName);
+    return sanitizeFileName(String(item.ad_key || '')) || `creative_${Date.now()}`;
+  };
+  const handleDownload = (e) => {
+    e.stopPropagation();
+    const url = isVideo ? videoUrl : thumbnailUrl;
+    if (!url) return;
+    const extFromUrl = getExtensionFromUrl(url);
+    const ext = isVideo
+      ? (extFromUrl === 'mp4' || extFromUrl === 'webm' || extFromUrl === 'mov' ? extFromUrl : 'mp4')
+      : (extFromUrl === 'gif' || extFromUrl === 'png' || extFromUrl === 'webp' ? extFromUrl : 'jpg');
+    const baseName = getDownloadBaseName();
+    const filename = `${baseName}.${ext}`;
+    fetch(url, { mode: 'cors' })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      })
+      .catch(() => {
+        window.open(url, '_blank', 'noopener');
+      });
+  };
+  const downloadUrl = isVideo ? videoUrl : thumbnailUrl;
+
   return (
     <div className="creative-card guangdada-card">
       {/* 产品信息头部 */}
@@ -159,7 +206,6 @@ function CreativeCardGuangdada({ item }) {
               <div className="card-developer">{developerName}</div>
             )}
           </div>
-          <div className="card-menu">⋯</div>
         </div>
       )}
       
@@ -181,7 +227,7 @@ function CreativeCardGuangdada({ item }) {
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'cover'
+              objectFit: 'contain'
             }}
           />
         ) : (
@@ -224,12 +270,26 @@ function CreativeCardGuangdada({ item }) {
             {lifecycleStart}-{lifecycleEnd}
           </div>
         )}
+        {/* 下载按钮 - 底部，hover 时显示（参考 Insightrackr） */}
+        {downloadUrl && (
+          <div className="card-thumbnail-download" onClick={handleDownload}>
+            <span className="card-download-icon" title={isVideo ? '下载视频' : '下载图片'}>⬇</span>
+            <span className="card-download-text">{isVideo ? '下载视频' : '下载图片'}</span>
+          </div>
+        )}
       </div>
       
       {/* 性能指标区域 */}
       <div className="card-metrics">
         <div className="metrics-header">
-          <div className="guangdada-logo">G</div>
+          <span className="metrics-header-advertiser" title={item.advertiser_name || ''}>
+            {item.advertiser_name || '—'}
+          </span>
+          {item.platform != null && item.platform !== '' && (
+            <span className="metrics-header-platform">
+              {Array.isArray(item.platform) ? item.platform.join(', ') : String(item.platform)}
+            </span>
+          )}
         </div>
         <div className="metrics-primary">
           {exposureValue && (

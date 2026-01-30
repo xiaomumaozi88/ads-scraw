@@ -22,7 +22,7 @@ function DataCard({ platform, addLog, onRequireLogin }) {
     setData(null);
     setCountData(null);
 
-    const keyword = searchParams.keyWord;
+    const keyword = platform === 'guangdada' ? (searchParams.keyword ?? searchParams.keyWord) : searchParams.keyWord;
     addLog(`开始查询数据 [${platform}]，关键词: ${keyword}`, 'info');
 
     try {
@@ -101,7 +101,14 @@ function DataCard({ platform, addLog, onRequireLogin }) {
 
   const dateRangeValue = currentSearchParams
     ? (platform === 'guangdada'
-        ? { startTime: currentSearchParams.startTime, endTime: currentSearchParams.endTime }
+        ? {
+            startTime: currentSearchParams.seen_begin != null
+              ? dayjs(currentSearchParams.seen_begin * 1000).format('YYYY-MM-DD')
+              : dayjs().subtract(1, 'year').format('YYYY-MM-DD'),
+            endTime: currentSearchParams.seen_end != null
+              ? dayjs(currentSearchParams.seen_end * 1000).format('YYYY-MM-DD')
+              : dayjs().format('YYYY-MM-DD')
+          }
         : { startTime: currentSearchParams.baseOption?.startTime, endTime: currentSearchParams.baseOption?.endTime })
     : { startTime: dayjs().subtract(1, 'year').format('YYYY-MM-DD'), endTime: dayjs().format('YYYY-MM-DD') };
 
@@ -110,7 +117,11 @@ function DataCard({ platform, addLog, onRequireLogin }) {
     if (currentSearchParams) {
       const updatedParams =
         platform === 'guangdada'
-          ? { ...currentSearchParams, startTime: dateRange.startTime, endTime: dateRange.endTime }
+          ? {
+              ...currentSearchParams,
+              seen_begin: Math.floor(new Date(dateRange.startTime).getTime() / 1000),
+              seen_end: Math.floor(new Date(dateRange.endTime).getTime() / 1000)
+            }
           : {
               ...currentSearchParams,
               baseOption: {
@@ -132,7 +143,13 @@ function DataCard({ platform, addLog, onRequireLogin }) {
 
   return (
     <div className="card data-card">
-      <SearchForm platform={platform} onSearch={handleSearch} loading={loading} />
+      <SearchForm
+        platform={platform}
+        onSearch={handleSearch}
+        loading={loading}
+        guangdadaSortField={platform === 'guangdada' ? currentSearchParams?.sort_field : undefined}
+        guangdadaDedupType={platform === 'guangdada' ? currentSearchParams?.duplicate_removal : undefined}
+      />
       <div className="data-area">
         <TimeFilter value={dateRangeValue} onChange={handleDateChange} />
         {platform === 'guangdada' && (

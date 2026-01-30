@@ -292,3 +292,35 @@
 ✅ **已实现**：所有主要字段的映射关系已确认并实现  
 ⚠️ **待确认**：上架状态字段的API参数名  
 📝 **待优化**：部分字段可能需要从级联选择器中提取更深层级的值
+
+---
+
+## 广大大 API 请求体与官方参数表对齐
+
+请求体由 `server/src/services/guangdadaApiService.js` 与 `client/src/utils/guangdadaApiBody.js` 构建，已按官方参数表核对并统一类型与默认值。
+
+### 类型与格式约定（已实现）
+
+| 参数 | 官方类型/默认 | 实现说明 |
+|------|----------------|----------|
+| `app_type` | int 必填，1-游戏 2-工具 3-电商 | 按 `guangdadaPrimaryTab` 映射 |
+| `position` | int 非必填默认0，0-综合 1-广告文案 2-广告主 4-投放主页 6-落地页域名 | 仅非 0 时写入 |
+| `keyword` | str 或 List[str]，多个最多7个 | 支持单字符串或数组，数组时 slice(0,7) |
+| `exclude_keyword` | List[str]，最多7个 | slice(0, 7) |
+| `search_type` | int 非必填默认0，0-默认 1-精确 | 传数字 0/1，不再传字符串 |
+| `tag_ids` | List[int] | 所有 tag_ids 统一转为 int 数组 |
+| `platform` | List[str] | 渠道，过滤 merge_facebook 后 slice(0,20) |
+| `fb_merge` | bool 默认 false | 根据渠道是否含「合并Facebook系」 |
+| `geo` / `language` | List[str] | 国家/地区、文案语言 |
+| `complete_country_match` | bool 默认 false | 仅在该国家地区投放 |
+| `material_size` | List[str]，格式 "320 x 480"（注意空格） | 将 `*` 或 `x` 规范为 ` x ` |
+| `sort_field` | str 默认 "-first_seen" | 仅允许文档 10 个取值，否则回退默认 |
+| `page` / `page_size` | int 必填，page 最大500，page_size 产品用60 | 与文档默认20不同，按产品要求 |
+| `duplicate_removal` | int 默认0，0-广告 1-素材 2-广告主 | parseInt 后写入 |
+| `seen_begin` / `seen_end` | int 时间戳 | 北京时间 00:00:00 / 23:59:59 |
+| 其他 int/bool 字段 | 按文档 0/1 或 bool | 仅在有选值时写入，避免多传默认值 |
+
+### 实现状态
+
+✅ **已对齐**：search_type(int)、tag_ids(List[int])、keyword(str/List[str] 最多7)、material_size("宽 x 高")、sort_field 白名单  
+✅ **前后端一致**：`guangdadaApiService.js` 与 `guangdadaApiBody.js` 逻辑与注释同步

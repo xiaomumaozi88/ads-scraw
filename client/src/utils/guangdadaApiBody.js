@@ -1,10 +1,8 @@
 /**
- * 广大大平台 - 直接请求 guangdada.net API（无需 Puppeteer 登录）
- * 需配置环境变量：GUANGDADA_AUTHORIZATION（JWT），可选：GUANGDADA_DEVICE_ID、GUANGDADA_USER_TOKEN
- * 请求体字段与 API 文档 2.1.1 对齐
+ * 广大大 API 请求体构建（与 server/src/services/guangdadaApiService.js 逻辑一致）
+ * 用于前端直接发送与 guangdada.net 标准请求一致的 body，便于在 Network 中核对参数
  */
-const GUANGDADA_API_BASE = 'https://guangdada.net';
-const CREATIVE_LIST_URL = `${GUANGDADA_API_BASE}/napi/v1/creative/list`;
+import { GUANGDADA_GAME_CATEGORIES_TREE, GAME_FIRST_LEVEL_API_TAG_ID } from '../data/guangdadaGameCategoriesTree.js';
 
 /** API sort_field 有效取值（文档约定，默认 -first_seen） */
 const SORT_FIELD_ALLOWED = new Set([
@@ -12,13 +10,9 @@ const SORT_FIELD_ALLOWED = new Set([
   '-related_ads_count', '-heat_degree', '-like_count', '-comment_count', '-share_count'
 ]);
 
-/** 素材类型中文 -> API ads_type */
-const ADS_TYPE_MAP = { '图片': 1, '视频': 2, '轮播': 3, 'HTML': 4, '试玩广告': 7 };
-
-/** Top 创意中文 -> API popularity_tag */
+const ADS_TYPE_MAP = { 图片: 1, 视频: 2, 轮播: 3, HTML: 4, 试玩广告: 7 };
 const POPULARITY_TAG_MAP = { '人气值Top1%': 1, '人气值Top10%': 10 };
 
-/** 落地页类型级联值 -> API ads_promote_type */
 function landingPageTypeToApi(arr) {
   if (!arr || arr.length === 0) return '0';
   if (arr[0] === '1') return '1';
@@ -29,7 +23,6 @@ function landingPageTypeToApi(arr) {
   return '0';
 }
 
-/** 预约广告级联值 -> API is_preorder: 0-全部 1-预约 2-非预约 */
 function preorderToApi(arr) {
   if (!arr || arr.length === 0) return 0;
   if (arr[0] === '2') return 2;
@@ -37,7 +30,6 @@ function preorderToApi(arr) {
   return 0;
 }
 
-/** 链接类型级联值 -> API redirect_filter_type: 0-全部 1-重定向 2-DSP */
 function linkTypeToApi(arr) {
   if (!arr || arr.length === 0) return 0;
   if (arr[0] === '1') return 1;
@@ -45,14 +37,20 @@ function linkTypeToApi(arr) {
   return 0;
 }
 
-/** 游戏一级分类「角色扮演」的二级 code 集合（与前端 GUANGDADA_GAME_CATEGORIES_TREE 一致）；选整类时用 API tag_id "25" */
-const GAME_CATEGORY_ROLEPLAY_CHILDREN = new Set([
-  '3164', '3163', '3156', '2007002', '3159', '3039', '3157', '3160', '3162', '3158',
-  '30233232', '30233235', '30233233', '3161'
-]);
-const GAME_FIRST_LEVEL_API_TAG_ID = { '角色扮演': '25' };
+function retargetingToApi(v) {
+  if (!v) return 0;
+  if (v === 'first' || v === '初次投放') return 1;
+  if (v === 'repeat' || v === '重复投放') return 2;
+  return 0;
+}
 
-/** 工具分类一级名称 -> 该分类下所有二级 code 数组（与前端 guangdadaToolCategoriesTree 一致，用于 API tag_ids） */
+function monetizationToApi(v) {
+  if (!v) return 0;
+  if (v === '内购') return 1;
+  if (v === '非内购') return 2;
+  return 0;
+}
+
 const TOOL_CATEGORY_TAG_IDS = {
   金融理财: ['2002', '2010', '2008', '2004', '2005', '2011', '2000', '2009', '2003', '2006', '2007'],
   餐饮美食: ['2017', '2014', '2012', '30233311', '2018', '2019', '2016'],
@@ -77,23 +75,6 @@ const TOOL_CATEGORY_TAG_IDS = {
   工具网赚: ['30233341', '5005', '5006', '30233342', '30233343', '30233344', '30233345'],
 };
 
-/** 重投广告前端值 -> API resume_or_new_ads: 0-全部 1-初次 2-重复 */
-function retargetingToApi(v) {
-  if (!v) return 0;
-  if (v === 'first' || v === '初次投放') return 1;
-  if (v === 'repeat' || v === '重复投放') return 2;
-  return 0;
-}
-
-/** 内购/非内购 -> API monetization_model: 0-全部 1-内购 2-非内购 */
-function monetizationToApi(v) {
-  if (!v) return 0;
-  if (v === '内购') return 1;
-  if (v === '非内购') return 2;
-  return 0;
-}
-
-/** 从核心赛道多选拆分为 tag_ids / game_play / game_theme / game_ip（value 为字符串，转 int） */
 function splitCoreTrack(values) {
   const tagIds = [];
   const gamePlay = [];
@@ -111,7 +92,6 @@ function splitCoreTrack(values) {
   return { tag_ids: tagIds, game_play: gamePlay, game_theme: gameTheme, game_ip: gameIp };
 }
 
-/** 将选中的图片/视频智能分析 code 列表转为 API 的 { parentCode: [childCodes] }（需已知 parent 映射） */
 function buildAiTagObject(selectedCodes, parentMap) {
   if (!Array.isArray(selectedCodes) || selectedCodes.length === 0) return undefined;
   const byParent = {};
@@ -128,21 +108,15 @@ function buildAiTagObject(selectedCodes, parentMap) {
   return byParent;
 }
 
-// 图片智能分析：子 code -> 父 code（根据文档示例与常见结构）
-const IMAGE_AI_PARENT = {
-  97: 96, 98: 96, 99: 96, 100: 96, 6: 1, 7: 1, 8: 1, 9: 1, 10: 1, 12: 1, 13: 1, 38: 1, 39: 1, 40: 1, 41: 1, 42: 1, 44: 1, 45: 1, 46: 1, 47: 1, 48: 1, 49: 1,
-  14: 2, 15: 2, 16: 2, 17: 2, 51: 2, 52: 2, 53: 2, 54: 2, 55: 2, 56: 2, 57: 2, 58: 2, 61: 2, 63: 2, 64: 2, 65: 2, 66: 2,
-  18: 3, 19: 3, 20: 3, 21: 3, 22: 3, 101: 3, 102: 3, 103: 3, 104: 3, 105: 3, 106: 3, 111: 3,
-};
 /** 广大大官方使用北京时间(UTC+8)：YYYY-MM-DD 转为 seen_begin/seen_end 时按北京 00:00:00 / 23:59:59 */
 const BEIJING_OFFSET_MS = 8 * 3600 * 1000;
 function dateStrToSeenBegin(dateStr) {
-  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const [y, m, d] = dateStr.split('-').map(Number);
   const ms = Date.UTC(y, m - 1, d, 0, 0, 0, 0) - BEIJING_OFFSET_MS;
   return Math.floor(ms / 1000);
 }
 function dateStrToSeenEnd(dateStr) {
-  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const [y, m, d] = dateStr.split('-').map(Number);
   const ms = Date.UTC(y, m - 1, d, 23, 59, 59, 999) - BEIJING_OFFSET_MS;
   return Math.floor(ms / 1000);
 }
@@ -157,7 +131,11 @@ function defaultSeenRangeBeijing() {
   return { seenBegin: Math.floor(beginMs / 1000), seenEnd: Math.floor(endMs / 1000) };
 }
 
-// 视频智能分析：子 code -> 父 code（示例）
+const IMAGE_AI_PARENT = {
+  97: 96, 98: 96, 99: 96, 100: 96, 6: 1, 7: 1, 8: 1, 9: 1, 10: 1, 12: 1, 13: 1, 38: 1, 39: 1, 40: 1, 41: 1, 42: 1, 44: 1, 45: 1, 46: 1, 47: 1, 48: 1, 49: 1,
+  14: 2, 15: 2, 16: 2, 17: 2, 51: 2, 52: 2, 53: 2, 54: 2, 55: 2, 56: 2, 57: 2, 58: 2, 61: 2, 63: 2, 64: 2, 65: 2, 66: 2,
+  18: 3, 19: 3, 20: 3, 21: 3, 22: 3, 101: 3, 102: 3, 103: 3, 104: 3, 105: 3, 106: 3, 111: 3,
+};
 const VIDEO_AI_PARENT = {
   142: 140, 144: 140, 145: 140, 146: 140, 147: 140, 148: 140, 149: 140, 150: 140, 151: 140,
   204: 200, 205: 200, 206: 200, 207: 200, 208: 200, 209: 200, 210: 200, 211: 200, 212: 200,
@@ -165,10 +143,10 @@ const VIDEO_AI_PARENT = {
 };
 
 /**
- * 将前端/控制器传入的 searchParams 转为广大大 API 的 body
- * @param {Object} searchParams - 包含 keyWord, page, pageSize, startTime, endTime, sort_field, duplicate_removal 及 guangdada* 等
+ * 将表单/搜索参数转为广大大 API 的 body（与 guangdada.net 标准请求一致）
+ * @param {Object} params - 含 keyWord, startTime, endTime, page, pageSize, sort_field, duplicate_removal 及 guangdada* 等
  */
-export function buildGuangdadaRequestBody(searchParams = {}) {
+export function buildGuangdadaApiBody(params = {}) {
   const {
     page = 1,
     pageSize = 60,
@@ -199,7 +177,6 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
     guangdadaCreativeAttr,
     guangdadaImageAnalysis,
     guangdadaVideoAnalysis,
-    guangdadaAdvertiserSystem,
     guangdadaCoreTrack,
     guangdadaPreorderAd,
     guangdadaMonetizationType,
@@ -217,13 +194,12 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
     guangdadaViolationAd,
     guangdadaEndCard,
     exclude_keyword,
-  } = searchParams;
+  } = params;
 
   let seenBegin = paramSeenBegin;
   let seenEnd = paramSeenEnd;
   if (seenBegin == null || seenEnd == null) {
-    const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
-    if (startTime && endTime && dateOnly.test(String(startTime)) && dateOnly.test(String(endTime))) {
+    if (startTime && endTime && /^\d{4}-\d{2}-\d{2}$/.test(String(startTime)) && /^\d{4}-\d{2}-\d{2}$/.test(String(endTime))) {
       seenBegin = dateStrToSeenBegin(String(startTime));
       seenEnd = dateStrToSeenEnd(String(endTime));
     } else {
@@ -261,7 +237,7 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
     body.is_theater = guangdadaIsTheater ? 1 : 0;
     body.is_ai_app = guangdadaIsAiApp ? 1 : 0;
   }
-  const positionMap = { '综合': 0, '广告文案': 1, '广告主': 2, '投放主页': 4, '落地页域名': 6 };
+  const positionMap = { 综合: 0, 广告文案: 1, 广告主: 2, 投放主页: 4, 落地页域名: 6 };
   if (guangdadaSearchType && positionMap[guangdadaSearchType] != null && positionMap[guangdadaSearchType] !== 0) {
     body.position = positionMap[guangdadaSearchType];
   }
@@ -293,10 +269,17 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
       ? (guangdadaGameCategoryCodes || []).map((c) => String(c)).filter(Boolean)
       : [];
     if (gameCodes.length > 0) {
-      const selectedSet = new Set(gameCodes);
+      const selectedSet = new Set(gameCodes.sort());
       let useApiTagId = null;
-      if (selectedSet.size === GAME_CATEGORY_ROLEPLAY_CHILDREN.size && [...selectedSet].every((v) => GAME_CATEGORY_ROLEPLAY_CHILDREN.has(v))) {
-        useApiTagId = GAME_FIRST_LEVEL_API_TAG_ID['角色扮演'];
+      for (const node of GUANGDADA_GAME_CATEGORIES_TREE) {
+        const apiTagId = GAME_FIRST_LEVEL_API_TAG_ID[node.name];
+        if (!apiTagId || !node.children) continue;
+        const childrenValues = node.children.map((c) => String(c.value)).sort();
+        if (childrenValues.length !== selectedSet.size) continue;
+        if (childrenValues.every((v) => selectedSet.has(v))) {
+          useApiTagId = apiTagId;
+          break;
+        }
       }
       body.tag_ids = useApiTagId != null ? [parseInt(useApiTagId, 10)] : toTagIdsInts(gameCodes);
     }
@@ -348,9 +331,7 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
   const monetModel = monetizationToApi(guangdadaMonetizationType);
   if (monetModel !== 0) body.monetization_model = monetModel;
 
-  if (guangdadaCta) {
-    body.cta_type = guangdadaCta;
-  }
+  if (guangdadaCta) body.cta_type = guangdadaCta;
   if (guangdadaPlacement) {
     body.ad_positions = [parseInt(guangdadaPlacement, 10)].filter((n) => !Number.isNaN(n));
   }

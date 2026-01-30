@@ -36,10 +36,11 @@ import AudienceAnalysisSelector from './AudienceAnalysisSelector';
 import ExposureEstimateRangeSelector from './ExposureEstimateRangeSelector';
 import InteractionMetricsSelector from './InteractionMetricsSelector';
 import SortSelector from './SortSelector';
+import { buildGuangdadaApiBody } from '../utils/guangdadaApiBody';
 
 const { RangePicker } = DatePicker;
 
-function SearchForm({ platform, onSearch, loading }) {
+function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdadaDedupType }) {
   const [formData, setFormData] = useState({
     keyWord: '',
     dateRange: [dayjs().subtract(1, 'year'), dayjs()], // 默认：过去一年至今
@@ -72,6 +73,8 @@ function SearchForm({ platform, onSearch, loading }) {
     guangdadaSearchType: '综合', // 综合
     guangdadaExactSearch: true, // 精确搜索
     guangdadaExcludeKeyword: [], // 排除关键词，数组，最多 7 个
+    sort_field: '-first_seen', // 广大大排序字段（API 取值见 guangdadaSortOptions.js）
+    duplicate_removal: 0, // 广大大去重：0-广告 1-素材 2-广告主
     // 游戏分类筛选项
     guangdadaNewAds: false, // 新广告
     guangdadaIsTheater: false, // 短剧（仅工具类显示）
@@ -494,8 +497,8 @@ function SearchForm({ platform, onSearch, loading }) {
       searchParams.pageSize = formDataToUse.pageSize ?? 60;
       searchParams.startTime = startTime;
       searchParams.endTime = endTime;
-      searchParams.sort_field = formDataToUse.sort_field ?? '-first_seen';
-      searchParams.duplicate_removal = formDataToUse.duplicate_removal ?? 0;
+      searchParams.sort_field = guangdadaSortField ?? formDataToUse.sort_field ?? '-first_seen';
+      searchParams.duplicate_removal = guangdadaDedupType ?? formDataToUse.duplicate_removal ?? 0;
       // 广告主类型：1-游戏 2-工具 3-电商
       searchParams.guangdadaPrimaryTab = formDataToUse.guangdadaPrimaryTab || '游戏';
       // 搜索目标 position：0-综合 1-广告文案 2-广告主 4-投放主页 6-落地页域名（暂无 UI 传 0）
@@ -536,6 +539,8 @@ function SearchForm({ platform, onSearch, loading }) {
       searchParams.guangdadaIncludePageInfo = !!formDataToUse.guangdadaIncludePageInfo;
       searchParams.guangdadaViolationAd = !!formDataToUse.guangdadaViolationAd;
       searchParams.guangdadaEndCard = !!formDataToUse.guangdadaEndCard;
+      // 广大大：直接返回与 guangdada.net 标准请求一致的 API body，便于在 Network 中核对参数
+      return buildGuangdadaApiBody(searchParams);
     }
 
     return searchParams;
@@ -621,6 +626,7 @@ function SearchForm({ platform, onSearch, loading }) {
               />
               <button type="submit" className="guangdada-search-btn" disabled={loading} title={loading ? '查询中...' : '搜索'}>
                 <span className="guangdada-search-icon">{loading ? <span className="spinner guangdada-spinner" /> : '🔍'}</span>
+                <span className="guangdada-search-btn-text">查询</span>
               </button>
             </div>
             {formData.guangdadaSearchCategory === '广告信息' && (
@@ -1804,6 +1810,13 @@ function SearchForm({ platform, onSearch, loading }) {
                   </div>
                 </div>
               )}
+              {/* 底部查询按钮：使用当前表单（含关键词与所有筛选项）发起查询 */}
+              <div className="guangdada-filters-footer">
+                <button type="submit" className="guangdada-query-btn-bottom" disabled={loading} title={loading ? '查询中...' : '使用当前筛选条件查询'}>
+                  <span className="guangdada-query-btn-icon">{loading ? <span className="spinner guangdada-spinner" /> : '🔍'}</span>
+                  <span>{loading ? '查询中...' : '查询'}</span>
+                </button>
+              </div>
             </div>
         </div>
       ) : (

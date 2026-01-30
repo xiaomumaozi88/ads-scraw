@@ -7,6 +7,7 @@ import {dirname, join} from 'path';
 import {fileURLToPath} from 'url';
 import {LoginStatus} from '../constants/index.js';
 import {upload} from '../utils/utils.js';
+import {buildGuangdadaRequestBody} from './guangdadaApiService.js';
 
 // 使用 Stealth 插件来避免反爬虫检测
 puppeteer.use(StealthPlugin());
@@ -1159,56 +1160,13 @@ export const fetchSearchData = async (searchParams = {}) => {
             }
         }
         
-        // 构建请求参数
-        const {
-            page = 1,
-            pageSize = 60,
-            keyWord,
-            startTime,
-            endTime,
-            ...otherParams
-        } = searchParams;
-        
-        // 转换时间格式（如果提供了 startTime 和 endTime）
-        let seenBegin = null;
-        let seenEnd = null;
-        if (startTime) {
-            seenBegin = Math.floor(new Date(startTime).getTime() / 1000);
-        } else {
-            // 默认：30天前
-            seenBegin = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
-        }
-        if (endTime) {
-            seenEnd = Math.floor(new Date(endTime).getTime() / 1000);
-        } else {
-            // 默认：现在
-            seenEnd = Math.floor(Date.now() / 1000);
-        }
-        
-        // 构建请求体（根据提供的 curl 示例）
-        const requestBody = {
-            page: parseInt(page) || 1,
-            complete_country_match: false,
-            app_type: 1,
-            new_ads_flag: 0,
-            sort_field: '-first_seen',
-            duplicate_removal: 0,
-            search_type: '1',
-            seen_begin: seenBegin,
-            seen_end: seenEnd,
-            fb_merge: false,
-            original_flag: 0,
-            is_dynamic: 0,
-            page_size: parseInt(pageSize) || 60,
-            landing_page: 0,
-            ...otherParams
-        };
-        
-        // 如果有关键词，添加到搜索条件中（需要根据实际 API 文档调整）
-        if (keyWord) {
-            // 广大大可能使用不同的字段名，这里先保留，可能需要调整
-            requestBody.keyword = keyWord;
-        }
+        // 若前端已发送广大大 API 格式（含 seen_begin、search_type、tag_ids 等），直接使用；否则从表单参数构建
+        const isApiFormat =
+          typeof searchParams.seen_begin === 'number' &&
+          typeof searchParams.seen_end === 'number' &&
+          (searchParams.search_type === '1' || searchParams.search_type === '0');
+        const requestBody = isApiFormat ? searchParams : buildGuangdadaRequestBody(searchParams);
+        logger.info('广大大实际请求体 (guangdada.net/napi/v1/creative/list):', JSON.stringify(requestBody, null, 2));
         
         // 使用 Puppeteer 页面发送请求
         const response = await loginPage.evaluate(async (body, authToken, deviceId, userToken) => {

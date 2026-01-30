@@ -2,21 +2,15 @@ import React from 'react';
 import { Radio, Tooltip } from 'antd';
 import { GUANGDADA_SORT_OPTIONS, GUANGDADA_DEDUP_OPTIONS } from '../data/guangdadaSortOptions';
 
-const RELEVANCE_VALUE = 'relevance';
-const MATERIAL_RELEVANCE_VALUE = 'material_relevance';
+const RELEVANCE_VALUE = '-correlation';
 const RELEVANCE_DISABLED_TIP = '只有在输入关键词后才可以进行相关性排序';
-const MATERIAL_RELEVANCE_DISABLED_TIP = '只有在素材内容搜索时有效';
 
 function SortDedupBar({ sortField = '-first_seen', dedupType = 0, hasKeyword = false, onSortChange, onDedupChange, className }) {
   const renderSortOption = (opt) => {
     const isRelevance = opt.value === RELEVANCE_VALUE;
-    const isMaterialRelevance = opt.value === MATERIAL_RELEVANCE_VALUE;
     const disabledByKeyword = isRelevance && !hasKeyword;
-    const disabled = isMaterialRelevance ? true : (opt.disabled || disabledByKeyword);
-    const tooltipTitle =
-      disabled && isRelevance ? RELEVANCE_DISABLED_TIP
-      : disabled && isMaterialRelevance ? MATERIAL_RELEVANCE_DISABLED_TIP
-      : null;
+    const disabled = opt.disabled || disabledByKeyword;
+    const tooltipTitle = disabled && isRelevance ? RELEVANCE_DISABLED_TIP : null;
 
     const btn = (
       <button

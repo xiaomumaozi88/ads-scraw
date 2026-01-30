@@ -462,6 +462,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 100%;
   max-width: 1200px;
   margin: 0 auto;
 }
@@ -556,6 +557,7 @@ body {
   align-items: center;
   gap: 16px;
   width: 100%;
+  align-self: stretch;
   flex-wrap: wrap;
 }
 
@@ -634,15 +636,22 @@ body {
 }
 
 .guangdada-search-btn {
-  width: 48px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
+  min-width: 48px;
+  padding: 0 14px;
+  flex-shrink: 0;
   background: #1890ff;
   border: none;
   cursor: pointer;
   color: #fff;
+  font-size: 14px;
   transition: background 0.2s;
+}
+.guangdada-search-btn-text {
+  white-space: nowrap;
 }
 
 .guangdada-search-btn:hover:not(:disabled) {
@@ -668,6 +677,43 @@ body {
   border-width: 2px;
   border-color: rgba(255,255,255,0.3);
   border-top-color: #fff;
+}
+
+/* 广大大筛选项底部查询按钮 */
+.guangdada-filters-footer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e8e8e8;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.guangdada-query-btn-bottom {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px;
+  height: 40px;
+  font-size: 14px;
+  color: #fff;
+  background: #1890ff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.guangdada-query-btn-bottom:hover:not(:disabled) {
+  background: #40a9ff;
+}
+.guangdada-query-btn-bottom:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.guangdada-query-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
 }
 
 .guangdada-search-options {
@@ -3078,15 +3124,17 @@ body.insightrackr-fullscreen-active .data-card {
     margin-top: 2px;
 }
 
-/* 广大大平台专用样式 - 视频播放按钮居中 */
-.guangdada-card .play-icon-center {
+/* 广大大平台专用样式 - 视频播放按钮居中，半透明黑底药丸形（提高特异性，避免被 .creative-card .play-icon-center 覆盖） */
+.creative-card.guangdada-card .play-icon-center {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 20px;
-    padding: 8px 16px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 999px;
+    padding: 8px 18px;
+    width: auto;
+    height: auto;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -3096,17 +3144,17 @@ body.insightrackr-fullscreen-active .data-card {
     transition: all 0.3s ease;
 }
 
-.guangdada-card .play-icon-center:hover {
-    background: rgba(0, 0, 0, 0.85);
+.creative-card.guangdada-card .play-icon-center:hover {
+    background: rgba(0, 0, 0, 0.65);
     transform: translate(-50%, -50%) scale(1.1);
 }
 
-.guangdada-card .play-icon-center .play-symbol {
+.creative-card.guangdada-card .play-icon-center .play-symbol {
     font-size: 18px;
     line-height: 1;
 }
 
-.guangdada-card .play-icon-center .video-duration {
+.creative-card.guangdada-card .play-icon-center .video-duration {
     font-size: 12px;
     font-weight: 600;
     line-height: 1;
@@ -3223,6 +3271,7 @@ body.insightrackr-fullscreen-active .data-card {
     bottom: 0;
     left: 0;
     right: 0;
+    z-index: 5;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3262,21 +3311,29 @@ body.insightrackr-fullscreen-active .data-card {
 
 .guangdada-card .metrics-header {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
     margin-bottom: 8px;
 }
 
-.guangdada-card .guangdada-logo {
-    width: 20px;
-    height: 20px;
-    background: linear-gradient(135deg, #ff6b6b, #ffa500);
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
+.guangdada-card .metrics-header-advertiser {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.guangdada-card .metrics-header-platform {
     font-size: 12px;
-    font-weight: bold;
+    color: #666;
+    background: #eee;
+    padding: 2px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
 }
 
 .guangdada-card .metrics-primary {
