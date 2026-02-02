@@ -7,7 +7,8 @@ function Pagination({
   latestDate = '', 
   currentPage = 1, 
   pageSize = 40,
-  onPageChange 
+  onPageChange,
+  showStats = true
 }) {
   const [goToPage, setGoToPage] = useState(currentPage);
   const totalPages = Math.ceil(totalSize / pageSize);
@@ -107,21 +108,22 @@ function Pagination({
 
   return (
     <div className="pagination-container">
-      {/* 统计信息 */}
-      <div className="pagination-stats">
-        <div className="stat-item">
-          <span className="stat-label">共</span>
-          <span className="stat-value">{formatNumber(totalSize)}</span>
+      {showStats && (
+        <div className="pagination-stats">
+          <div className="stat-item">
+            <span className="stat-label">共</span>
+            <span className="stat-value">{formatNumber(totalSize)}</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">新增</span>
+            <span className="stat-value">{formatNumber(newNum)}</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-label">更新时间</span>
+            <span className="stat-value">{formatDateTime(latestDate)}</span>
+          </div>
         </div>
-        <div className="stat-item">
-          <span className="stat-label">新增</span>
-          <span className="stat-value">{formatNumber(newNum)}</span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-label">更新时间</span>
-          <span className="stat-value">{formatDateTime(latestDate)}</span>
-        </div>
-      </div>
+      )}
 
       {/* 分页控件 */}
       <div className="pagination-controls">

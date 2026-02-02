@@ -34,3 +34,35 @@ export const search = async (req, res) => {
     });
   }
 };
+
+/** 广大大 count 接口：参数与 search 一致，返回 all_total / default_total / result_total，用于分页 */
+export const count = async (req, res) => {
+  try {
+    const searchParams = req.body || {};
+    const result = await puppeteerService.fetchCountData(searchParams);
+
+    if (!result.success) {
+      return res.status(200).json({
+        data: result.data,
+        success: false,
+        code: result.code,
+        message: result.message
+      });
+    }
+
+    res.status(200).json({
+      data: result.data,
+      success: true,
+      code: result.code,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('广大大 count 失败:', error);
+    res.status(200).json({
+      data: null,
+      success: false,
+      code: 500,
+      message: `请求 count 失败: ${error.message || '未知错误'}`
+    });
+  }
+};

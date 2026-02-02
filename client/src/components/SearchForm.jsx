@@ -595,8 +595,19 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
               <span className="guangdada-new-badge">NEW</span>
             </button>
           </div>
-          {/* 关键词提示 */}
-          <p className="guangdada-keyword-hint">可使用 \ 分割添加关键词, 最多7个可使用</p>
+          {/* 关键词提示：\; 为可点击按钮，点击一次向输入框末尾追加 \; */}
+          <p className="guangdada-keyword-hint">
+            可使用
+            <button
+              type="button"
+              className="guangdada-keyword-sep-btn"
+              onClick={() => handleChange('keyWord', (formData.keyWord || '') + '\\;')}
+              title="在关键词末尾追加 \\; 分隔符"
+            >
+              \;
+            </button>
+            分割添加关键词, 最多7个可使用
+          </p>
           {/* 搜索栏与右侧选项同一行：下拉（仅广告信息时显示）+ 输入框 + 搜索按钮 | 排除 + 精确搜索 */}
           <div className="guangdada-search-row">
             <div className="guangdada-search-bar">

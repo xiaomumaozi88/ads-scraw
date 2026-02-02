@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { login } from '../utils/api';
+import { login, formatRequestError } from '../utils/api';
 
 function LoginCard({ platform, onLoginSuccess, addLog }) {
   const [email, setEmail] = useState('');
@@ -35,7 +35,7 @@ function LoginCard({ platform, onLoginSuccess, addLog }) {
       }
     } catch (error) {
       addLog(`登录请求失败: ${error.message}`, 'error');
-      setMessage({ text: `请求失败: ${error.message}`, type: 'error' });
+      setMessage({ text: formatRequestError(error.message), type: 'error' });
     } finally {
       setLoading(false);
     }

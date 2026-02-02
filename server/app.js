@@ -9,12 +9,13 @@ import apiRoutes from './src/routes/apiRoutes.js';
 import dayjs from 'dayjs';
 import * as puppeteerServiceInsightrackr from './src/services/puppeteerServiceInsightrackr.js';
 import * as puppeteerServiceGuangdada from './src/services/puppeteerService.js';
+import memoryLogAppender from './src/utils/memoryLogAppender.js';
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// 配置日志记录
+// 配置日志记录（main 输出到控制台，memory 写入内存供 /health 展示）
 log4js.configure({
     appenders: {
         main: {
@@ -27,8 +28,12 @@ log4js.configure({
                 },
             },
         },
+        memory: {
+            type: memoryLogAppender,
+            layout: { type: 'messagePassThrough' },
+        },
     },
-    categories: { default: { appenders: ['main'], level: 'info' } },
+    categories: { default: { appenders: ['main', 'memory'], level: 'info' } },
 });
 global.logger = log4js.getLogger('insightrackr-scraper');
 
@@ -39,10 +44,13 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
+// API 路由必须在静态兜底之前注册，否则 GET /api/* 会被下面的 * 匹配成 index.html
+app.use('/api', apiRoutes);
+
 // 静态文件服务 - 生产环境使用构建后的 React 应用
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(join(__dirname, '..', 'dist')));
-    // 所有非 API 路由返回 React 应用
+    // 所有非 API 的非静态请求返回 React 应用（前端路由）
     app.get('*', (req, res) => {
         res.sendFile(join(__dirname, '..', 'dist', 'index.html'));
     });
@@ -62,10 +70,6 @@ if (process.env.NODE_ENV === 'production') {
         logger.error('浏览器初始化失败:', error);
     }
 })();
-
-
-// 使用 API 路由
-app.use('/api', apiRoutes);
 
 // 启动服务器
 app.listen(PORT, () => {

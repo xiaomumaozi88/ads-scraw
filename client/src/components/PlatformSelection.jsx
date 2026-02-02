@@ -1,19 +1,21 @@
 import React from 'react';
 import './PlatformSelection.css';
+import insightrackrLogo from '../../assets/insightrackr-logo.png';
+import guangdadaLogo from '../../assets/guangdada-logo.svg';
 
 const platforms = [
   {
     id: 'insightrackr',
     name: 'Insightrackr',
     description: '广告数据查询平台',
-    icon: '📊',
+    logo: insightrackrLogo,
     color: '#667eea'
   },
   {
     id: 'guangdada',
     name: '广大大',
     description: '广告创意分析平台',
-    icon: '🎯',
+    logo: guangdadaLogo,
     color: '#764ba2'
   }
 ];
@@ -33,10 +35,9 @@ function PlatformSelection({ onSelectPlatform }) {
             onClick={() => onSelectPlatform(platform.id)}
             style={{ '--card-color': platform.color }}
           >
-            <div className="platform-icon">{platform.icon}</div>
-            <h2>{platform.name}</h2>
-            <p>{platform.description}</p>
-            <div className="platform-card-arrow">→</div>
+            <div className="platform-card-logo-wrap">
+              <img src={platform.logo} alt={platform.name} className="platform-card-logo" />
+            </div>
           </div>
         ))}
       </div>

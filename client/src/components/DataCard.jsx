@@ -1,19 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { message as antdMessage } from 'antd';
 import dayjs from 'dayjs';
-import { searchData, getCount, getDistributeMedia, getDistributeApp, clearLogin } from '../utils/api';
+import { searchData, getCount, getDistributeMedia, getDistributeApp, clearLogin, formatRequestError } from '../utils/api';
 import SearchForm from './SearchForm';
 import DataDisplay from './DataDisplay';
 import TimeFilter from './TimeFilter';
 import SortDedupBar from './SortDedupBar';
 
-function DataCard({ platform, addLog, onRequireLogin }) {
+function DataCard({ platform, addLog, onRequireLogin, isLoggedIn }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [countData, setCountData] = useState(null);
   const [currentSearchParams, setCurrentSearchParams] = useState(null);
   const [mediaDistribute, setMediaDistribute] = useState({});
   const [appDistribute, setAppDistribute] = useState({});
+  const [batchDownloadMode, setBatchDownloadMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const selectAllPage = useCallback((ids) => {
+    setSelectedIds(new Set(ids));
+  }, []);
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+  const exitBatchMode = useCallback(() => {
+    setBatchDownloadMode(false);
+    setSelectedIds(new Set());
+  }, []);
 
   const handleSearch = async (searchParams) => {
     // 保存当前搜索参数
@@ -29,10 +50,12 @@ function DataCard({ platform, addLog, onRequireLogin }) {
       // 并行请求搜索数据和总数
       const [searchResult, countResult] = await Promise.all([
         searchData(platform, searchParams),
-        platform === 'insightrackr' ? getCount(platform, searchParams).catch(err => {
-          addLog(`获取总数失败: ${err.message}`, 'warn');
-          return { success: false, data: null };
-        }) : Promise.resolve({ success: false, data: null })
+        (platform === 'insightrackr' || platform === 'guangdada')
+          ? getCount(platform, searchParams).catch(err => {
+              addLog(`获取总数失败: ${err.message}`, 'warn');
+              return { success: false, data: null };
+            })
+          : Promise.resolve({ success: false, data: null })
       ]);
 
       if (searchResult.success) {
@@ -41,9 +64,9 @@ function DataCard({ platform, addLog, onRequireLogin }) {
         setMediaDistribute({});
         setAppDistribute({});
 
-        // count 接口返回格式：{ data: { code, data: { totalSize, newNum, latestDate } }, success }，取内层 data
+        // count 接口：Insightrackr 为 { data: { code, data: { totalSize, newNum, latestDate } } }；广大大为 { data: { id, data: { result_total, all_total, default_total } } }
         if (countResult.success && countResult.data) {
-          const inner = countResult.data.data || countResult.data;
+          const inner = platform === 'guangdada' ? countResult.data : (countResult.data.data || countResult.data);
           setCountData(inner);
         }
 
@@ -71,7 +94,7 @@ function DataCard({ platform, addLog, onRequireLogin }) {
         }
       } else {
         addLog(`查询失败: ${searchResult.message}`, 'error');
-        antdMessage.error(searchResult.message || '查询失败');
+        antdMessage.error(formatRequestError(searchResult.message || '查询失败'));
       }
     } catch (error) {
       // 检查是否需要重新登录：直接弹出登录框，不显示错误文案
@@ -92,7 +115,7 @@ function DataCard({ platform, addLog, onRequireLogin }) {
         }
       } else {
         addLog(`查询请求失败: ${error.message}`, 'error');
-        antdMessage.error(error.message || '请求失败');
+        antdMessage.error(formatRequestError(error.message));
       }
     } finally {
       setLoading(false);
@@ -151,15 +174,17 @@ function DataCard({ platform, addLog, onRequireLogin }) {
         guangdadaDedupType={platform === 'guangdada' ? currentSearchParams?.duplicate_removal : undefined}
       />
       <div className="data-area">
-        <TimeFilter value={dateRangeValue} onChange={handleDateChange} />
         {platform === 'guangdada' && (
-          <SortDedupBar
+          <>
+            <TimeFilter value={dateRangeValue} onChange={handleDateChange} />
+            <SortDedupBar
             sortField={currentSearchParams?.sort_field ?? '-first_seen'}
             dedupType={currentSearchParams?.duplicate_removal ?? 0}
             hasKeyword={!!(currentSearchParams?.keyWord?.trim())}
             onSortChange={(sort_field) => handleSortDedupChange({ sort_field })}
             onDedupChange={(duplicate_removal) => handleSortDedupChange({ duplicate_removal })}
-          />
+            />
+          </>
         )}
         {loading && (
           <div className="data-container data-container--loading">
@@ -172,7 +197,7 @@ function DataCard({ platform, addLog, onRequireLogin }) {
         {!loading && !data && (
           <div className="data-container data-container--empty">
             <div className="data-placeholder">
-              <p>暂无数据</p>
+              <p>{isLoggedIn ? '暂无数据' : '登录后查看数据'}</p>
             </div>
           </div>
         )}
@@ -185,6 +210,13 @@ function DataCard({ platform, addLog, onRequireLogin }) {
             countData={countData}
             mediaDistribute={mediaDistribute}
             appDistribute={appDistribute}
+            batchDownloadMode={batchDownloadMode}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onSelectAllPage={selectAllPage}
+            onBatchDownloadCancel={exitBatchMode}
+            onEnterBatchMode={() => setBatchDownloadMode(true)}
+            onExitBatchMode={exitBatchMode}
             onPageChange={(page) => {
               if (currentSearchParams) {
                 const updatedParams = platform === 'guangdada'

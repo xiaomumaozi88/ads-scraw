@@ -1,5 +1,11 @@
 const API_BASE = '/api';
 
+/** 请求失败时的统一提示文案：message + 请重试 */
+export function formatRequestError(message) {
+  const msg = message && String(message).trim();
+  return msg ? `${msg}，请重试。` : '请重试。';
+}
+
 export async function getStatus(platform) {
   // 使用相对路径，localhost 与 IP 访问都会走当前页面的 origin，由 Vite 代理到后端；登录状态在后端共享
   const response = await fetch(`${API_BASE}/${platform}/status`, {
@@ -73,22 +79,27 @@ export async function searchData(platform, searchParams) {
     throw new Error(`JSON 解析失败: ${error.message}. 响应内容: ${text.substring(0, 200)}`);
   }
   
-  // 检查是否需要重新登录
+  // 检查是否需要重新登录：顶层 code 或 data.code（如 Insightrackr -3106 Login expired）
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
-    // 创建一个特殊的错误对象，包含需要重新登录的信息
     const loginError = new Error(result.message || '需要重新登录');
     loginError.code = result.code;
     loginError.requiresLogin = true;
     throw loginError;
   }
-  
+  if (result.data && result.data.code === -3106) {
+    const loginError = new Error(result.data.message || result.data.msg || 'Login expired');
+    loginError.code = -3106;
+    loginError.requiresLogin = true;
+    throw loginError;
+  }
+
   return result;
 }
 
-// 获取数据总数（count 接口，仅 Insightrackr）
+// 获取数据总数（count 接口：Insightrackr、广大大）
 export async function getCount(platform, searchParams) {
-  if (platform !== 'insightrackr') {
-    throw new Error('Count 接口仅支持 Insightrackr 平台');
+  if (platform !== 'insightrackr' && platform !== 'guangdada') {
+    throw new Error('Count 接口仅支持 Insightrackr、广大大 平台');
   }
 
   const response = await fetch(`${API_BASE}/${platform}/count`, {
@@ -126,14 +137,20 @@ export async function getCount(platform, searchParams) {
     throw new Error(`JSON 解析失败: ${error.message}. 响应内容: ${text.substring(0, 200)}`);
   }
   
-  // 检查是否需要重新登录
+  // 检查是否需要重新登录（含 data.code === -3106）
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const loginError = new Error(result.message || '需要重新登录');
     loginError.code = result.code;
     loginError.requiresLogin = true;
     throw loginError;
   }
-  
+  if (result.data && result.data.code === -3106) {
+    const loginError = new Error(result.data.message || result.data.msg || 'Login expired');
+    loginError.code = -3106;
+    loginError.requiresLogin = true;
+    throw loginError;
+  }
+
   return result;
 }
 
@@ -158,6 +175,12 @@ export async function getDistributeMedia(platform, body) {
     err.requiresLogin = true;
     throw err;
   }
+  if (result.data && result.data.code === -3106) {
+    const err = new Error(result.data.message || result.data.msg || 'Login expired');
+    err.code = -3106;
+    err.requiresLogin = true;
+    throw err;
+  }
   return result;
 }
 
@@ -179,6 +202,12 @@ export async function getDistributeApp(platform, body) {
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const err = new Error(result.message || '需要重新登录');
     err.code = result.code;
+    err.requiresLogin = true;
+    throw err;
+  }
+  if (result.data && result.data.code === -3106) {
+    const err = new Error(result.data.message || result.data.msg || 'Login expired');
+    err.code = -3106;
     err.requiresLogin = true;
     throw err;
   }

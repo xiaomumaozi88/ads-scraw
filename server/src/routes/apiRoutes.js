@@ -1,5 +1,6 @@
 // src/routes/apiRoutes.js
 import { Router } from 'express';
+import * as healthController from '../controllers/healthController.js';
 // Insightrackr 相关控制器
 import * as loginControllerInsightrackr from '../controllers/loginControllerInsightrackr.js';
 import * as statusControllerInsightrackr from '../controllers/statusControllerInsightrackr.js';
@@ -12,6 +13,8 @@ import * as clearLoginControllerGuangdada from '../controllers/clearLoginControl
 import * as searchControllerGuangdada from '../controllers/searchControllerGuangdada.js';
 
 const router = Router();
+
+router.get('/health', healthController.getHealth);
 
 // Insightrackr 网站路由
 router.post('/insightrackr/login', loginControllerInsightrackr.login);
@@ -27,5 +30,6 @@ router.post('/guangdada/login', loginControllerGuangdada.login);
 router.get('/guangdada/status', statusControllerGuangdada.getStatus);
 router.post('/guangdada/clearLogin', clearLoginControllerGuangdada.clearLogin);
 router.post('/guangdada/search', searchControllerGuangdada.search);
+router.post('/guangdada/count', searchControllerGuangdada.count);
 
 export default router;

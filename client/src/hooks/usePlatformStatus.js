@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getStatus } from '../utils/api';
 
+const defaultDetail = () => ({ status: 'LOGGED_OUT', email: null });
+
 export function usePlatformStatus() {
   const [statuses, setStatuses] = useState({
-    insightrackr: 'LOGGED_OUT',
-    guangdada: 'LOGGED_OUT'
+    insightrackr: defaultDetail(),
+    guangdada: defaultDetail()
   });
   const [loading, setLoading] = useState({});
 
@@ -13,11 +15,12 @@ export function usePlatformStatus() {
     try {
       const data = await getStatus(platform);
       const newStatus = data.data?.status || data.status || 'LOGGED_OUT';
-      setStatuses(prev => ({ ...prev, [platform]: newStatus }));
+      const email = data.data?.email ?? null;
+      setStatuses(prev => ({ ...prev, [platform]: { status: newStatus, email } }));
       return newStatus;
     } catch (error) {
       console.error(`获取 ${platform} 状态失败:`, error);
-      setStatuses(prev => ({ ...prev, [platform]: 'LOGGED_OUT' }));
+      setStatuses(prev => ({ ...prev, [platform]: defaultDetail() }));
       return 'LOGGED_OUT';
     } finally {
       setLoading(prev => ({ ...prev, [platform]: false }));
@@ -28,16 +31,16 @@ export function usePlatformStatus() {
     return await fetchStatus(platform);
   }, [fetchStatus]);
 
-  // 初始化时获取所有平台状态
   useEffect(() => {
     fetchStatus('insightrackr');
     fetchStatus('guangdada');
   }, [fetchStatus]);
 
-  return { 
-    statuses, 
-    loading, 
+  return {
+    statuses,
+    loading,
     refreshStatus,
-    getStatus: (platform) => statuses[platform] || 'LOGGED_OUT'
+    getStatus: (platform) => (statuses[platform] && typeof statuses[platform] === 'object' ? statuses[platform].status : statuses[platform]) || 'LOGGED_OUT',
+    getStatusDetail: (platform) => (statuses[platform] && typeof statuses[platform] === 'object' ? statuses[platform] : defaultDetail())
   };
 }

@@ -421,11 +421,52 @@ export const scrapeDisplayAds = async () => {
 
 // 查询当前状态（不自动检查，只返回当前状态）
 export const getStatus = async () => {
-    // 不再自动检查登录状态，只返回当前保存的状态
-    // 如果需要检查，可以手动调用 checkLoginStatus
     return {
         status: status.current,
+        email: status.current === LoginStatus.ONLINE ? loginInfo.email : null
     };
+};
+
+/** 健康检查：浏览器是否存在、页面数、登录状态与账号，供 /health 排查用 */
+export const getHealthInfo = async () => {
+    if (!browser) {
+        return { browserExists: false, pageCount: 0, status: status.current, email: null, isLoggedIn: false };
+    }
+    try {
+        const pages = await browser.pages();
+        const isLoggedIn = status.current === LoginStatus.ONLINE;
+        return {
+            browserExists: true,
+            pageCount: pages.length,
+            status: status.current,
+            email: isLoggedIn ? loginInfo.email : null,
+            isLoggedIn
+        };
+    } catch (e) {
+        logger.warn('getHealthInfo 广大大:', e.message);
+        return {
+            browserExists: true,
+            pageCount: 0,
+            status: status.current,
+            email: status.current === LoginStatus.ONLINE ? loginInfo.email : null,
+            isLoggedIn: status.current === LoginStatus.ONLINE,
+            error: e.message
+        };
+    }
+};
+
+/** 关闭同一浏览器下除 keepPage 外的所有页面，节省资源 */
+const closeOtherPages = async (keepPage) => {
+    if (!browser || !keepPage) return;
+    try {
+        const pages = await browser.pages();
+        for (const p of pages) {
+            if (p !== keepPage && !p.isClosed()) await p.close().catch(() => {});
+        }
+        if (pages.length > 1) logger.info(`已关闭其他 ${pages.length - 1} 个页面，仅保留登录页`);
+    } catch (e) {
+        logger.warn('关闭其他页面失败:', e.message);
+    }
 };
 
 // 获取浏览器页面 URL（用于 iframe）
@@ -906,7 +947,7 @@ export const login = async (email, password) => {
             }
             loginPage = page;
             logger.info('登录成功，当前URL:', currentUrl);
-            logger.info('登录页面已保存，不会关闭');
+            await closeOtherPages(page);
             return {
                 data: {
                     url: currentUrl,
@@ -967,6 +1008,7 @@ export const login = async (email, password) => {
                 }
                 loginPage = page;
                 logger.info('登录成功（延迟跳转），当前URL:', finalUrl);
+                await closeOtherPages(page);
         return {
             data: {
                         url: finalUrl,
@@ -1268,6 +1310,186 @@ export const fetchSearchData = async (searchParams = {}) => {
         };
     } catch (error) {
         logger.error('请求数据失败:', error);
+        return {
+            data: null,
+            success: false,
+            code: 500,
+            message: `请求失败: ${error.message}`
+        };
+    }
+};
+
+/** 广大大 count 接口：参数与 search 一致，返回 all_total / default_total / result_total，用于分页 */
+export const fetchCountData = async (searchParams = {}) => {
+    if (status.current !== LoginStatus.ONLINE) {
+        return {
+            data: null,
+            success: false,
+            code: 'NOT_LOGGED_IN',
+            message: '未登录，请先登录'
+        };
+    }
+    if (!loginPage || loginPage.isClosed()) {
+        return {
+            data: null,
+            success: false,
+            code: 'NO_LOGIN_PAGE',
+            message: '登录页面已关闭，请重新登录'
+        };
+    }
+    try {
+        let authorizationToken = loginInfo.authorization;
+        let deviceId = loginInfo.deviceId;
+        let userToken = loginInfo.userToken;
+        if (!authorizationToken) {
+            try {
+                const storageData = await loginPage.evaluate(() => {
+                    const keys = ['authorization', 'token', 'authToken', 'accessToken', 'Authorization', 'user-token', 'device-id'];
+                    const result = {};
+                    for (const key of keys) {
+                        const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+                        if (value) result[key] = value;
+                    }
+                    return result;
+                });
+                if (storageData.authorization || storageData.Authorization || storageData.token) {
+                    authorizationToken = storageData.authorization || storageData.Authorization || storageData.token;
+                    loginInfo.authorization = authorizationToken;
+                }
+                if (storageData['user-token']) {
+                    userToken = storageData['user-token'];
+                    loginInfo.userToken = userToken;
+                }
+                if (storageData['device-id']) {
+                    deviceId = storageData['device-id'];
+                    loginInfo.deviceId = deviceId;
+                }
+            } catch (e) {
+                logger.warn('从存储获取 token 失败:', e.message);
+            }
+        }
+        if (!authorizationToken) {
+            try {
+                logger.info('尝试通过导航到数据页面获取 authorization token');
+                const tokenInfo = await new Promise((resolve) => {
+                    let resolved = false;
+                    const timeout = setTimeout(() => {
+                        if (!resolved) {
+                            resolved = true;
+                            resolve(null);
+                        }
+                    }, 10000);
+                    const requestHandler = (request) => {
+                        if (!resolved) {
+                            const url = request.url();
+                            const headers = request.headers();
+                            const authHeader = headers['authorization'] || headers['Authorization'];
+                            if (url.includes('/napi/v1/creative/list') && authHeader) {
+                                resolved = true;
+                                clearTimeout(timeout);
+                                loginPage.off('request', requestHandler);
+                                resolve({
+                                    authorization: authHeader,
+                                    deviceId: headers['x-device-id'] || null,
+                                    userToken: headers['x-nbs-user-token'] || null
+                                });
+                            }
+                        }
+                    };
+                    loginPage.on('request', requestHandler);
+                    loginPage.goto('https://guangdada.net/modules/creative/display-ads', {
+                        waitUntil: 'networkidle2',
+                        timeout: 30000
+                    }).catch(() => {});
+                });
+                if (tokenInfo) {
+                    authorizationToken = tokenInfo.authorization;
+                    deviceId = tokenInfo.deviceId;
+                    userToken = tokenInfo.userToken;
+                    loginInfo.authorization = authorizationToken;
+                    if (deviceId) loginInfo.deviceId = deviceId;
+                    if (userToken) loginInfo.userToken = userToken;
+                    logger.info('✅ 从网络请求中获取到 authorization token');
+                } else {
+                    logger.warn('⚠️ 未能从网络请求中获取到 authorization token');
+                }
+            } catch (e) {
+                logger.warn('从网络请求获取 token 失败:', e.message);
+            }
+        }
+        const isApiFormat =
+          typeof searchParams.seen_begin === 'number' &&
+          typeof searchParams.seen_end === 'number' &&
+          (searchParams.search_type === '1' || searchParams.search_type === '0');
+        const requestBody = isApiFormat ? searchParams : buildGuangdadaRequestBody(searchParams);
+        logger.info('广大大 count 请求体 (guangdada.net/napi/v1/creative/count):', JSON.stringify(requestBody, null, 2));
+
+        const response = await loginPage.evaluate(async (body, authToken, devId, uToken) => {
+            try {
+                const headers = {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,ja;q=0.8,en;q=0.7',
+                    'Authorization': authToken || '',
+                    'Connection': 'keep-alive',
+                    'Content-Type': 'application/json',
+                    'Origin': 'https://guangdada.net',
+                    'Referer': 'https://guangdada.net/modules/creative/display-ads',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+                };
+                if (devId) headers['x-device-id'] = devId;
+                if (uToken) headers['x-nbs-user-token'] = uToken;
+                headers['x-product-id'] = '2';
+                headers['x-timezone'] = '+0800';
+
+                const res = await fetch('/napi/v1/creative/count', {
+                    method: 'POST',
+                    headers,
+                    credentials: 'include',
+                    body: JSON.stringify(body)
+                });
+                const text = await res.text();
+                let data = null;
+                if (text && text.trim()) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch (parseError) {
+                        return {
+                            ok: false,
+                            status: res.status,
+                            statusText: `JSON 解析失败: ${parseError.message}`,
+                            data: { id: 'ERROR', message: parseError.message, data: null }
+                        };
+                    }
+                }
+                return {
+                    ok: res.ok,
+                    status: res.status,
+                    statusText: res.statusText,
+                    data
+                };
+            } catch (error) {
+                return {
+                    ok: false,
+                    status: 500,
+                    statusText: error.message,
+                    data: { id: 'ERROR', message: error.message, data: null }
+                };
+            }
+        }, requestBody, authorizationToken, deviceId, userToken);
+
+        const apiData = response.data;
+        const success = response.ok && apiData && (apiData.id === 'SUCCESS' || apiData.code === 0);
+        return {
+            data: apiData,
+            success: !!success,
+            code: response.status,
+            message: success ? 'success' : (apiData?.message || response.statusText || '请求失败')
+        };
+    } catch (error) {
+        logger.error('广大大 count 请求失败:', error);
         return {
             data: null,
             success: false,

@@ -114,6 +114,7 @@
 
 .modal-actions .btn {
   flex: 1;
+  min-height: 44px;
   padding: 12px 24px;
   border: none;
   border-radius: 8px;
@@ -125,6 +126,10 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+.modal-actions .btn-secondary {
+  margin-top: 0;
 }
 
 .modal-actions .btn:disabled {

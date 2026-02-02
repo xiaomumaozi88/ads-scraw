@@ -227,7 +227,7 @@ export const getStatus = async () => {
                 await initializeBrowser();
             } catch (error) {
                 logger.error('初始化浏览器失败:', error);
-                return { status: LoginStatus.LOGGED_OUT };
+                return { status: LoginStatus.LOGGED_OUT, email: null };
             }
         }
         // 仅当存在已登录的页面时，用该页面做一次校验；否则直接返回当前内存状态（避免 newPage 无会话导致误判 LOGGED_OUT）
@@ -239,10 +239,56 @@ export const getStatus = async () => {
                 // 校验失败不强制改为 LOGGED_OUT，保持当前状态
             }
         }
-        return { status: status.current };
+        return {
+            status: status.current,
+            email: status.current === LoginStatus.ONLINE ? loginInfo.email : null
+        };
     } catch (error) {
         logger.error('getStatus 发生未预期的错误:', error);
-        return { status: LoginStatus.LOGGED_OUT };
+        return { status: LoginStatus.LOGGED_OUT, email: null };
+    }
+};
+
+/** 健康检查：浏览器是否存在、页面数、登录状态与账号，供 /health 排查用 */
+export const getHealthInfo = async () => {
+    if (!browser) {
+        return { browserExists: false, pageCount: 0, status: status.current, email: null, isLoggedIn: false };
+    }
+    try {
+        const pages = await browser.pages();
+        const info = getLoginInfo();
+        return {
+            browserExists: true,
+            pageCount: pages.length,
+            status: status.current,
+            email: info.email ?? null,
+            isLoggedIn: info.isLoggedIn
+        };
+    } catch (e) {
+        logger.warn('getHealthInfo Insightrackr:', e.message);
+        const info = getLoginInfo();
+        return {
+            browserExists: true,
+            pageCount: 0,
+            status: status.current,
+            email: info.email ?? null,
+            isLoggedIn: info.isLoggedIn,
+            error: e.message
+        };
+    }
+};
+
+/** 关闭同一浏览器下除 keepPage 外的所有页面，节省资源 */
+const closeOtherPages = async (keepPage) => {
+    if (!browser || !keepPage) return;
+    try {
+        const pages = await browser.pages();
+        for (const p of pages) {
+            if (p !== keepPage && !p.isClosed()) await p.close().catch(() => {});
+        }
+        if (pages.length > 1) logger.info(`已关闭其他 ${pages.length - 1} 个页面，仅保留登录页`);
+    } catch (e) {
+        logger.warn('关闭其他页面失败:', e.message);
     }
 };
 
@@ -312,8 +358,8 @@ export const login = async (email, password) => {
             waitUntil: 'domcontentloaded',
         });
         
-        // 等待页面加载完成，检查是否有重定向
-        await page.waitForTimeout(2000);
+        // 短暂等待重定向完成
+        await page.waitForTimeout(800);
         
         const checkUrl = page.url();
         logger.info('登录前检查 - 当前页面URL:', checkUrl);
@@ -333,7 +379,8 @@ export const login = async (email, password) => {
             } catch (e) {
                 logger.error('保存 cookies 失败:', e.message);
             }
-            
+
+            await closeOtherPages(page);
             return {
                 data: {
                     url: checkUrl,
@@ -345,7 +392,7 @@ export const login = async (email, password) => {
                 message: '已经登录，无需再次登录'
             };
         }
-        
+
         // 如果跳转到登录页，说明未登录，继续登录流程
         logger.info('检测到未登录（已跳转到登录页），继续登录流程');
         // 不关闭页面，继续使用这个页面进行登录（此时 page 已经在登录页）
@@ -471,7 +518,7 @@ export const login = async (email, password) => {
         const pageUrl = page.url();
         if (!pageUrl.includes('/login')) {
             logger.info('页面不在登录页，导航到登录页');
-            await page.goto(loginPageUrl, { timeout: 120 * 1000, waitUntil: 'networkidle2' });
+            await page.goto(loginPageUrl, { timeout: 120 * 1000, waitUntil: 'domcontentloaded' });
         } else {
             logger.info('页面已在登录页，无需导航');
         }
@@ -508,8 +555,8 @@ export const login = async (email, password) => {
         await page.click(selectors.submitButton);
         logger.info('已点击登录按钮');
 
-        // 等待一下，检查是否弹出协议弹窗
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // 短暂等待，检查是否弹出协议弹窗
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         // 检查并处理协议弹窗
         try {
@@ -544,7 +591,7 @@ export const login = async (email, password) => {
 
                 if (agreeClicked) {
                     logger.info('已点击协议弹窗的"Agree"按钮');
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 500));
                 } else {
                     // 如果找不到 Agree 按钮，尝试查找其他确认按钮
                     logger.warn('未找到"Agree"按钮，尝试查找其他确认按钮');
@@ -563,7 +610,7 @@ export const login = async (email, password) => {
                     
                     if (otherButtonClicked) {
                         logger.info('已点击弹窗中的确认按钮');
-                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        await new Promise(resolve => setTimeout(resolve, 500));
                     } else {
                         logger.warn('未找到确认按钮，继续等待页面跳转');
                     }
@@ -573,17 +620,16 @@ export const login = async (email, password) => {
             logger.warn('处理协议弹窗时出错，继续执行:', e.message);
         }
 
-        // 等待页面跳转或响应 - 增加等待时间
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // 等待页面跳转或响应
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
         // 检查是否登录成功（通过URL变化或页面元素判断）
         let loginResultUrl = page.url();
         logger.info('登录后当前URL:', loginResultUrl);
 
-        // 等待可能的页面跳转 - 增加超时时间
+        // 等待可能的导航（缩短超时，避免长时间阻塞）
         try {
-            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => {
-                // 如果导航超时，继续执行
+            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 6000 }).catch(() => {
                 logger.info('等待导航超时，继续检查当前URL');
             });
             loginResultUrl = page.url();
@@ -591,9 +637,8 @@ export const login = async (email, password) => {
         } catch (e) {
             logger.info('等待导航时出错，继续检查:', e.message);
         }
-        
-        // 再次等待一下，确保页面完全加载
-        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        await new Promise(resolve => setTimeout(resolve, 800));
         loginResultUrl = page.url();
         logger.info('最终检查URL:', loginResultUrl);
 
@@ -657,10 +702,10 @@ export const login = async (email, password) => {
         if (isActuallyLoggedIn) {
             logger.info('✅ 登录成功，URL已跳转:', loginResultUrl);
             
-            // 登录成功后，跳转到搜索页面以获取 authorization token
-            const searchUrl = 'https://data.insightrackr.com/search/material?keyWord=Geometry+Dash&gpt=1';
+            // 登录成功后，仅在不已是搜索/创意页时跳转到搜索页（无预设关键词），以触发请求并捕获 authorization token
+            const tokenPageUrl = 'https://data.insightrackr.com/search/material';
             if (!loginResultUrl.includes('/search') && !loginResultUrl.includes('/creative')) {
-                logger.info(`正在跳转到搜索页面以获取 token: ${searchUrl}`);
+                logger.info(`正在跳转到搜索页以获取 token: ${tokenPageUrl}`);
                 try {
                     // 设置请求拦截器来获取 authorization token
                     let capturedToken = null;
@@ -675,21 +720,18 @@ export const login = async (email, password) => {
                         }
                     };
                     page.on('request', requestHandler);
-                    
-                    await page.goto(searchUrl, { 
-                        timeout: 120 * 1000, 
-                        waitUntil: 'networkidle2' 
+
+                    await page.goto(tokenPageUrl, {
+                        timeout: 120 * 1000,
+                        waitUntil: 'domcontentloaded'
                     });
                     loginResultUrl = page.url();
-                    logger.info('已跳转到搜索页面:', loginResultUrl);
-                    
-                    // 等待一下，确保所有请求都发送完成
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    
-                    // 如果还没有获取到 token，再等待一下
+                    logger.info('已跳转到搜索页:', loginResultUrl);
+
+                    await new Promise(resolve => setTimeout(resolve, 1200));
                     if (!capturedToken) {
                         logger.warn('首次未获取到 token，等待更多请求...');
-                        await new Promise(resolve => setTimeout(resolve, 3000));
+                        await new Promise(resolve => setTimeout(resolve, 2000));
                     }
                     
                     // 移除监听器
@@ -793,6 +835,7 @@ export const login = async (email, password) => {
             
             loginPage = page; // 保存登录页面，不关闭
             status.update(LoginStatus.ONLINE);
+            await closeOtherPages(page);
             return {
                 data: {
                     url: loginResultUrl,
@@ -811,8 +854,8 @@ export const login = async (email, password) => {
                     timeout: 120 * 1000,
                     waitUntil: 'domcontentloaded',
                 });
-                await page.waitForTimeout(3000);
-                
+                await page.waitForTimeout(1500);
+
                 const finalUrl = page.url();
                 logger.info('最终确认URL:', finalUrl);
                 
@@ -822,7 +865,7 @@ export const login = async (email, password) => {
                     status.update(LoginStatus.ONLINE);
                     loginPage = page;
                     loginInfo.email = loginEmail;
-                    
+
                     // 保存 cookies
                     try {
                         const cookies = await page.cookies();
@@ -831,7 +874,8 @@ export const login = async (email, password) => {
                     } catch (e) {
                         logger.error('保存 cookies 失败:', e.message);
                     }
-                    
+
+                    await closeOtherPages(page);
                     return {
                         data: {
                             url: finalUrl,

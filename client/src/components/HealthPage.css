@@ -1,0 +1,201 @@
+.health-page {
+  min-height: 100vh;
+  padding: 24px;
+  background: #f5f5f5;
+}
+
+.health-header {
+  max-width: 720px;
+  margin: 0 auto 24px;
+  position: relative;
+}
+
+.health-back {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+}
+
+.health-back:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.health-header h1 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.health-desc {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.health-loading,
+.health-error {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px;
+  text-align: center;
+}
+
+.health-error {
+  color: #c00;
+  background: #fff2f0;
+  border-radius: 8px;
+}
+
+.health-content {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.health-summary {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.health-summary h2,
+.health-platforms h2 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.health-summary ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.health-summary li {
+  margin-bottom: 6px;
+}
+
+.health-platforms {
+  margin-bottom: 24px;
+}
+
+.health-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.health-card h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #333;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.health-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 24px;
+  font-size: 0.9rem;
+}
+
+.health-card dt {
+  color: #666;
+  font-weight: 500;
+}
+
+.health-card dd {
+  margin: 0;
+  color: #333;
+}
+
+.health-error-text {
+  color: #c00;
+}
+
+.health-logs {
+  margin-bottom: 24px;
+}
+
+.health-logs h2 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.health-log-block {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.health-log-block h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: #555;
+}
+
+.health-log-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.health-log-list--error {
+  border-left: 3px solid #ff4d4f;
+  padding-left: 10px;
+}
+
+.health-log-entry {
+  padding: 4px 0;
+  border-bottom: 1px solid #f0f0f0;
+  word-break: break-all;
+  display: grid;
+  grid-template-columns: 160px 52px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.health-log-entry:last-child {
+  border-bottom: none;
+}
+
+.health-log-entry--error .health-log-level,
+.health-log-list--error .health-log-level {
+  color: #ff4d4f;
+  font-weight: 600;
+}
+
+.health-log-entry--warn .health-log-level {
+  color: #faad14;
+}
+
+.health-log-time {
+  color: #888;
+  flex-shrink: 0;
+}
+
+.health-log-level {
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.health-log-msg {
+  color: #333;
+  min-width: 0;
+}

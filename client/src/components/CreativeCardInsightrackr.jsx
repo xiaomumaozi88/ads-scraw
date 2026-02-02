@@ -32,7 +32,7 @@ function renderWithRedHighlight(str) {
   return parts.length === 0 ? str : <>{parts}</>;
 }
 
-function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', mediaChannels = [], appList = [] }) {
+function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', mediaChannels = [], appList = [], batchMode = false, selected = false, onToggleSelect }) {
   // 使用 useMemo 缓存计算结果
   const { isVideo, thumbnailUrl, videoUrl } = useMemo(() => {
     const isVideo = item.materialType === 2 || (item.videoUrl && item.videoUrl.trim() !== '');
@@ -289,6 +289,19 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
 
   return (
     <div className="creative-card">
+      {batchMode && (
+        <div
+          className={`batch-card-checkbox ${selected ? 'batch-card-checkbox--checked' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect?.();
+          }}
+          role="button"
+          aria-label={selected ? '取消选择' : '选择'}
+        >
+          {selected ? '✓' : ''}
+        </div>
+      )}
       <div className="card-thumbnail">
         {!imageError && thumbnailUrl ? (
           <img

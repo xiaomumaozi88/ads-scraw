@@ -242,11 +242,19 @@ export function buildGuangdadaApiBody(params = {}) {
     body.position = positionMap[guangdadaSearchType];
   }
 
-  // keyword: str 或 List[str]，多个最多7个
+  // keyword: str 或 List[str]，多个最多7个；支持输入中用 "\;" 分割，发请求时拆成数组
   if (Array.isArray(keyWord) && keyWord.length > 0) {
     body.keyword = keyWord.map((k) => String(k).trim()).filter(Boolean).slice(0, 7);
   } else if (keyWord != null && String(keyWord).trim() !== '') {
-    body.keyword = String(keyWord).trim();
+    const raw = String(keyWord).trim();
+    const parts = raw.split('\\;').map((s) => s.trim()).filter(Boolean).slice(0, 7);
+    if (parts.length > 1) {
+      body.keyword = parts;
+    } else if (parts.length === 1) {
+      body.keyword = parts[0];
+    } else {
+      body.keyword = raw;
+    }
   }
   if (Array.isArray(exclude_keyword) && exclude_keyword.length > 0) {
     body.exclude_keyword = exclude_keyword.slice(0, 7);

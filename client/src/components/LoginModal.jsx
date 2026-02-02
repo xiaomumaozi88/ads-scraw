@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { login } from '../utils/api';
+import { login, formatRequestError } from '../utils/api';
 import './LoginModal.css';
 
 function LoginModal({ platform, isOpen, onClose, onLoginSuccess, addLog }) {
@@ -48,7 +48,7 @@ function LoginModal({ platform, isOpen, onClose, onLoginSuccess, addLog }) {
       }
     } catch (error) {
       addLog(`登录请求失败: ${error.message}`, 'error');
-      setMessage({ text: `请求失败: ${error.message}`, type: 'error' });
+      setMessage({ text: formatRequestError(error.message), type: 'error' });
     } finally {
       setLoading(false);
     }

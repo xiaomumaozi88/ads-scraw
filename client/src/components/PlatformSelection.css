@@ -67,10 +67,21 @@
   transform: scaleX(1);
 }
 
-.platform-icon {
-  font-size: 4rem;
+.platform-card-logo-wrap {
   margin-bottom: 20px;
   text-align: center;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.platform-card-logo {
+  max-width: 280px;
+  max-height: 100px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 .platform-card h2 {

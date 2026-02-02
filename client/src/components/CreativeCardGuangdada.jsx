@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 
-function CreativeCardGuangdada({ item }) {
+function CreativeCardGuangdada({ item, batchMode = false, selected = false, onToggleSelect }) {
   // 使用 useMemo 缓存计算结果，避免每次渲染都重新计算
   const { isVideo, thumbnailUrl, videoUrl, videoDuration } = useMemo(() => {
     let isVideo = false;
@@ -187,6 +187,19 @@ function CreativeCardGuangdada({ item }) {
 
   return (
     <div className="creative-card guangdada-card">
+      {batchMode && (
+        <div
+          className={`batch-card-checkbox ${selected ? 'batch-card-checkbox--checked' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect?.();
+          }}
+          role="button"
+          aria-label={selected ? '取消选择' : '选择'}
+        >
+          {selected ? '✓' : ''}
+        </div>
+      )}
       {/* 产品信息头部 */}
       {(item.logo_url || appName !== 'N/A') && (
         <div className="card-header">

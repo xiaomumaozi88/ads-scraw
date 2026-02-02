@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { Dropdown } from 'antd';
 import PlatformSelection from './components/PlatformSelection';
 import LoginModal from './components/LoginModal';
 import DataCard from './components/DataCard';
 import { usePlatformStatus } from './hooks/usePlatformStatus';
 import { useLogs } from './hooks/useLogs';
+import { clearLogin } from './utils/api';
 import './styles/App.css';
+import insightrackrLogo from '../assets/insightrackr-logo.png';
+import guangdadaLogo from '../assets/guangdada-logo.svg';
 
 const PLATFORM_ROUTES = { insightrackr: '/insightrackr', guangdada: '/guangdada' };
 
@@ -26,8 +30,19 @@ function App() {
   }, [pathname, isSelectionView, selectedPlatform, navigate]);
 
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const { statuses, refreshStatus } = usePlatformStatus();
+  const { statuses, refreshStatus, getStatus, getStatusDetail } = usePlatformStatus();
   const { addLog } = useLogs();
+
+  const handleReLogin = async (platform) => {
+    try {
+      await clearLogin(platform);
+      await refreshStatus(platform);
+      setShowLoginModal(true);
+      addLog(`已清除 ${platform === 'insightrackr' ? 'Insightrackr' : '广大大'} 登录状态，请重新登录`, 'info');
+    } catch (e) {
+      addLog(`清除登录状态失败: ${e.message}`, 'error');
+    }
+  };
 
   // 在 Insightrackr / 广大大 路由下检查登录状态，未登录则弹出登录框（与 Insightrackr 一致）
   useEffect(() => {
@@ -110,15 +125,42 @@ function App() {
           <button className="btn-back" onClick={handleBackToSelection}>
             ← 返回平台选择
           </button>
-          <h1>
-            {selectedPlatform === 'insightrackr' ? 'Insightrackr' : '广大大'} - 数据查询
-          </h1>
+          <div className="search-page-header-logo">
+            <img
+              src={selectedPlatform === 'insightrackr' ? insightrackrLogo : guangdadaLogo}
+              alt={selectedPlatform === 'insightrackr' ? 'Insightrackr' : '广大大'}
+              className="search-page-header-logo-img"
+            />
+            <span className="search-page-header-suffix">数据查询</span>
+          </div>
+          {getStatus(selectedPlatform) === 'ONLINE' ? (
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'relogin',
+                    label: '重新登录',
+                    onClick: () => handleReLogin(selectedPlatform)
+                  }
+                ]
+              }}
+              trigger={['click']}
+              placement="bottomRight"
+            >
+              <button type="button" className="search-page-header-user">
+                {getStatusDetail(selectedPlatform)?.email || '已登录'}
+              </button>
+            </Dropdown>
+          ) : (
+            <span className="search-page-header-user search-page-header-user--muted">未登录</span>
+          )}
         </div>
         <div className="main-content">
           <DataCard
             platform={selectedPlatform}
             addLog={addLog}
             onRequireLogin={handleRequireLogin}
+            isLoggedIn={getStatus(selectedPlatform) === 'ONLINE'}
           />
         </div>
         <LoginModal

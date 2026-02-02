@@ -7,3 +7,5 @@ dist
 .cache
 tmp/
 *.old
+docs/
+cat-catch/

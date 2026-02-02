@@ -551,6 +551,24 @@ body {
   align-self: flex-start;
 }
 
+.guangdada-keyword-hint .guangdada-keyword-sep-btn {
+  margin: 0 2px;
+  padding: 2px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #1677ff;
+  background: #e6f4ff;
+  border: 1px solid #91caff;
+  border-radius: 4px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.guangdada-keyword-hint .guangdada-keyword-sep-btn:hover {
+  color: #4096ff;
+  background: #bae0ff;
+  border-color: #69b1ff;
+}
+
 /* 搜索栏与右侧「排除」「精确搜索」同一行 */
 .guangdada-search-row {
   display: flex;
@@ -3017,6 +3035,159 @@ body.insightrackr-fullscreen-active .data-card {
     flex-direction: column;
     position: relative;
     height: auto;
+}
+
+/* 批量下载 - 卡片右上角勾选框 */
+.batch-card-checkbox {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 20;
+    width: 24px;
+    height: 24px;
+    border: 2px solid #fff;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.4);
+    color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: background 0.2s, color 0.2s;
+}
+.batch-card-checkbox:hover {
+    background: rgba(0, 0, 0, 0.6);
+}
+.batch-card-checkbox--checked {
+    background: #1677ff;
+    border-color: #1677ff;
+    color: #fff;
+}
+.batch-card-checkbox--checked:hover {
+    background: #4096ff;
+}
+
+/* 批量下载 - 工具栏 */
+.batch-download-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 8px 0;
+}
+.batch-download-toolbar--active {
+    padding: 8px 12px;
+    background: #f0f7ff;
+    border-radius: 8px;
+}
+
+/* 下载处理列表 - 可展开/收起 */
+.download-list-panel {
+    margin-top: 12px;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e8e8e8;
+    overflow: hidden;
+}
+.download-list-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    cursor: pointer;
+    user-select: none;
+    background: #fafafa;
+}
+.download-list-panel__header:hover {
+    background: #f0f0f0;
+}
+.download-list-panel__title {
+    font-weight: 600;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.download-list-panel__badge {
+    font-size: 12px;
+    font-weight: normal;
+    color: #1677ff;
+    background: #e6f4ff;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+.download-list-panel__chevron {
+    font-size: 10px;
+    color: #666;
+    transition: transform 0.2s ease;
+}
+.download-list-panel__chevron.is-expanded {
+    transform: rotate(-180deg);
+}
+.download-list-panel__body {
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 8px;
+}
+.download-list-item {
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+    border: 1px solid #f0f0f0;
+    background: #fafafa;
+}
+.download-list-item:last-child {
+    margin-bottom: 0;
+}
+.download-list-item--processing {
+    background: #e6f4ff;
+    border-color: #91caff;
+}
+.download-list-item--done {
+    background: #f6ffed;
+    border-color: #b7eb8f;
+}
+.download-list-item--error {
+    background: #fff2f0;
+    border-color: #ffccc7;
+}
+.download-list-item__main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+.download-list-item__filename {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: #333;
+}
+.download-list-item__status {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: #666;
+}
+.download-list-item--done .download-list-item__status { color: #52c41a; }
+.download-list-item--error .download-list-item__status { color: #ff4d4f; }
+.download-list-item__progress-wrap {
+    height: 4px;
+    margin-top: 6px;
+    background: rgba(0,0,0,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.download-list-item__progress-bar {
+    height: 100%;
+    background: #1677ff;
+    border-radius: 2px;
+    transition: width 0.2s ease;
 }
 
 

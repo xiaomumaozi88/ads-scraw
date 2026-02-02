@@ -6,6 +6,8 @@
   "type": "module",
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
+    "@ffmpeg/ffmpeg": "^0.12.10",
+    "@ffmpeg/util": "^0.12.1",
     "antd": "^6.2.2",
     "chrome-finder": "^1.0.7",
     "chrome-launcher": "^1.0.0",
