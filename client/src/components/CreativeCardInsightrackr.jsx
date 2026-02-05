@@ -32,7 +32,7 @@ function renderWithRedHighlight(str) {
   return parts.length === 0 ? str : <>{parts}</>;
 }
 
-function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', mediaChannels = [], appList = [], batchMode = false, selected = false, onToggleSelect }) {
+function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', mediaChannels = [], appList = [], batchMode = false, selected = false, onToggleSelect, onEnterBatchMode, onOpenDetail, onRequestVideoDownload }) {
   // 使用 useMemo 缓存计算结果
   const { isVideo, thumbnailUrl, videoUrl } = useMemo(() => {
     const isVideo = item.materialType === 2 || (item.videoUrl && item.videoUrl.trim() !== '');
@@ -80,6 +80,25 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
   const lifecycleDays = item.findCntSum != null ? item.findCntSum : (item.findCnt != null ? item.findCnt : '');
   const lifecycleStart = formatDateDDMMYY(item.globalFirstTime);
   const lifecycleEnd = formatDateDDMMYY(item.globalLastTime);
+
+  // 曝光预估、关联创意组数（用于 card-lifecycle）
+  const formatImpression = (val) => {
+    if (val == null || val === '') return null;
+    const n = Number(val);
+    if (!Number.isFinite(n) || n < 0) return null;
+    if (n >= 1e8) return `${(n / 1e8).toFixed(1)}亿`;
+    if (n >= 1e4) return `${(n / 1e4).toFixed(1)}万`;
+    return String(n);
+  };
+  const formatCreativeCnt = (val) => {
+    if (val == null || val === '') return null;
+    const n = Number(val);
+    if (!Number.isFinite(n) || n < 0) return null;
+    if (n >= 1e4) return `${(n / 1e4).toFixed(1)}万`;
+    return String(n);
+  };
+  const impressionDisplay = formatImpression(item.impression);
+  const creativeCntDisplay = formatCreativeCnt(item.creativeCnt);
 
   // 根据排序字段格式化标签显示内容
   const getMetricsLabel = useMemo(() => {
@@ -260,9 +279,13 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
     return sanitizeFileName(String(id)) || `creative_${Date.now()}`;
   };
 
-  // 下载素材：视频用 videoUrl，图片用 thumbnailUrl
+  // 下载素材：视频用 videoUrl（可走尺寸弹窗），图片用 thumbnailUrl
   const handleDownload = (e) => {
     e.stopPropagation();
+    if (isVideo && onRequestVideoDownload) {
+      onRequestVideoDownload(item);
+      return;
+    }
     const url = isVideo ? videoUrl : thumbnailUrl;
     if (!url) return;
     const extFromUrl = getExtensionFromUrl(url);
@@ -270,7 +293,7 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
       ? (extFromUrl === 'mp4' || extFromUrl === 'webm' || extFromUrl === 'mov' ? extFromUrl : 'mp4')
       : (extFromUrl === 'gif' || extFromUrl === 'png' || extFromUrl === 'webp' ? extFromUrl : 'jpg');
     const baseName = getDownloadBaseName();
-    const filename = `${baseName}.${ext}`;
+    const filename = `${baseName}_${Date.now()}.${ext}`;
     fetch(url, { mode: 'cors' })
       .then((res) => res.blob())
       .then((blob) => {
@@ -287,21 +310,37 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
 
   const downloadUrl = isVideo ? videoUrl : thumbnailUrl;
 
+  const handleCheckboxClick = (e) => {
+    e.stopPropagation();
+    if (!batchMode && onEnterBatchMode) {
+      onEnterBatchMode();
+    }
+    onToggleSelect?.();
+  };
+
+  const handleCardClick = (e) => {
+    if (e.target.closest('.batch-card-checkbox') || e.target.closest('.card-thumbnail-download') || e.target.closest('.play-icon-center') || e.target.closest('.video-player-modal')) {
+      return;
+    }
+    onOpenDetail?.(item);
+  };
+
   return (
-    <div className="creative-card">
-      {batchMode && (
-        <div
-          className={`batch-card-checkbox ${selected ? 'batch-card-checkbox--checked' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleSelect?.();
-          }}
-          role="button"
-          aria-label={selected ? '取消选择' : '选择'}
-        >
-          {selected ? '✓' : ''}
-        </div>
-      )}
+    <div
+      className={`creative-card${onOpenDetail ? ' creative-card--clickable' : ''}${batchMode ? ' creative-card--batch-mode' : ''}`}
+      role={onOpenDetail ? 'button' : undefined}
+      tabIndex={onOpenDetail ? 0 : undefined}
+      onKeyDown={onOpenDetail ? (e) => e.key === 'Enter' && handleCardClick(e) : undefined}
+      onClick={onOpenDetail ? handleCardClick : undefined}
+    >
+      <div
+        className={`batch-card-checkbox ${selected ? 'batch-card-checkbox--checked' : ''}`}
+        onClick={handleCheckboxClick}
+        role="button"
+        aria-label={selected ? '取消选择' : '选择'}
+      >
+        {selected ? '✓' : ''}
+      </div>
       <div className="card-thumbnail">
         {!imageError && thumbnailUrl ? (
           <img
@@ -361,33 +400,49 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
         )}
       </div>
       <div className="card-details">
-        {/* Part 2: 标题、描述、流量分布渠道 */}
-        {title && title !== 'No Title/Description' && (
-          <p className="card-title"><b>标题</b>{' '}{renderWithRedHighlight(item.title || item.describe || '')}</p>
-        )}
-        {item.describe && item.describe !== title && (
-          <p className="card-description"><b>描述</b>{' '}{renderWithRedHighlight(item.describe)}</p>
-        )}
-        {mediaChannels.length > 0 && (
-          <div className="card-media-channels">
-            <span className="card-label"><b>流量分布渠道：</b></span>
-            <div className="card-channel-icons">
-              {mediaChannels.map((ch) => (
-                <span key={ch.id || ch.name} className="channel-item" title={`${ch.name}${ch.cnt != null ? ` (${ch.cnt})` : ''}`}>
-                  {ch.logo ? (
-                    <img src={ch.logo} alt={ch.name || ''} className="channel-icon" />
-                  ) : (
-                    <span className="channel-name">{ch.name || ch.id}</span>
-                  )}
-                </span>
-              ))}
+        {/* 组1：标题、描述、流量分布渠道 */}
+        <div className="card-details-group">
+          {title && title !== 'No Title/Description' && (
+            <p className="card-title"><b>标题</b>{' '}{renderWithRedHighlight(item.title || item.describe || '')}</p>
+          )}
+          {item.describe && item.describe !== title && (
+            <p className="card-description"><b>描述</b>{' '}{renderWithRedHighlight(item.describe)}</p>
+          )}
+          {mediaChannels.length > 0 && (
+            <div className="card-media-channels">
+              <span className="card-label"><b>流量分布渠道：</b></span>
+              <div className="card-channel-icons">
+                {mediaChannels.map((ch) => (
+                  <span key={ch.id || ch.name} className="channel-item" title={`${ch.name}${ch.cnt != null ? ` (${ch.cnt})` : ''}`}>
+                    {ch.logo ? (
+                      <img src={ch.logo} alt={ch.name || ''} className="channel-icon" />
+                    ) : (
+                      <span className="channel-name">{ch.name || ch.id}</span>
+                    )}
+                  </span>
+                ))}
+              </div>
             </div>
+          )}
+        </div>
+        {/* 组2：生命周期、曝光预估、关联创意组数（组间细线分割） */}
+        <div className="card-details-group card-details-group--metrics">
+          <div className="card-lifecycle-group">
+          <p className="card-lifecycle-row">
+            <b>生命周期(天)</b>{' '}{lifecycleDays !== '' ? `${lifecycleDays} / ${lifecycleStart} - ${lifecycleEnd}` : '—'}
+          </p>
+          {impressionDisplay != null && (
+            <p className="card-lifecycle-row">
+              <b>曝光预估</b>{' '}{impressionDisplay}
+            </p>
+          )}
+          {creativeCntDisplay != null && (
+            <p className="card-lifecycle-row">
+              <b>关联创意组数</b>{' '}{creativeCntDisplay}
+            </p>
+          )}
           </div>
-        )}
-        {/* Part 3: 生命周期 */}
-        <p className="card-lifecycle">
-          生命周期(天) {lifecycleDays} / {lifecycleStart} - {lifecycleEnd}
-        </p>
+        </div>
         {/* Part 4: 广告发行商信息（App 信息） */}
         <div className="card-app-info">
           {appLogo && (
@@ -405,6 +460,7 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
         <div 
           className="video-player-modal"
           onClick={(e) => {
+            e.stopPropagation();
             if (e.target.className === 'video-player-modal') {
               setShowVideoPlayer(false);
             }
@@ -412,8 +468,12 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
         >
           <div className="video-player-container">
             <button 
+              type="button"
               className="video-player-close"
-              onClick={() => setShowVideoPlayer(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowVideoPlayer(false);
+              }}
             >
               ×
             </button>

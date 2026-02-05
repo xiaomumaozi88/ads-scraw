@@ -183,6 +183,36 @@ export const distributeMedia = async (req, res) => {
     }
 };
 
+// 全局搜索（search-global）：应用/产品、开发者；keyWord + searchType，可选 baseOption（两请求 searchType "1"/"2" 均需带 baseOption）
+export const searchGlobal = async (req, res) => {
+    try {
+        const { keyWord = '', searchType = '1', baseOption } = req.body || {};
+        const result = await puppeteerService.fetchSearchGlobal(keyWord, searchType, baseOption);
+        if (!result.success && result.code === 'NO_LOGIN_PAGE') {
+            return res.status(200).json({
+                data: null,
+                success: false,
+                code: result.code,
+                message: result.message || '请先登录'
+            });
+        }
+        res.json({
+            data: result.data,
+            success: result.success,
+            code: result.code,
+            message: result.message
+        });
+    } catch (error) {
+        logger.error(`请求 search-global 失败: ${error}`);
+        res.status(200).json({
+            data: null,
+            success: false,
+            code: 500,
+            message: error.message || '请求失败'
+        });
+    }
+};
+
 // 广告发行商/App 信息（distribute/app）- 参数与 search 一致，body 需包含 ids
 export const distributeApp = async (req, res) => {
     try {

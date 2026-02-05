@@ -157,3 +157,11 @@ export const GUANGDADA_COUNTRY_CATEGORIES = [
     ],
   },
 ];
+
+/** 国家/地区代码（如 JPN、USA）-> 中文名，用于创意详情等展示 */
+export const GUANGDADA_COUNTRY_CODE_TO_CN = GUANGDADA_COUNTRY_CATEGORIES.reduce((acc, cat) => {
+  (cat.items || []).forEach((it) => {
+    acc[it.value] = it.label;
+  });
+  return acc;
+}, {});

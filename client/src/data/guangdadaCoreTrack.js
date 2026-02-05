@@ -91,3 +91,23 @@ export const GUANGDADA_CORE_TRACK_CATEGORIES = [
     ],
   },
 ];
+
+/** 核心/玩法/主题/IP 的 value -> label，用于详情里「核心」等 tag 的 code 转中文 */
+export const GUANGDADA_CORE_TRACK_CODE_TO_LABEL = GUANGDADA_CORE_TRACK_CATEGORIES.reduce((acc, cat) => {
+  (cat.items || []).forEach((item) => {
+    if (item.value != null) acc[String(item.value)] = item.label || item.value;
+  });
+  return acc;
+}, {});
+
+/** 玩法与分类里 category_tag 的 key（如 21、27、72、ip）-> 父级中文名，与 GUANGDADA_CORE_TRACK_CATEGORIES 的 title 对应；含字符串 key 以便接口返回 ip 等时直接展示父级中文名 */
+export const GUANGDADA_CATEGORY_TAG_KEY_TO_LABEL = {
+  '21': '游戏玩法',
+  '27': '游戏主题',
+  '72': '核心赛道',
+  '73': 'IP',
+  ip: 'IP',
+  game_play: '游戏玩法',
+  game_theme: '游戏主题',
+  core_track: '核心赛道',
+};

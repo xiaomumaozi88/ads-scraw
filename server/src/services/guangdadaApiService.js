@@ -217,6 +217,7 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
     guangdadaViolationAd,
     guangdadaEndCard,
     exclude_keyword,
+    advertiser_key,
   } = searchParams;
 
   let seenBegin = paramSeenBegin;
@@ -282,6 +283,9 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
   }
   if (Array.isArray(exclude_keyword) && exclude_keyword.length > 0) {
     body.exclude_keyword = exclude_keyword.slice(0, 7);
+  }
+  if (Array.isArray(advertiser_key) && advertiser_key.length > 0) {
+    body.advertiser_key = advertiser_key.map((k) => String(k).trim()).filter(Boolean);
   }
 
   if (Array.isArray(guangdadaChannels) && guangdadaChannels.length > 0) {

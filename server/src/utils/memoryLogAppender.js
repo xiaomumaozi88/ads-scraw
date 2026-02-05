@@ -25,4 +25,9 @@ export function getRecentLogs(n = 50, levelFilter = null) {
   return list;
 }
 
+/** 清除内存中的日志，供 /health 页「清除日志」使用 */
+export function clearLogs() {
+  entries.length = 0;
+}
+
 export default { configure };

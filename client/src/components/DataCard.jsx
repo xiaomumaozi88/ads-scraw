@@ -1,13 +1,28 @@
 import React, { useState, useCallback } from 'react';
 import { message as antdMessage } from 'antd';
 import dayjs from 'dayjs';
+import { getTodayBeijingDayjs, getTodayBeijingStr } from '../utils/beijingDate';
 import { searchData, getCount, getDistributeMedia, getDistributeApp, clearLogin, formatRequestError } from '../utils/api';
+import { dateRangeToSeenParams } from '../utils/guangdadaApiBody';
 import SearchForm from './SearchForm';
 import DataDisplay from './DataDisplay';
 import TimeFilter from './TimeFilter';
 import SortDedupBar from './SortDedupBar';
 
-function DataCard({ platform, addLog, onRequireLogin, isLoggedIn }) {
+/** 广大大 count 数值格式化为「万、百万、千万、亿」等 */
+function formatGuangdadaCount(num) {
+  if (num == null || num === '') return '—';
+  const n = Number(num);
+  if (!Number.isFinite(n) || n < 0) return '—';
+  const fmt = (val) => (val % 1 === 0 ? String(val) : val.toFixed(1));
+  if (n >= 1e8) return `${fmt(n / 1e8)}亿`;
+  if (n >= 1e7) return `${fmt(n / 1e7)}千万`;
+  if (n >= 1e6) return `${fmt(n / 1e6)}百万`;
+  if (n >= 1e4) return `${fmt(n / 1e4)}万`;
+  return `${n}`;
+}
+
+function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnteredWithHint, refreshPlatformStatus }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [countData, setCountData] = useState(null);
@@ -101,10 +116,13 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn }) {
       if (error.requiresLogin) {
         addLog(`登录状态已失效: ${error.message}`, 'error');
 
-        // 清除登录状态
+        // 清除登录状态并刷新状态，使头部切换为未登录
         try {
           await clearLogin(platform);
           addLog('已清除登录状态', 'info');
+          if (refreshPlatformStatus) {
+            await refreshPlatformStatus(platform);
+          }
         } catch (clearError) {
           addLog(`清除登录状态失败: ${clearError.message}`, 'error');
         }
@@ -122,18 +140,19 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn }) {
     }
   };
 
+  const todayBeijing = getTodayBeijingDayjs();
   const dateRangeValue = currentSearchParams
     ? (platform === 'guangdada'
         ? {
-            startTime: currentSearchParams.seen_begin != null
+            startTime: currentSearchParams.startTime ?? (currentSearchParams.seen_begin != null
               ? dayjs(currentSearchParams.seen_begin * 1000).format('YYYY-MM-DD')
-              : dayjs().subtract(1, 'year').format('YYYY-MM-DD'),
-            endTime: currentSearchParams.seen_end != null
+              : todayBeijing.subtract(1, 'year').format('YYYY-MM-DD')),
+            endTime: currentSearchParams.endTime ?? (currentSearchParams.seen_end != null
               ? dayjs(currentSearchParams.seen_end * 1000).format('YYYY-MM-DD')
-              : dayjs().format('YYYY-MM-DD')
+              : todayBeijing.format('YYYY-MM-DD'))
           }
         : { startTime: currentSearchParams.baseOption?.startTime, endTime: currentSearchParams.baseOption?.endTime })
-    : { startTime: dayjs().subtract(1, 'year').format('YYYY-MM-DD'), endTime: dayjs().format('YYYY-MM-DD') };
+    : { startTime: todayBeijing.subtract(1, 'year').format('YYYY-MM-DD'), endTime: todayBeijing.format('YYYY-MM-DD') };
 
   const handleDateChange = (dateRange) => {
     if (!dateRange?.startTime || !dateRange?.endTime) return;
@@ -142,8 +161,9 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn }) {
         platform === 'guangdada'
           ? {
               ...currentSearchParams,
-              seen_begin: Math.floor(new Date(dateRange.startTime).getTime() / 1000),
-              seen_end: Math.floor(new Date(dateRange.endTime).getTime() / 1000)
+              startTime: dateRange.startTime,
+              endTime: dateRange.endTime,
+              ...dateRangeToSeenParams(dateRange.startTime, dateRange.endTime)
             }
           : {
               ...currentSearchParams,
@@ -172,11 +192,23 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn }) {
         loading={loading}
         guangdadaSortField={platform === 'guangdada' ? currentSearchParams?.sort_field : undefined}
         guangdadaDedupType={platform === 'guangdada' ? currentSearchParams?.duplicate_removal : undefined}
+        guangdadaDateRange={platform === 'guangdada' ? dateRangeValue : undefined}
       />
       <div className="data-area">
         {platform === 'guangdada' && (
           <>
-            <TimeFilter value={dateRangeValue} onChange={handleDateChange} />
+            <div className="time-filter-row">
+              <TimeFilter value={dateRangeValue} onChange={handleDateChange} />
+              {countData?.data && (
+                <div className="guangdada-count-info">
+                  共找到{' '}{formatGuangdadaCount(countData.data.all_total)}{' '}个相关广告，
+                  <span className="guangdada-count-highlight">默认去重后</span>
+                  {' '}{formatGuangdadaCount(countData.data.default_total)}，
+                  <span className="guangdada-count-highlight">按广告严格去重后</span>{' '}
+                  {' '}{formatGuangdadaCount(countData.data.result_total)}{' '}
+                </div>
+              )}
+            </div>
             <SortDedupBar
             sortField={currentSearchParams?.sort_field ?? '-first_seen'}
             dedupType={currentSearchParams?.duplicate_removal ?? 0}
@@ -216,6 +248,7 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn }) {
             onSelectAllPage={selectAllPage}
             onBatchDownloadCancel={exitBatchMode}
             onEnterBatchMode={() => setBatchDownloadMode(true)}
+            onBatchModeEnteredWithHint={onBatchModeEnteredWithHint}
             onExitBatchMode={exitBatchMode}
             onPageChange={(page) => {
               if (currentSearchParams) {

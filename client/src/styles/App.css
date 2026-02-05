@@ -82,11 +82,47 @@
   border-color: rgba(255, 255, 255, 0.5);
 }
 
-.search-page-header-user {
+.search-page-header-right {
   position: absolute;
   right: 20px;
   top: 50%;
   transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-page-header-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.search-page-header-download-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.search-page-header-download-count {
+  opacity: 0.95;
+}
+
+.search-page-header-download-badge {
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.25);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.search-page-header-user {
   background: rgba(255, 255, 255, 0.2);
   border: 2px solid rgba(255, 255, 255, 0.3);
   color: white;
@@ -135,10 +171,63 @@
     padding: 5px 12px;
     font-size: 0.85rem;
   }
-  .search-page-header-user {
+  .search-page-header-right {
     right: 12px;
+    gap: 8px;
+  }
+  .search-page-header-download-btn {
+    padding: 5px 10px;
+    font-size: 0.8rem;
+  }
+  .search-page-header-user {
     max-width: 120px;
     font-size: 0.8rem;
     padding: 5px 10px;
   }
+}
+
+/* 批量下载 → 下载列表 气泡引导 */
+.bubble-hint {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+.bubble-hint__bubble {
+  position: fixed;
+  border-radius: 50%;
+  background: rgba(0, 82, 204, 0.95);
+  box-shadow: 0 0 12px rgba(0, 82, 204, 0.7);
+  animation: bubble-hint-float 1.1s ease-in-out forwards;
+}
+@keyframes bubble-hint-float {
+  0% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(var(--bubble-mid-x, 0), var(--bubble-mid-y, 0));
+    opacity: 0.92;
+  }
+  100% {
+    transform: translate(var(--bubble-dx), var(--bubble-dy));
+    opacity: 0;
+  }
+}
+
+/* 下载列表按钮外层：气泡到达时摇晃变大（避免按钮自身 transform 被覆盖） */
+.search-page-header-download-btn-wrap {
+  display: inline-block;
+  transform-origin: center center;
+}
+.search-page-header-download-btn-wrap--wobble {
+  animation: download-btn-wobble 0.65s ease-in-out;
+}
+@keyframes download-btn-wobble {
+  0% { transform: scale(1) rotate(0deg); }
+  18% { transform: scale(1.2) rotate(-4deg); }
+  36% { transform: scale(1) rotate(0deg); }
+  54% { transform: scale(1.2) rotate(3deg); }
+  72% { transform: scale(1.05) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); }
 }

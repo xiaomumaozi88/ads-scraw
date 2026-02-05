@@ -1,4 +1,5 @@
 // src/config.js
+// 广大大使用的配置（userDataDir 独立，避免与 Insightrackr 冲突）
 export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
     defaultViewport: {
         width: 1920,
@@ -65,6 +66,71 @@ export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
         '--window-size=1920,1080',
         // '--single-process',
         // '--disable-gpu',
+    ],
+};
+
+// Insightrackr 使用的配置（独立 userDataDir，与广大大分开，避免双平台同时登录时第二个浏览器启动失败）
+export const puppeteerOptionsInsightrackr = process.env.NODE_ENV !== 'development' ? {
+    defaultViewport: {
+        width: 1920,
+        height: 1280,
+    },
+    headless: true,
+    userDataDir: 'tmp/insightrackr_spider_usr_dir',
+    executablePath: '/usr/bin/google-chrome',
+    args: [
+        '--no-sandbox',
+        '--disable-client-side-phishing-detection',
+        '--disable-setuid-sandbox',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-popup-blocking',
+        '--disable-offer-store-unmasked-wallet-cards',
+        '--disable-speech-api',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--no-zygote',
+    ],
+} : {
+    defaultViewport: {
+        width: 1920,
+        height: 1280,
+    },
+    headless: false,
+    userDataDir: 'tmp/insightrackr_spider_usr_dir',
+    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-client-side-phishing-detection',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-popup-blocking',
+        '--disable-offer-store-unmasked-wallet-cards',
+        '--disable-speech-api',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--no-zygote',
+        '--window-size=1920,1080',
     ],
 };
 

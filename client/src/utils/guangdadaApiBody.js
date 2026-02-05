@@ -131,6 +131,15 @@ function defaultSeenRangeBeijing() {
   return { seenBegin: Math.floor(beginMs / 1000), seenEnd: Math.floor(endMs / 1000) };
 }
 
+/** 供 DataCard 时间范围切换使用：将 startTime/endTime 转为 seen_begin/seen_end，保持 API 格式以便筛选条件不丢失 */
+export function dateRangeToSeenParams(startTime, endTime) {
+  if (!startTime || !endTime) return {};
+  return {
+    seen_begin: dateStrToSeenBegin(String(startTime)),
+    seen_end: dateStrToSeenEnd(String(endTime))
+  };
+}
+
 const IMAGE_AI_PARENT = {
   97: 96, 98: 96, 99: 96, 100: 96, 6: 1, 7: 1, 8: 1, 9: 1, 10: 1, 12: 1, 13: 1, 38: 1, 39: 1, 40: 1, 41: 1, 42: 1, 44: 1, 45: 1, 46: 1, 47: 1, 48: 1, 49: 1,
   14: 2, 15: 2, 16: 2, 17: 2, 51: 2, 52: 2, 53: 2, 54: 2, 55: 2, 56: 2, 57: 2, 58: 2, 61: 2, 63: 2, 64: 2, 65: 2, 66: 2,
@@ -194,6 +203,7 @@ export function buildGuangdadaApiBody(params = {}) {
     guangdadaViolationAd,
     guangdadaEndCard,
     exclude_keyword,
+    advertiser_key,
   } = params;
 
   let seenBegin = paramSeenBegin;
@@ -258,6 +268,9 @@ export function buildGuangdadaApiBody(params = {}) {
   }
   if (Array.isArray(exclude_keyword) && exclude_keyword.length > 0) {
     body.exclude_keyword = exclude_keyword.slice(0, 7);
+  }
+  if (Array.isArray(advertiser_key) && advertiser_key.length > 0) {
+    body.advertiser_key = advertiser_key.map((k) => String(k).trim()).filter(Boolean);
   }
 
   if (Array.isArray(guangdadaChannels) && guangdadaChannels.length > 0) {

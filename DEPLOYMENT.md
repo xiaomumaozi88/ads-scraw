@@ -91,6 +91,7 @@ docker run -d \
   -p 3000:3000 \
   -e NODE_ENV=production \
   --restart unless-stopped \
+  --shm-size=1g \
   ads-scraw
 ```
 
@@ -113,7 +114,79 @@ docker run -d \
 
 ---
 
-## 四、简要架构（生产）
+## 四、重新上传并 Docker 重新部署（完整流程）
+
+适用于：之前用 SCP 上传、在服务器上用 `sudo docker stop ads-scraw` 的方式，现在要**重新上传整个项目并重新部署**。
+
+### 1. 本地上传项目到服务器
+
+在**本地项目根目录**执行（将 `你的密钥`、`用户@服务器IP`、`/home/xxx/ads-scraw` 换成自己的）：
+
+```bash
+# 方式 A：用 scp 上传整个项目（排除 node_modules、.git 等）
+scp -i ~/.ssh/你的密钥 -r \
+  --exclude='node_modules' --exclude='.git' --exclude='.env' --exclude='*.log' \
+  . 用户@服务器IP:/home/xxx/ads-scraw/
+```
+
+> 注意：`scp` 不支持 `--exclude`，若需排除目录，可改用下面的 rsync，或先打包再传。
+
+**推荐：用 rsync 上传（支持排除、增量）**
+
+```bash
+# 在项目根目录
+rsync -avz --delete -e "ssh -i ~/.ssh/你的密钥" \
+  --exclude 'node_modules' \
+  --exclude '.git' \
+  --exclude '.env' \
+  --exclude '*.log' \
+  --exclude '.DS_Store' \
+  . 用户@服务器IP:/home/xxx/ads-scraw/
+```
+
+### 2. 在服务器上停止旧容器、删除旧镜像（可选）、重新构建并运行
+
+SSH 登录服务器后：
+
+```bash
+# 进入项目目录（路径与上面一致）
+cd /home/xxx/ads-scraw
+
+# 停止并删除旧容器（若存在）
+sudo docker stop ads-scraw 2>/dev/null || true
+sudo docker rm ads-scraw 2>/dev/null || true
+
+# 重新构建镜像
+sudo docker build -t ads-scraw .
+
+# 运行新容器
+sudo docker run -d \
+  --name ads-scraw \
+  -p 3000:3000 \
+  -e NODE_ENV=production \
+  --restart unless-stopped \
+  --shm-size=1g \
+  ads-scraw
+```
+
+### 3. 一键脚本（可选）
+
+在服务器上保存为 `redeploy.sh`，放在项目目录，每次上传后执行 `./redeploy.sh` 即可：
+
+```bash
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+sudo docker stop ads-scraw 2>/dev/null || true
+sudo docker rm ads-scraw 2>/dev/null || true
+sudo docker build -t ads-scraw .
+sudo docker run -d --name ads-scraw -p 3000:3000 -e NODE_ENV=production --restart unless-stopped --shm-size=1g ads-scraw
+echo ">>> 部署完成，访问 http://<服务器IP>:3000"
+```
+
+---
+
+## 五、简要架构（生产）
 
 - 单进程：Express 同时提供 **API**（`/api/*`）和 **前端静态资源**（`dist/`）。
 - 未命中静态文件且非 API 的 GET 请求会回退到 `dist/index.html`，由前端路由处理。

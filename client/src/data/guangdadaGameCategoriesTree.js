@@ -864,3 +864,18 @@ export const GAME_FIRST_LEVEL_API_TAG_ID = {
 };
 
 export const GUANGDADA_GAME_CATEGORIES = GUANGDADA_GAME_CATEGORIES_TREE.map((item) => item.name);
+
+/** code（tag_id/玩法/核心等）-> 展示文案，用于玩法与分类等处的 code 转中文 */
+export const GUANGDADA_GAME_CODE_TO_LABEL = (() => {
+  const map = {};
+  GUANGDADA_GAME_CATEGORIES_TREE.forEach((cat) => {
+    if (cat.name) map[String(cat.name)] = cat.name;
+    (cat.children || []).forEach((child) => {
+      if (child.value != null) map[String(child.value)] = child.label || child.value;
+    });
+  });
+  Object.entries(GAME_FIRST_LEVEL_API_TAG_ID || {}).forEach(([name, tagId]) => {
+    if (tagId != null) map[String(tagId)] = name;
+  });
+  return map;
+})();

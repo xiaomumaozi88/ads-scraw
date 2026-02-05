@@ -71,8 +71,9 @@ if (process.env.NODE_ENV === 'production') {
     }
 })();
 
-// 启动服务器
+// 启动服务器（记录启动时间，供 /health 页展示「上次启动时间」「窗口打开时长」）
 app.listen(PORT, () => {
+    global.serverStartTime = Date.now();
     console.log(`Server is running on http://localhost:${PORT}`);
 });
 

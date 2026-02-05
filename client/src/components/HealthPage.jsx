@@ -10,25 +10,50 @@ function HealthPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [reopenLoading, setReopenLoading] = useState(false);
+  const [actionError, setActionError] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchHealth = React.useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setActionError(null);
     fetch(`${API_BASE}/health`, { credentials: 'same-origin' })
       .then((res) => res.json())
       .then((json) => {
-        if (!cancelled) {
-          if (json.success && json.data) setData(json.data);
-          else setError(formatRequestError(json.message || '请求失败'));
-        }
+        if (json.success && json.data) setData(json.data);
+        else setError(formatRequestError(json.message || '请求失败'));
       })
-      .catch((err) => {
-        if (!cancelled) setError(formatRequestError(err.message || '请求异常'));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+      .catch((err) => setError(formatRequestError(err.message || '请求异常')))
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchHealth();
+  }, [fetchHealth]);
+
+  const handleClearLogs = () => {
+    setActionError(null);
+    fetch(`${API_BASE}/health/clear-logs`, { method: 'POST', credentials: 'same-origin' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success) fetchHealth();
+        else setActionError(json.message || '清除失败');
+      })
+      .catch((err) => setActionError(err.message || '请求异常'));
+  };
+
+  const handleReopenBrowser = () => {
+    setActionError(null);
+    setReopenLoading(true);
+    fetch(`${API_BASE}/health/reopen-browser`, { method: 'POST', credentials: 'same-origin' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success) fetchHealth();
+        else setActionError(json.message || '重新打开失败');
+      })
+      .catch((err) => setActionError(err.message || '请求异常'))
+      .finally(() => setReopenLoading(false));
+  };
 
   return (
     <div className="health-page">
@@ -42,6 +67,7 @@ function HealthPage() {
 
       {loading && <div className="health-loading">加载中...</div>}
       {error && <div className="health-error">{error}</div>}
+      {actionError && <div className="health-error health-action-error">{actionError}</div>}
 
       {data && !loading && (
         <div className="health-content">
@@ -50,7 +76,17 @@ function HealthPage() {
             <ul>
               <li>浏览器实例数：<strong>{data.summary?.totalBrowsers ?? '-'}</strong></li>
               <li>总页面数（标签页）：<strong>{data.summary?.totalPages ?? '-'}</strong></li>
+              <li>上次启动时间：<strong>{data.summary?.lastStartTimeFormatted ?? '-'}</strong></li>
+              <li>窗口打开时长：<strong>{data.summary?.uptimeText ?? '-'}</strong></li>
             </ul>
+            <div className="health-summary-actions">
+              <button type="button" className="health-btn health-btn-primary" onClick={handleReopenBrowser} disabled={reopenLoading}>
+                {reopenLoading ? '正在重新打开窗口...' : '重新打开窗口'}
+              </button>
+              <button type="button" className="health-btn health-btn-secondary" onClick={handleClearLogs}>
+                清除日志
+              </button>
+            </div>
           </section>
 
           <section className="health-platforms">

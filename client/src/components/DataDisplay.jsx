@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button, Modal, Radio, message } from 'antd';
 import CreativeCardInsightrackr from './CreativeCardInsightrackr';
 import CreativeCardGuangdada from './CreativeCardGuangdada';
+import GuangdadaDetailModal from './GuangdadaDetailModal';
+import InsightrackrDetailModal from './InsightrackrDetailModal';
 import SortSelector from './SortSelector';
 import Pagination from './Pagination';
+import { useDownloadList } from '../contexts/DownloadListContext';
 import {
   getBatchItemId,
   getBatchDownloadInfo,
@@ -26,13 +29,16 @@ function DataDisplay({
   onSelectAllPage,
   onBatchDownloadCancel,
   onEnterBatchMode,
+  onBatchModeEnteredWithHint,
 }) {
+  const startDownloadBtnRef = useRef(null);
   const [sizeModalOpen, setSizeModalOpen] = useState(false);
   const [selectedSizeIndex, setSelectedSizeIndex] = useState(0);
-  const [downloading, setDownloading] = useState(false);
-  /** 下载处理列表：{ id, filename, isVideo, status: 'pending'|'processing'|'done'|'error', progress: 0-100, errorMessage? } */
-  const [downloadList, setDownloadList] = useState([]);
-  const [downloadListExpanded, setDownloadListExpanded] = useState(true);
+  const [guangdadaDetailItem, setGuangdadaDetailItem] = useState(null);
+  const [insightrackrDetailItem, setInsightrackrDetailItem] = useState(null);
+  /** 单卡片点击「下载视频」时暂存该项，弹窗确认后按所选尺寸下载 */
+  const [pendingSingleDownloadItem, setPendingSingleDownloadItem] = useState(null);
+  const { downloadList, setDownloadList, downloading, setDownloading, setBatchSizeLabel } = useDownloadList();
   if (!data) {
     return (
       <div className="data-container data-container--empty">
@@ -166,6 +172,13 @@ function DataDisplay({
     if (onSelectAllPage) onSelectAllPage(pageItemIds);
   };
   const handleConfirmDownload = () => {
+    setPendingSingleDownloadItem(null);
+    setSizeModalOpen(true);
+  };
+
+  /** 卡片内点击「下载视频」时调用，弹出尺寸选择后下载该条视频 */
+  const handleRequestVideoDownload = (item) => {
+    setPendingSingleDownloadItem(item);
     setSizeModalOpen(true);
   };
 
@@ -174,18 +187,26 @@ function DataDisplay({
 
   const handleStartBatchDownload = async () => {
     const opt = BATCH_DOWNLOAD_SIZE_OPTIONS[selectedSizeIndex];
-    const targetW = opt.width;
-    const targetH = opt.height;
-    const selectedItems = dataList
-      .filter((item) => selectedIds.has(getBatchItemId(item, platform)))
-      .map((item) => {
-        const info = getBatchDownloadInfo(item, platform);
-        return { ...info, id: getBatchItemId(item, platform) };
-      })
-      .filter((x) => x.url);
+    const targetW = opt.originalSize ? null : opt.width;
+    const targetH = opt.originalSize ? null : opt.height;
+    const isSingle = !!pendingSingleDownloadItem;
+    const selectedItems = isSingle
+      ? (() => {
+          const info = getBatchDownloadInfo(pendingSingleDownloadItem, platform);
+          const id = getBatchItemId(pendingSingleDownloadItem, platform);
+          return info.url ? [{ ...info, id }] : [];
+        })()
+      : dataList
+          .filter((item) => selectedIds.has(getBatchItemId(item, platform)))
+          .map((item) => {
+            const info = getBatchDownloadInfo(item, platform);
+            return { ...info, id: getBatchItemId(item, platform) };
+          })
+          .filter((x) => x.url);
     if (selectedItems.length === 0) {
-      message.warning('所选素材中没有可下载的 URL');
+      message.warning(isSingle ? '该素材没有可下载的 URL' : '所选素材中没有可下载的 URL');
       setSizeModalOpen(false);
+      setPendingSingleDownloadItem(null);
       return;
     }
     const initialList = selectedItems.map((one) => ({
@@ -197,12 +218,17 @@ function DataDisplay({
       errorMessage: null,
     }));
     setDownloadList(initialList);
-    setDownloadListExpanded(true);
+    setBatchSizeLabel(opt.label || '');
     setDownloading(true);
     setSizeModalOpen(false);
+    setPendingSingleDownloadItem(null);
+    onBatchDownloadCancel?.();
 
-    try {
-      for (const one of selectedItems) {
+    const CONCURRENCY = 3;
+    let nextIndex = 0;
+    const runOne = async () => {
+      while (nextIndex < selectedItems.length) {
+        const one = selectedItems[nextIndex++];
         setDownloadList((prev) => updateDownloadItem(prev, one.id, { status: 'processing', progress: 0 }));
         try {
           await processAndDownloadItem(one, targetW, targetH, (percent) => {
@@ -218,10 +244,13 @@ function DataDisplay({
           message.error(`下载失败: ${one.filename}（${msg}）`);
         }
       }
+    };
+    try {
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, selectedItems.length) }, runOne));
     } finally {
       setDownloading(false);
       const doneCount = initialList.length;
-      message.success(`已处理 ${doneCount} 个素材，请查看下方下载列表`);
+      message.success(doneCount === 1 ? '已加入下载列表，请点击右上角「下载列表」查看' : `已处理 ${doneCount} 个素材，请点击右上角「下载列表」查看`);
     }
   };
 
@@ -250,18 +279,19 @@ function DataDisplay({
             const key = item.ad_key || item.id || item.search_flag || index;
             const creativeId = item.id || item.search_flag || item.ad_key || item.bizId || item.materialId;
             const itemId = getBatchItemId(item, platform);
-            const cardBatchProps = batchDownloadMode
-              ? {
-                  batchMode: true,
-                  selected: selectedIds.has(itemId),
-                  onToggleSelect: () => onToggleSelect && onToggleSelect(itemId),
-                }
-              : {};
+            const cardBatchProps = {
+              batchMode: batchDownloadMode,
+              selected: selectedIds.has(itemId),
+              onToggleSelect: () => onToggleSelect && onToggleSelect(itemId),
+              onEnterBatchMode: batchDownloadMode ? undefined : onEnterBatchMode,
+            };
             if (platform === 'guangdada') {
               return (
                 <CreativeCardGuangdada
                   key={key}
                   item={item}
+                  onOpenDetail={() => setGuangdadaDetailItem(item)}
+                  onRequestVideoDownload={handleRequestVideoDownload}
                   {...cardBatchProps}
                 />
               );
@@ -274,6 +304,8 @@ function DataDisplay({
                   sortRule={sortRule}
                   mediaChannels={creativeId ? (mediaDistribute[creativeId] || []) : []}
                   appList={creativeId ? (appDistribute[creativeId] || []) : []}
+                  onOpenDetail={() => setInsightrackrDetailItem(item)}
+                  onRequestVideoDownload={handleRequestVideoDownload}
                   {...cardBatchProps}
                 />
               );
@@ -281,58 +313,23 @@ function DataDisplay({
           })}
         </div>
       </div>
-      {downloadList.length > 0 && (
-        <div className="download-list-panel">
-          <div
-            className="download-list-panel__header"
-            onClick={() => setDownloadListExpanded((e) => !e)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(ev) => ev.key === 'Enter' && setDownloadListExpanded((e) => !e)}
-          >
-            <span className="download-list-panel__title">
-              下载处理列表 ({downloadList.length})
-              {downloading && <span className="download-list-panel__badge">处理中</span>}
-            </span>
-            <span className={`download-list-panel__chevron ${downloadListExpanded ? 'is-expanded' : ''}`}>
-              ▼
-            </span>
-          </div>
-          {downloadListExpanded && (
-            <div className="download-list-panel__body">
-              {downloadList.map((item) => (
-                <div
-                  key={item.id}
-                  className={`download-list-item download-list-item--${item.status}`}
-                >
-                  <div className="download-list-item__main">
-                    <span className="download-list-item__filename" title={item.filename}>
-                      {item.filename.length > 40 ? item.filename.slice(0, 38) + '…' : item.filename}
-                    </span>
-                    <span className="download-list-item__status">
-                      {item.status === 'pending' && '等待中'}
-                      {item.status === 'processing' && `处理中 ${Math.round(item.progress)}%`}
-                      {item.status === 'done' && '已完成'}
-                      {item.status === 'error' && (item.errorMessage || '失败')}
-                    </span>
-                  </div>
-                  {(item.status === 'processing' || item.status === 'done') && (
-                    <div className="download-list-item__progress-wrap">
-                      <div
-                        className="download-list-item__progress-bar"
-                        style={{
-                          width: `${item.status === 'processing' && item.progress < 100
-                            ? Math.max(item.progress, 2)
-                            : item.progress}%`,
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      {platform === 'guangdada' && (
+        <GuangdadaDetailModal
+          item={guangdadaDetailItem}
+          open={!!guangdadaDetailItem}
+          onClose={() => setGuangdadaDetailItem(null)}
+          onRequestDownload={handleRequestVideoDownload}
+        />
+      )}
+      {platform === 'insightrackr' && (
+        <InsightrackrDetailModal
+          item={insightrackrDetailItem}
+          mediaChannels={insightrackrDetailItem ? (mediaDistribute[insightrackrDetailItem.ad_key || insightrackrDetailItem.id || insightrackrDetailItem.search_flag] || []) : []}
+          appList={insightrackrDetailItem ? (appDistribute[insightrackrDetailItem.ad_key || insightrackrDetailItem.id || insightrackrDetailItem.search_flag] || []) : []}
+          open={!!insightrackrDetailItem}
+          onClose={() => setInsightrackrDetailItem(null)}
+          onRequestVideoDownload={handleRequestVideoDownload}
+        />
       )}
       {totalSize > 0 && (
         <Pagination
@@ -348,21 +345,28 @@ function DataDisplay({
       <Modal
         title="选择输出尺寸"
         open={sizeModalOpen}
-        onCancel={() => setSizeModalOpen(false)}
+        zIndex={1060}
+        onCancel={() => { setSizeModalOpen(false); setPendingSingleDownloadItem(null); }}
         footer={[
-          <Button key="cancel" onClick={() => setSizeModalOpen(false)}>取消</Button>,
+          <Button key="cancel" onClick={() => { setSizeModalOpen(false); setPendingSingleDownloadItem(null); }}>取消</Button>,
           <Button
             key="ok"
+            ref={startDownloadBtnRef}
             type="primary"
             loading={downloading}
-            disabled={selectedIds.size === 0}
-            onClick={handleStartBatchDownload}
+            disabled={!pendingSingleDownloadItem && selectedIds.size === 0}
+            onClick={() => {
+              if (onBatchModeEnteredWithHint && startDownloadBtnRef.current) {
+                onBatchModeEnteredWithHint(startDownloadBtnRef.current.getBoundingClientRect());
+              }
+              handleStartBatchDownload();
+            }}
           >
             开始下载
           </Button>,
         ]}
       >
-        {selectedIds.size === 0 ? (
+        {!pendingSingleDownloadItem && selectedIds.size === 0 ? (
           <p style={{ color: '#faad14', margin: 0 }}>请先勾选要下载的素材，再确认下载。</p>
         ) : (
           <Radio.Group

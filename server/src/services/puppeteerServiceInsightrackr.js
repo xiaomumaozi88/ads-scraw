@@ -1,7 +1,7 @@
 import puppeteerBase, {TimeoutError} from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import {puppeteerOptions} from '../config.js';
+import {puppeteerOptionsInsightrackr} from '../config.js';
 import {rm} from 'fs/promises';
 import {dirname, join} from 'path';
 import {fileURLToPath} from 'url';
@@ -145,8 +145,8 @@ export const initializeBrowser = async () => {
     }
     
     try {
-        logger.info('尝试启动浏览器，配置:', JSON.stringify(puppeteerOptions, null, 2));
-        browser = await puppeteer.launch(puppeteerOptions);
+        logger.info('尝试启动浏览器，配置:', JSON.stringify(puppeteerOptionsInsightrackr, null, 2));
+        browser = await puppeteer.launch(puppeteerOptionsInsightrackr);
         
         // 验证浏览器连接是否正常
         try {
@@ -1886,6 +1886,102 @@ export const fetchDistributeApp = async (searchParams = {}, ids = []) => {
         };
     } catch (error) {
         logger.error('请求 distribute/app 失败:', error);
+        return { data: null, success: false, code: 500, message: error.message };
+    }
+};
+
+// 全局搜索（search-global）：应用/产品、开发者；两请求 searchType "1"（左侧Apps）与 "2"（右侧开发者旗下APP）均需带 baseOption
+const DEFAULT_SEARCH_GLOBAL_BASE_OPTION = { sortField: '3', sortRule: 'desc', dayMode: 'ALL', gptSearch: false };
+
+export const fetchSearchGlobal = async (keyWord = '', searchType = '1', baseOption) => {
+    if (!loginPage || loginPage.isClosed()) {
+        return {
+            data: null,
+            success: false,
+            code: 'NO_LOGIN_PAGE',
+            message: '请先登录'
+        };
+    }
+    const kw = String(keyWord || '').trim();
+    if (!kw) {
+        return { data: { productList: [], companyList: [] }, success: true, code: 200, message: '关键词为空' };
+    }
+    try {
+        let authorizationToken = loginInfo.authorization;
+        if (!authorizationToken) {
+            try {
+                const storageToken = await loginPage.evaluate(() => {
+                    const keys = ['authorization', 'token', 'authToken', 'accessToken', 'bearerToken', 'Authorization'];
+                    for (const key of keys) {
+                        const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+                        if (value) return value;
+                    }
+                    return null;
+                });
+                if (storageToken) {
+                    authorizationToken = storageToken;
+                    loginInfo.authorization = storageToken;
+                }
+            } catch (e) {
+                logger.warn('从存储获取 token 失败:', e.message);
+            }
+        }
+        const path = '/cas/api/app/search-global';
+        const requestBody = {
+            keyWord: kw,
+            searchType: String(searchType),
+            baseOption: baseOption && typeof baseOption === 'object' ? baseOption : DEFAULT_SEARCH_GLOBAL_BASE_OPTION
+        };
+        const requestHeaders = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Content-Type': 'application/json;charset=UTF-8',
+            'presentationSortType': '1',
+            'showTrendType': '1',
+            'Language': 'cn',
+            'ECF07FD99F7847C0': loginInfo.deviceId || 'a54ebcd25f886dac0d630e00cc831337',
+            'Email': loginInfo.email || '',
+            'Origin': 'https://data.insightrackr.com',
+            'Referer': 'https://data.insightrackr.com/creative/material',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'cache-control': 'max-age=0',
+            'upgrade-insecure-requests': '1'
+        };
+        if (authorizationToken) {
+            requestHeaders['Authorization'] = authorizationToken;
+        }
+        const response = await loginPage.evaluate(async (body, authToken, headers, url) => {
+            try {
+                if (authToken) headers['Authorization'] = authToken;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers,
+                    credentials: 'include',
+                    body: JSON.stringify(body)
+                });
+                const text = await res.text();
+                let data = null;
+                if (text && text.trim()) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        return { ok: false, status: res.status, statusText: res.statusText, data: { code: -1, message: 'JSON 解析失败' } };
+                    }
+                }
+                return { ok: res.ok, status: res.status, statusText: res.statusText, data };
+            } catch (err) {
+                return { ok: false, status: 500, statusText: err.message, data: { code: -1, message: err.message } };
+            }
+        }, requestBody, authorizationToken, requestHeaders, path);
+        const payload = response.data && response.data.data !== undefined ? response.data.data : (response.data || {});
+        return {
+            data: payload,
+            success: response.ok,
+            code: response.status,
+            message: response.ok ? '请求成功' : (response.data?.message || response.statusText)
+        };
+    } catch (error) {
+        logger.error('请求 search-global 失败:', error);
         return { data: null, success: false, code: 500, message: error.message };
     }
 };

@@ -1,0 +1,828 @@
+/* 广大大创意详情弹窗 */
+.guangdada-detail-modal .ant-modal-content {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.guangdada-detail-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 24px;
+}
+
+.guangdada-detail-modal-title {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.guangdada-detail-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guangdada-detail-link-btn {
+  text-decoration: none;
+}
+
+.guangdada-detail-body {
+  display: flex;
+  gap: 32px;
+  min-height: 480px;
+}
+
+.guangdada-detail-left {
+  flex: 0 1 30%;
+  max-width: 50%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.guangdada-detail-radio-group {
+  display: flex;
+  gap: 0;
+}
+
+.guangdada-detail-radio-item {
+  padding: 4px 12px;
+  font-size: 13px;
+  border: 1px solid #d9d9d9;
+  cursor: default;
+  background: #fafafa;
+  color: #666;
+}
+
+.guangdada-detail-radio-item--active {
+  background: #1677ff;
+  border-color: #1677ff;
+  color: #fff;
+}
+
+.guangdada-detail-radio-item:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.guangdada-detail-radio-item:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.guangdada-detail-creative-area {
+  background: #fafafa;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.guangdada-detail-image-wrap {
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  max-height: 500px;
+}
+
+.guangdada-detail-image-wrap:has(.guangdada-detail-iframe-wrap) {
+  min-height: 0;
+  max-height: 340px;
+  overflow: hidden;
+}
+
+.guangdada-detail-media {
+  max-width: 100%;
+  max-height: 500px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.guangdada-detail-media--empty {
+  color: #999;
+  font-size: 14px;
+}
+
+/* 详情内 HTML iframe：竖屏 9:16，最大高度 340px，居中 */
+.guangdada-detail-iframe-wrap {
+  position: relative;
+  width: 100%;
+  max-width: calc(340px * 9 / 16);
+  aspect-ratio: 9 / 16;
+  max-height: 340px;
+  margin: 0 auto;
+}
+
+.guangdada-detail-iframe-wrap .guangdada-detail-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.guangdada-detail-iframe {
+  width: 100%;
+  min-height: 400px;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.guangdada-detail-creative-info {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.guangdada-detail-creative-title {
+  font-weight: 500;
+  font-size: 14px;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.guangdada-detail-creative-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guangdada-detail-cta {
+  font-size: 12px;
+  color: #666;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.guangdada-detail-body-text {
+  padding: 0 16px 12px;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.5;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.guangdada-detail-disclaimer {
+  padding: 8px 16px 12px;
+  font-size: 11px;
+  color: #999;
+}
+
+.guangdada-detail-right {
+  flex: 1;
+  min-width: 0;
+}
+
+.guangdada-detail-tabs .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.guangdada-detail-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.guangdada-detail-advertiser {
+  padding: 12px 16px;
+  background: #fafafb;
+  border-radius: 8px;
+}
+
+.guangdada-detail-advertiser-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.guangdada-detail-app-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.guangdada-detail-app-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+}
+
+.guangdada-detail-developer {
+  font-size: 12px;
+  color: #666;
+}
+
+.guangdada-detail-meta-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  margin-right: 18px;
+}
+
+.guangdada-detail-meta-label {
+  color: #999;
+  width: max-content;
+}
+
+.guangdada-detail-meta-value {
+  color: #333;
+}
+
+.guangdada-detail-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.guangdada-detail-metric-card {
+  flex: 1;
+  min-width: 100px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+}
+
+.guangdada-detail-metric-label {
+  font-size: 12px;
+  color: #999;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.guangdada-detail-metric-label-icon {
+  color: #999;
+  font-size: 12px;
+  cursor: help;
+  display: inline-flex;
+}
+.guangdada-detail-metric-label-icon:hover {
+  color: #1677ff;
+}
+
+.guangdada-detail-metric-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #000;
+  margin-top: 4px;
+}
+
+.guangdada-detail-metric-extra {
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.guangdada-detail-metric-extra-icon {
+  color: #999;
+  font-size: 11px;
+  cursor: help;
+  display: inline-flex;
+}
+.guangdada-detail-metric-extra-icon:hover {
+  color: #1677ff;
+}
+
+.guangdada-detail-analysis {
+  margin-top: 4px;
+}
+
+/* 玩法与分类、创意分析 - 标签列表 */
+.guangdada-detail-advertiser .guangdada-detail-tags-block {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.guangdada-detail-tags-block {
+  margin-top: 0;
+}
+
+.guangdada-detail-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.guangdada-detail-tag-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #333;
+  background: #f0f0f0;
+  border-radius: 6px;
+}
+
+.guangdada-detail-tag-prefix {
+  font-size: 12px;
+  color: #999;
+  margin-right: 6px;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.guangdada-detail-analysis-groups {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.guangdada-detail-analysis-group{
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.guangdada-detail-analysis-group-title {
+  font-size: 12px;
+  color: #666;
+  width: max-content;
+}
+
+.guangdada-detail-analysis-group .guangdada-detail-tag-list {
+  display: flex;
+  width: max-content;
+}
+
+.guangdada-detail-section-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.guangdada-detail-placeholder {
+  font-size: 12px;
+  color: #999;
+  padding: 12px 0;
+}
+
+/* 数据趋势 - 折线图 */
+.guangdada-detail-trend-section {
+  margin-top: 0;
+}
+
+.guangdada-detail-trend-chart-wrap {
+  margin-top: 12px;
+  min-height: 320px;
+}
+
+.guangdada-detail-similar-advertisers {
+  margin-top: 12px;
+}
+
+.guangdada-detail-advertiser-avatars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.guangdada-detail-advertiser-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f0f0f0;
+  flex-shrink: 0;
+}
+
+.guangdada-detail-advertiser-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.guangdada-detail-advertiser-avatar--clickable {
+  cursor: pointer;
+}
+
+.guangdada-detail-advertiser-avatar--clickable:hover {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.guangdada-detail-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #666;
+}
+
+.guangdada-detail-error {
+  font-size: 12px;
+  color: #ff4d4f;
+  padding: 8px 0;
+}
+
+/* 关联广告：使用相同素材其他广告主（表格上方） */
+.guangdada-detail-related-advertisers-block {
+  margin-bottom: 16px;
+}
+
+.guangdada-detail-related-advertisers-loading {
+  padding: 8px 0;
+}
+
+.guangdada-detail-related-advertisers-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 8px;
+}
+
+.guangdada-detail-related-advertiser-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #fafafb;
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.guangdada-detail-related-advertiser-item--clickable {
+  cursor: pointer;
+}
+
+.guangdada-detail-related-advertiser-item--clickable:hover {
+  background: #f0f0f0;
+}
+
+.guangdada-detail-related-advertiser-logo,
+.guangdada-detail-related-advertiser-logo-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #eee;
+}
+
+.guangdada-detail-related-advertiser-logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #666;
+}
+
+.guangdada-detail-related-advertiser-name {
+  font-size: 13px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+/* 关联广告：使用相同素材其他广告 - 表格 */
+.guangdada-detail-related-ads-section {
+  margin-top: 0;
+}
+
+.guangdada-detail-related-ads-table-wrap {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.guangdada-detail-related-ads-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.guangdada-detail-related-ads-table th,
+.guangdada-detail-related-ads-table td {
+  padding: 10px 8px;
+  border: 1px solid #eee;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.guangdada-detail-related-ads-table th {
+  background: #fafafa;
+  font-weight: 600;
+  color: #333;
+}
+
+.guangdada-detail-related-ads-table tbody tr:hover {
+  background: #fafafa;
+}
+
+.guangdada-detail-table-advertiser {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guangdada-detail-table-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.guangdada-detail-table-advertiser-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.guangdada-detail-table-advertiser-name {
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guangdada-detail-table-developer {
+  font-size: 11px;
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guangdada-detail-table-channel {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f0f0f0;
+  font-size: 11px;
+}
+
+.guangdada-detail-table-copy,
+.guangdada-detail-table-url {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guangdada-detail-landing-link {
+  color: var(--ant-color-link, #1677ff);
+  text-decoration: none;
+}
+.guangdada-detail-landing-link:hover {
+  text-decoration: underline;
+}
+
+.guangdada-detail-table-days {
+  font-weight: 500;
+}
+
+.guangdada-detail-table-daterange {
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+}
+
+.guangdada-detail-table-view-btn {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #1677ff;
+  text-decoration: none;
+  border: 1px solid #1677ff;
+  border-radius: 4px;
+}
+
+.guangdada-detail-table-view-btn:hover {
+  background: #e6f4ff;
+}
+
+.guangdada-detail-loading-wrap {
+  padding: 24px 0;
+  text-align: center;
+}
+
+/* 相似素材推荐 - 卡片网格（图1） */
+.guangdada-detail-similar-ads-section {
+  margin-top: 0;
+}
+
+.guangdada-detail-similar-ads-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.guangdada-detail-similar-card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.guangdada-detail-similar-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #fafafa;
+}
+
+.guangdada-detail-similar-card-logo-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #eee;
+}
+
+.guangdada-detail-similar-card-logo-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.guangdada-detail-similar-card-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.guangdada-detail-similar-card-advertiser {
+  font-weight: 600;
+  font-size: 12px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guangdada-detail-similar-card-developer {
+  font-size: 10px;
+  color: #999;
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guangdada-detail-similar-card-image {
+  aspect-ratio: 1;
+  min-height: 80px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.guangdada-detail-similar-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.guangdada-detail-similar-card-image-placeholder {
+  color: #999;
+  font-size: 11px;
+}
+
+.guangdada-detail-similar-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.guangdada-detail-similar-card-title {
+  font-size: 11px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.guangdada-detail-similar-card-platform {
+  flex-shrink: 0;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #f0f0f0;
+  font-size: 10px;
+  color: #666;
+}
+
+.guangdada-detail-similar-card-metrics {
+  display: flex;
+  padding: 6px 10px;
+  gap: 10px;
+  font-size: 11px;
+  color: #666;
+  background: #fafafa;
+  border-top: 1px solid #f0f0f0;
+}
+
+.guangdada-detail-similar-card-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.guangdada-detail-similar-card-metric-label {
+  font-size: 10px;
+  color: #999;
+}
+
+/* 广告主概览 Drawer */
+.guangdada-advertiser-drawer-body {
+  padding: 0;
+}
+
+.guangdada-advertiser-drawer-card {
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+  margin-bottom: 12px;
+}
+
+.guangdada-advertiser-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.guangdada-advertiser-drawer-logo-wrap {
+  width: 85px;
+  height: 85px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f0f0f0;
+}
+
+.guangdada-advertiser-drawer-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.guangdada-advertiser-drawer-logo-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  color: #999;
+}
+
+.guangdada-advertiser-drawer-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.guangdada-advertiser-drawer-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.guangdada-advertiser-drawer-developer {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.guangdada-advertiser-drawer-meta {
+  font-size: 14px;
+  color: #666;
+}

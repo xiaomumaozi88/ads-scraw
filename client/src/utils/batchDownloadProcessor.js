@@ -42,17 +42,20 @@ export function getBatchItemId(item, platform) {
   return String(raw ?? '');
 }
 
-/** 从 item 提取下载 URL、是否视频、建议文件名 */
+/** 从 item 提取下载 URL、是否视频、是否 HTML、建议文件名 */
 export function getBatchDownloadInfo(item, platform) {
   const sanitize = (s) => (s == null ? '' : String(s).replace(/[\\/:*?"<>|\x00-\x1f]/g, '').trim().slice(0, 80));
   if (platform === 'guangdada') {
-    const isVideo = item.ads_type === 2 || (item.resource_urls?.[0]?.type === 2) || !!(item.resource_urls?.[0]?.video_url);
-    const url = isVideo
-      ? (item.resource_urls?.[0]?.video_url ?? '')
-      : (item.resource_urls?.[0]?.image_url ?? item.preview_img_url ?? '');
-    const title = item.title || item.message || item.body || '';
-    const name = (item.advertiser_name || item.ad_key || '') + (title ? `_${title}` : '');
-    return { url, isVideo, filename: sanitize(name) || 'creative' };
+    const r0 = item.resource_urls?.[0];
+    const isHtml = r0?.type === 4 && r0?.html_url && String(r0.html_url).trim() !== '';
+    const isVideo = !isHtml && (item.ads_type === 2 || r0?.type === 2 || !!(r0?.video_url));
+    let url = '';
+    if (isHtml) url = r0.html_url.trim();
+    else if (isVideo) url = r0?.video_url ?? '';
+    else url = r0?.image_url ?? item.preview_img_url ?? '';
+  const title = item.title || item.message || item.body || '';
+  const name = (item.advertiser_name || item.ad_key || '') + (title ? `_${title}` : '');
+  return { url, isVideo, isHtml: !!isHtml, filename: sanitize(name) || 'creative' };
   }
   const isVideo = item.materialType === 2 || !!(item.videoUrl && item.videoUrl.trim());
   const url = isVideo
@@ -61,7 +64,7 @@ export function getBatchDownloadInfo(item, platform) {
   const title = (item.title || item.describe || '').replace(/<font color='red'>|<\/font>/g, '');
   const appName = (item.appList?.[0]?.name || '').replace(/<font color='red'>|<\/font>/g, '');
   const name = title || appName || item.id || item.search_flag || 'creative';
-  return { url, isVideo, filename: sanitize(name) || 'creative' };
+  return { url, isVideo, isHtml: false, filename: sanitize(name) || 'creative' };
 }
 
 /**
@@ -112,7 +115,7 @@ export async function processImageToBlob(imageUrl, targetW, targetH, onProgress 
   const srcH = img.naturalHeight || img.height;
 
   if (srcW === targetW && srcH === targetH) {
-    const resp = await fetchWithTimeout(imageUrl, { mode: 'cors' }, 30000);
+    const resp = await fetchWithTimeout(imageUrl, { mode: 'cors', referrerPolicy: 'no-referrer' }, 30000);
     const blob = await resp.blob();
     if (onProgress) onProgress(100);
     return blob;
@@ -175,14 +178,14 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
 
   const mainPromise = new Promise((resolve, reject) => {
     console.log(logPrefix, '开始 fetch 视频:', videoUrl?.slice?.(0, 80));
-    fetchWithTimeout(videoUrl, { mode: 'cors' }, 45000)
+    fetchWithTimeout(videoUrl, { mode: 'cors', referrerPolicy: 'no-referrer' }, 45000)
       .then((res) => res.blob())
       .then((videoBlob) => {
-        const originalVideoBlob = videoBlob;
         console.log(logPrefix, 'fetch 完成, blob 大小:', videoBlob?.size, 'bytes');
         const video = document.createElement('video');
         video.src = URL.createObjectURL(videoBlob);
-        video.muted = true;
+        // 不设置 muted / volume=0，否则浏览器可能不解码音频，录不到声音；静音由 Web Audio GainNode 控制
+        video.volume = 1;
         video.playsInline = true;
         video.setAttribute('playsinline', 'true');
         video.style.position = 'fixed';
@@ -257,48 +260,69 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
             ctx.drawImage(video, offsetX, offsetY, scaledWidth, scaledHeight);
           };
 
-          const mimeVideoOnly = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          // Web Audio：在 play() 前接好线，静音输出 + 录制用分支，避免开头“闪一声”
+          let audioContext = null;
+          let audioDestination = null;
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            try {
+              audioContext = new AudioContextClass();
+              const audioSource = audioContext.createMediaElementSource(video);
+              audioDestination = audioContext.createMediaStreamDestination();
+              const gainNode = audioContext.createGain();
+              gainNode.gain.value = 0;
+              // 一路：静音输出到扬声器
+              audioSource.connect(gainNode);
+              gainNode.connect(audioContext.destination);
+              // 一路：原声进录制（不经过 GainNode）
+              audioSource.connect(audioDestination);
+              console.log(logPrefix, 'Web Audio 已连接：静音输出 + 录制分支');
+            } catch (e) {
+              console.warn(logPrefix, 'Web Audio 初始化失败，将仅录画面:', e?.message);
+            }
+          }
+
+          // 优先使用浏览器原生 MP4（如 Safari），无需 FFmpeg 转码
+          const mimeMp4 = MediaRecorder.isTypeSupported('video/mp4')
+            ? 'video/mp4'
+            : MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a')
+              ? 'video/mp4;codecs=avc1,mp4a'
+              : null;
+          const mimeVideoOnly = mimeMp4 || (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
             ? 'video/webm;codecs=vp9'
             : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
               ? 'video/webm;codecs=vp8'
-              : 'video/webm';
-          const mimeWithAudio = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-            ? 'video/webm;codecs=vp9,opus'
-            : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
-              ? 'video/webm;codecs=vp8,opus'
-              : mimeVideoOnly;
+              : 'video/webm');
+          const mimeWithAudio = mimeMp4
+            ? mimeMp4
+            : (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+              ? 'video/webm;codecs=vp9,opus'
+              : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+                ? 'video/webm;codecs=vp8,opus'
+                : mimeVideoOnly);
+          if (mimeMp4) console.log(logPrefix, '使用原生 MP4 录制，无需转码');
           let recorder = null;
           let chunks = [];
           let mime = mimeVideoOnly;
 
           const setupRecorder = (streamToRecord) => {
-            mime = streamToRecord.getAudioTracks().length > 0 ? mimeWithAudio : mimeVideoOnly;
+            const hasAudio = streamToRecord.getAudioTracks().length > 0;
+            mime = hasAudio ? mimeWithAudio : mimeVideoOnly;
             const rec = new MediaRecorder(streamToRecord, {
               mimeType: mime,
               videoBitsPerSecond: 2500000,
-              audioBitsPerSecond: streamToRecord.getAudioTracks().length > 0 ? 128000 : undefined,
+              audioBitsPerSecond: hasAudio ? 192000 : undefined,
             });
             chunks = [];
             rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
-            const hasAudio = streamToRecord.getAudioTracks().length > 0;
-            rec.onstop = async () => {
-              let blob = new Blob(chunks, { type: mime });
+            rec.onstop = () => {
+              const blob = new Blob(chunks, { type: mime });
               console.log(logPrefix, '录制结束, 输出 blob 大小:', blob.size, '含音频:', hasAudio);
               cleanup();
               if (blob.size < 1000) {
                 console.error(logPrefix, '生成的视频过小:', blob.size);
                 reject(new Error('生成的视频过小'));
                 return;
-              }
-              if (!hasAudio && originalVideoBlob) {
-                try {
-                  const { mergeAudioIntoVideo } = await import('./ffmpegMergeAudio.js');
-                  console.log(logPrefix, '使用 FFmpeg 合并原视频音频…');
-                  blob = await mergeAudioIntoVideo(originalVideoBlob, blob);
-                  console.log(logPrefix, '合并后 blob 大小:', blob.size);
-                } catch (e) {
-                  console.warn(logPrefix, 'FFmpeg 合并失败，返回仅画面:', e?.message);
-                }
               }
               resolve(blob);
             };
@@ -354,6 +378,15 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
             requestAnimationFrame(drawFrame);
           };
 
+          const addAudioTracksToStream = (combinedStream) => {
+            if (!audioDestination) return;
+            const audioTracks = audioDestination.stream.getAudioTracks();
+            audioTracks.forEach((track) => {
+              track.enabled = true;
+              combinedStream.addTrack(track);
+            });
+          };
+
           let started = false;
           const startPlayAndRecord = () => {
             if (started) return;
@@ -365,19 +398,41 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
             console.log(logPrefix, '开始播放与录制, duration=', video.duration);
             if (onProgress) onProgress(0);
             video.currentTime = 0;
-            video
-              .play()
-              .then(() => {
-                const canvasStream = canvas.captureStream(TARGET_FPS);
-                recorder = setupRecorder(canvasStream);
+
+            video.play().then(() => {
+              if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().catch(() => {});
+              }
+              const canvasStream = canvas.captureStream(TARGET_FPS);
+              const combinedStream = new MediaStream();
+              canvasStream.getVideoTracks().forEach((t) => combinedStream.addTrack(t));
+
+              const startRecorder = () => {
+                recorder = setupRecorder(combinedStream);
                 recorder.start(100);
                 requestAnimationFrame(drawFrame);
-              })
-              .catch((e) => {
-                console.error(logPrefix, 'video.play() 失败:', e?.message ?? e);
-                cleanup();
-                reject(new Error('视频播放失败: ' + (e?.message || '')));
-              });
+              };
+
+              // 播放后等约 300ms 再加音频轨，避免录出来的 WebM 缺音轨或开头无声
+              setTimeout(() => {
+                addAudioTracksToStream(combinedStream);
+                if (combinedStream.getAudioTracks().length === 0 && audioDestination) {
+                  setTimeout(() => {
+                    addAudioTracksToStream(combinedStream);
+                    if (combinedStream.getAudioTracks().length === 0) {
+                      console.warn(logPrefix, '未获取到音频轨道，将仅录画面');
+                    }
+                    startRecorder();
+                  }, 300);
+                } else {
+                  startRecorder();
+                }
+              }, 300);
+            }).catch((e) => {
+              console.error(logPrefix, 'video.play() 失败:', e?.message ?? e);
+              cleanup();
+              reject(new Error('视频播放失败: ' + (e?.message || '')));
+            });
           };
 
           let readyWarnTimer = setTimeout(() => {
@@ -400,29 +455,67 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
   return withTimeout(mainPromise, 120000, '视频处理超时（约 2 分钟）');
 }
 
-/** 预设输出尺寸 */
+/** 预设输出尺寸（原尺寸为第一项且为默认） */
 export const BATCH_DOWNLOAD_SIZE_OPTIONS = [
+  { label: '原尺寸', originalSize: true },
   { label: '720×1280（竖版）', width: 720, height: 1280 },
   { label: '1280×720（横版）', width: 1280, height: 720 },
   { label: '800×800（方形）', width: 800, height: 800 },
 ];
 
 /**
- * 批量处理并下载：根据 isVideo 调用 processImageToBlob 或 processVideoToBlob，然后触发下载
+ * 批量处理并下载：HTML 直接下载为 .html；视频/图片按尺寸处理或原尺寸下载。
+ * 当 targetW/targetH 为 null 时按原尺寸直接下载（不缩放、不重编码）。
  * onProgress(percent?) 可选，图片完成时调用 onProgress(100)，视频处理中会多次调用 0–100
  */
-export async function processAndDownloadItem({ url, isVideo, filename }, targetW, targetH, onProgress) {
-  const blob = isVideo
-    ? await processVideoToBlob(url, targetW, targetH, onProgress)
-    : await processImageToBlob(url, targetW, targetH, onProgress);
-  if (!isVideo && onProgress) onProgress(100);
-  const ext = isVideo ? 'webm' : 'png';
+export async function processAndDownloadItem({ url, isVideo, isHtml, filename }, targetW, targetH, onProgress) {
+  let blob;
+
+  if (isHtml && url) {
+    if (onProgress) onProgress(10);
+    const resp = await fetchWithTimeout(url, { mode: 'cors', referrerPolicy: 'no-referrer' }, 60000);
+    const text = await resp.text();
+    blob = new Blob([text], { type: 'text/html;charset=utf-8' });
+    if (onProgress) onProgress(100);
+  } else {
+    const isOriginalSize = targetW == null && targetH == null;
+    if (isOriginalSize) {
+      if (onProgress) onProgress(10);
+      const resp = await fetchWithTimeout(url, { mode: 'cors', referrerPolicy: 'no-referrer' }, 60000);
+      blob = await resp.blob();
+      if (onProgress) onProgress(100);
+    } else {
+      blob = isVideo
+        ? await processVideoToBlob(url, targetW, targetH, onProgress)
+        : await processImageToBlob(url, targetW, targetH, onProgress);
+      if (!isVideo && onProgress) onProgress(100);
+    }
+  }
+
+  let ext = 'png';
+  if (isHtml) {
+    ext = 'html';
+  } else {
+    const fromUrl = url.split('?')[0].match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase();
+    if (fromUrl && /^(mp4|webm|mov|avi|jpg|jpeg|png|gif|webp)$/i.test(fromUrl)) {
+      ext = fromUrl === 'jpeg' ? 'jpg' : fromUrl;
+    } else if (blob.type) {
+      if (blob.type === 'video/mp4') ext = 'mp4';
+      else if (blob.type === 'video/webm') ext = 'webm';
+      else if (blob.type === 'image/jpeg') ext = 'jpg';
+      else if (blob.type === 'image/gif') ext = 'gif';
+      else if (blob.type === 'image/webp') ext = 'webp';
+      else if (isVideo) ext = blob.type === 'video/mp4' ? 'mp4' : 'webm';
+    }
+  }
+
   const name = filename.replace(/\.[a-zA-Z0-9]+$/, '') || 'creative';
-  const finalName = `${name}.${ext}`;
+  const finalName = `${name}_${Date.now()}.${ext}`;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = finalName;
   a.click();
   URL.revokeObjectURL(a.href);
-  if (isVideo && onProgress) onProgress(100);
+  if (isVideo && onProgress && !isHtml) onProgress(100);
+  await new Promise((r) => setTimeout(r, 200));
 }

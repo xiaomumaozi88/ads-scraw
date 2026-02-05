@@ -141,3 +141,27 @@ INSIGHTRACKR_PASSWORD=your-password
 ## 许可证
 
 MIT
+
+
+#打包发布
+##在本地项目文件夹
+```
+tar --exclude='node_modules' --exclude='.git' --exclude='.env' --exclude='*.log' -czvf /tmp/ads-scraw.tar.gz .
+
+scp -i ~/.ssh/id_ed25519_nginx /tmp/ads-scraw.tar.gz ecs-user@120.27.200.123:~/ads-scraw.tar.gz
+```
+
+##在服务器
+```
+ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123
+cd ~
+rm -rf ads-scraw
+mkdir -p ads-scraw
+tar -xzvf ads-scraw.tar.gz -C ads-scraw
+rm ads-scraw.tar.gz
+cd ads-scraw
+sudo docker stop ads-scraw 2>/dev/null || true
+sudo docker rm ads-scraw 2>/dev/null || true
+sudo docker build -t ads-scraw .
+sudo docker run -d --name ads-scraw -p 3000:3000 -e NODE_ENV=production --restart unless-stopped --shm-size=1g ads-scraw
+```
