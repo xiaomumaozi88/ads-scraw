@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Dropdown, Drawer } from 'antd';
+import { Dropdown, Drawer, Tag } from 'antd';
 import PlatformSelection from './components/PlatformSelection';
 import BubbleHint from './components/BubbleHint';
 import { useDownloadList } from './contexts/DownloadListContext';
@@ -205,14 +205,12 @@ function App() {
           placement="right"
           open={downloadDrawerOpen}
           onClose={() => setDownloadDrawerOpen(false)}
-          width={400}
+          width={600}
           className="download-list-drawer"
-          extra={
-            batchSizeLabel ? (
-              <span className="download-list-drawer-size">本批次输出尺寸：{batchSizeLabel}</span>
-            ) : null
-          }
         >
+          {batchSizeLabel ? (
+            <div className="download-list-drawer-size-block">本批次输出尺寸：{batchSizeLabel}</div>
+          ) : null}
           {downloadList.length === 0 ? (
             <div className="download-list-drawer-empty">暂无下载任务</div>
           ) : (
@@ -222,6 +220,9 @@ function App() {
                   key={item.id}
                   className={`download-list-item download-list-item--${item.status}`}
                 >
+                  {item.sizeLabel && (
+                    <Tag className="download-list-item__size-tag">{item.sizeLabel}</Tag>
+                  )}
                   <div className="download-list-item__main">
                     <span className="download-list-item__filename" title={item.filename}>
                       {item.filename.length > 40 ? item.filename.slice(0, 38) + '…' : item.filename}

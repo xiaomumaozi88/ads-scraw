@@ -42,6 +42,51 @@ export function getBatchItemId(item, platform) {
   return String(raw ?? '');
 }
 
+/** 文件名片段：去除特殊字符，保留中文、字母、数字、下划线、横线 */
+function sanitizeFilenamePart(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '')
+    .replace(/\s+/g, '_')
+    .trim()
+    .slice(0, 80) || '';
+}
+
+/**
+ * 竞品名：应用名 / 产品名 / 开发者名（用于下载文件名）
+ */
+export function getCompetitorName(item, platform) {
+  if (!item) return '';
+  if (platform === 'guangdada') {
+    return (
+      item.advertiser_name ||
+      item.app_developer ||
+      item.app_name ||
+      ''
+    );
+  }
+  const appName = (item.appList?.[0]?.name || '').replace(/<font color='red'>|<\/font>/g, '').trim();
+  return appName || item.productName || item.developer || '';
+}
+
+/**
+ * 构建下载文件名（无扩展名）：竞品_日期_素材ID_尺寸
+ * @param {string} competitorName - 竞品名
+ * @param {string} dateStr - 日期 YYYYMMDD
+ * @param {string} materialId - 素材 ID
+ * @param {string} sizeLabel - 尺寸标签，如 原尺寸、720x1280、800x800
+ */
+export function buildDownloadBaseName(competitorName, dateStr, materialId, sizeLabel) {
+  const safeSize = String(sizeLabel || '原尺寸').replace(/[××]/g, 'x').replace(/[（）()]/g, '');
+  const parts = [
+    sanitizeFilenamePart(competitorName) || 'creative',
+    sanitizeFilenamePart(dateStr) || new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+    sanitizeFilenamePart(materialId) || 'id',
+    sanitizeFilenamePart(safeSize) || 'size',
+  ];
+  return parts.join('_');
+}
+
 /** 从 item 提取下载 URL、是否视频、是否 HTML、建议文件名 */
 export function getBatchDownloadInfo(item, platform) {
   const sanitize = (s) => (s == null ? '' : String(s).replace(/[\\/:*?"<>|\x00-\x1f]/g, '').trim().slice(0, 80));
@@ -463,12 +508,90 @@ export const BATCH_DOWNLOAD_SIZE_OPTIONS = [
   { label: '800×800（方形）', width: 800, height: 800 },
 ];
 
+/** 比例相等判定容差（避免浮点误差） */
+const ASPECT_RATIO_TOLERANCE = 0.02;
+
+/**
+ * 判断两组宽高是否同比例（如 600×600 与 800×800 均为 1:1）
+ */
+export function isSameAspectRatio(w1, h1, w2, h2, tolerance = ASPECT_RATIO_TOLERANCE) {
+  if (!w1 || !h1 || !w2 || !h2) return false;
+  const r1 = w1 / h1;
+  const r2 = w2 / h2;
+  return Math.abs(r1 - r2) <= tolerance;
+}
+
+/**
+ * 获取媒体（图片或视频）的原始宽高，用于「同比例按原图下载」判断。
+ * @param {string} url - 媒体 URL
+ * @param {boolean} isVideo - 是否视频
+ * @returns {Promise<{ width: number, height: number } | null>}
+ */
+export function getMediaDimensions(url, isVideo) {
+  if (!url || typeof url !== 'string') return Promise.resolve(null);
+  if (isVideo) {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.preload = 'metadata';
+      let settled = false;
+      const cleanup = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        video.removeAttribute('src');
+        video.load();
+        if (video.parentNode) video.parentNode.removeChild(video);
+      };
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        resolve(null);
+      }, 15000);
+      video.onloadedmetadata = () => {
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        cleanup();
+        resolve(w && h ? { width: w, height: h } : null);
+      };
+      video.onerror = () => {
+        cleanup();
+        resolve(null);
+      };
+      video.style.position = 'fixed';
+      video.style.left = '-9999px';
+      document.body.appendChild(video);
+      video.src = url;
+    });
+  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const timeout = setTimeout(() => {
+      img.onload = null;
+      img.onerror = null;
+      img.src = '';
+      resolve(null);
+    }, 10000);
+    img.onload = () => {
+      clearTimeout(timeout);
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      resolve(w && h ? { width: w, height: h } : null);
+    };
+    img.onerror = () => {
+      clearTimeout(timeout);
+      resolve(null);
+    };
+    img.src = url;
+  });
+}
+
 /**
  * 批量处理并下载：HTML 直接下载为 .html；视频/图片按尺寸处理或原尺寸下载。
  * 当 targetW/targetH 为 null 时按原尺寸直接下载（不缩放、不重编码）。
- * onProgress(percent?) 可选，图片完成时调用 onProgress(100)，视频处理中会多次调用 0–100
+ * onProgress(percent?) 可选；baseFilename 可选，若传入则使用「竞品_日期_素材ID_尺寸」格式，否则用原 filename_时间戳。
  */
-export async function processAndDownloadItem({ url, isVideo, isHtml, filename }, targetW, targetH, onProgress) {
+export async function processAndDownloadItem({ url, isVideo, isHtml, filename }, targetW, targetH, onProgress, baseFilename) {
   let blob;
 
   if (isHtml && url) {
@@ -509,8 +632,12 @@ export async function processAndDownloadItem({ url, isVideo, isHtml, filename },
     }
   }
 
-  const name = filename.replace(/\.[a-zA-Z0-9]+$/, '') || 'creative';
-  const finalName = `${name}_${Date.now()}.${ext}`;
+  const name = baseFilename != null && String(baseFilename).trim()
+    ? String(baseFilename).trim().replace(/\.[a-zA-Z0-9]+$/, '')
+    : (filename.replace(/\.[a-zA-Z0-9]+$/, '') || 'creative');
+  const finalName = baseFilename != null && String(baseFilename).trim()
+    ? `${name}.${ext}`
+    : `${name}_${Date.now()}.${ext}`;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = finalName;

@@ -3338,6 +3338,19 @@ body.insightrackr-fullscreen-active .data-card {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
+/* 选择输出尺寸弹窗：尺寸勾选与「同比例按原图下载」样式区分 */
+.batch-download-size-modal .batch-download-size-option {
+    font-weight: 500;
+}
+.batch-download-size-modal .batch-download-same-ratio-wrap {
+    font-size: 12px;
+    color: #666;
+}
+.batch-download-size-modal .batch-download-same-ratio-wrap .ant-checkbox-wrapper {
+    font-size: 12px;
+    color: #666;
+}
+
 /* 下载处理列表 - 可展开/收起 */
 .download-list-panel {
     margin-top: 12px;
@@ -3387,6 +3400,10 @@ body.insightrackr-fullscreen-active .data-card {
     padding: 8px;
 }
 .download-list-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
     padding: 8px 10px;
     margin-bottom: 6px;
     border-radius: 6px;
@@ -3408,7 +3425,12 @@ body.insightrackr-fullscreen-active .data-card {
     background: #fff2f0;
     border-color: #ffccc7;
 }
+.download-list-item__size-tag {
+    flex-shrink: 0;
+}
 .download-list-item__main {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -3432,8 +3454,9 @@ body.insightrackr-fullscreen-active .data-card {
 .download-list-item--done .download-list-item__status { color: #52c41a; }
 .download-list-item--error .download-list-item__status { color: #ff4d4f; }
 .download-list-item__progress-wrap {
+    width: 100%;
     height: 4px;
-    margin-top: 6px;
+    margin-top: 2px;
     background: rgba(0,0,0,0.06);
     border-radius: 2px;
     overflow: hidden;
@@ -3446,10 +3469,12 @@ body.insightrackr-fullscreen-active .data-card {
 }
 
 /* 下载列表侧边 Drawer */
-.download-list-drawer-size {
+.download-list-drawer-size-block {
     font-size: 12px;
     color: #666;
-    font-weight: normal;
+    padding: 8px 0 12px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #eee;
 }
 .download-list-drawer .download-list-drawer-body {
     max-height: calc(100vh - 120px);

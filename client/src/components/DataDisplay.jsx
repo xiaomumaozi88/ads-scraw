@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Button, Modal, Radio, message } from 'antd';
+import { Button, Modal, Checkbox, Tooltip, message } from 'antd';
 import CreativeCardInsightrackr from './CreativeCardInsightrackr';
 import CreativeCardGuangdada from './CreativeCardGuangdada';
 import GuangdadaDetailModal from './GuangdadaDetailModal';
@@ -12,6 +12,10 @@ import {
   getBatchDownloadInfo,
   BATCH_DOWNLOAD_SIZE_OPTIONS,
   processAndDownloadItem,
+  getMediaDimensions,
+  isSameAspectRatio,
+  getCompetitorName,
+  buildDownloadBaseName,
 } from '../utils/batchDownloadProcessor';
 
 function DataDisplay({
@@ -33,7 +37,18 @@ function DataDisplay({
 }) {
   const startDownloadBtnRef = useRef(null);
   const [sizeModalOpen, setSizeModalOpen] = useState(false);
-  const [selectedSizeIndex, setSelectedSizeIndex] = useState(0);
+  /** 多选尺寸：选中的尺寸下标数组，如 [0,1,3] 表示 原尺寸、720×1280、800×800 */
+  const [selectedSizeIndices, setSelectedSizeIndices] = useState([0]);
+  /** 同比例按原图下载：按尺寸下标，仅对非原尺寸（i>0）有效 */
+  const [sameRatioByIndex, setSameRatioByIndex] = useState(() =>
+    BATCH_DOWNLOAD_SIZE_OPTIONS.map(() => false)
+  );
+
+  const toggleSizeIndex = (index) => {
+    setSelectedSizeIndices((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index].sort((a, b) => a - b)
+    );
+  };
   const [guangdadaDetailItem, setGuangdadaDetailItem] = useState(null);
   const [insightrackrDetailItem, setInsightrackrDetailItem] = useState(null);
   /** 单卡片点击「下载视频」时暂存该项，弹窗确认后按所选尺寸下载 */
@@ -186,21 +201,24 @@ function DataDisplay({
     list.map((item) => (item.id === id ? { ...item, ...updates } : item));
 
   const handleStartBatchDownload = async () => {
-    const opt = BATCH_DOWNLOAD_SIZE_OPTIONS[selectedSizeIndex];
-    const targetW = opt.originalSize ? null : opt.width;
-    const targetH = opt.originalSize ? null : opt.height;
+    const selectedSizes = BATCH_DOWNLOAD_SIZE_OPTIONS.filter((_, i) => selectedSizeIndices.includes(i));
+    if (selectedSizes.length === 0) {
+      message.warning('请至少选择一种输出尺寸');
+      return;
+    }
     const isSingle = !!pendingSingleDownloadItem;
     const selectedItems = isSingle
       ? (() => {
-          const info = getBatchDownloadInfo(pendingSingleDownloadItem, platform);
-          const id = getBatchItemId(pendingSingleDownloadItem, platform);
-          return info.url ? [{ ...info, id }] : [];
+          const raw = pendingSingleDownloadItem;
+          const info = getBatchDownloadInfo(raw, platform);
+          const id = getBatchItemId(raw, platform);
+          return info.url ? [{ ...info, id, rawItem: raw }] : [];
         })()
       : dataList
           .filter((item) => selectedIds.has(getBatchItemId(item, platform)))
           .map((item) => {
             const info = getBatchDownloadInfo(item, platform);
-            return { ...info, id: getBatchItemId(item, platform) };
+            return { ...info, id: getBatchItemId(item, platform), rawItem: item };
           })
           .filter((x) => x.url);
     if (selectedItems.length === 0) {
@@ -209,16 +227,37 @@ function DataDisplay({
       setPendingSingleDownloadItem(null);
       return;
     }
-    const initialList = selectedItems.map((one) => ({
-      id: one.id,
-      filename: one.filename,
-      isVideo: one.isVideo,
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const tasks = [];
+    selectedItems.forEach((one) => {
+      selectedSizeIndices.forEach((sizeIndex) => {
+        const opt = BATCH_DOWNLOAD_SIZE_OPTIONS[sizeIndex];
+        const sizeLabel = opt.originalSize ? '原尺寸' : `${opt.width}x${opt.height}`;
+        tasks.push({
+          ...one,
+          sizeOpt: opt,
+          sizeIndex,
+          taskId: `${one.id}_${sizeLabel}`,
+          baseFilename: buildDownloadBaseName(
+            getCompetitorName(one.rawItem, platform),
+            dateStr,
+            one.id,
+            sizeLabel
+          ),
+        });
+      });
+    });
+    const initialList = tasks.map((t) => ({
+      id: t.taskId,
+      filename: t.baseFilename,
+      isVideo: t.isVideo,
       status: 'pending',
       progress: 0,
       errorMessage: null,
+      sizeLabel: t.sizeOpt.originalSize ? '原尺寸' : `${t.sizeOpt.width}×${t.sizeOpt.height}`,
     }));
     setDownloadList(initialList);
-    setBatchSizeLabel(opt.label || '');
+    setBatchSizeLabel(selectedSizes.map((o) => o.label).join('、') || '');
     setDownloading(true);
     setSizeModalOpen(false);
     setPendingSingleDownloadItem(null);
@@ -227,26 +266,39 @@ function DataDisplay({
     const CONCURRENCY = 3;
     let nextIndex = 0;
     const runOne = async () => {
-      while (nextIndex < selectedItems.length) {
-        const one = selectedItems[nextIndex++];
-        setDownloadList((prev) => updateDownloadItem(prev, one.id, { status: 'processing', progress: 0 }));
+      while (nextIndex < tasks.length) {
+        const task = tasks[nextIndex++];
+        const { sizeOpt, sizeIndex, taskId, baseFilename } = task;
+        const targetW = sizeOpt.originalSize ? null : sizeOpt.width;
+        const targetH = sizeOpt.originalSize ? null : sizeOpt.height;
+        const useSameRatioOriginal = sameRatioByIndex[sizeIndex];
+        setDownloadList((prev) => updateDownloadItem(prev, taskId, { status: 'processing', progress: 0 }));
         try {
-          await processAndDownloadItem(one, targetW, targetH, (percent) => {
-            setDownloadList((prev) => updateDownloadItem(prev, one.id, { progress: percent ?? 100 }));
-          });
-          setDownloadList((prev) => updateDownloadItem(prev, one.id, { status: 'done', progress: 100 }));
+          let useW = targetW;
+          let useH = targetH;
+          if (useSameRatioOriginal && targetW != null && targetH != null && !task.isHtml) {
+            const dims = await getMediaDimensions(task.url, task.isVideo);
+            if (dims && isSameAspectRatio(dims.width, dims.height, targetW, targetH)) {
+              useW = null;
+              useH = null;
+            }
+          }
+          await processAndDownloadItem(task, useW, useH, (percent) => {
+            setDownloadList((prev) => updateDownloadItem(prev, taskId, { progress: percent ?? 100 }));
+          }, baseFilename);
+          setDownloadList((prev) => updateDownloadItem(prev, taskId, { status: 'done', progress: 100 }));
         } catch (e) {
           const msg = e?.message || String(e);
-          console.error('[批量下载] 单条失败:', one.filename, one.id, e);
+          console.error('[批量下载] 单条失败:', task.filename, taskId, e);
           setDownloadList((prev) =>
-            updateDownloadItem(prev, one.id, { status: 'error', errorMessage: msg })
+            updateDownloadItem(prev, taskId, { status: 'error', errorMessage: msg })
           );
-          message.error(`下载失败: ${one.filename}（${msg}）`);
+          message.error(`下载失败: ${baseFilename}（${msg}）`);
         }
       }
     };
     try {
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, selectedItems.length) }, runOne));
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, runOne));
     } finally {
       setDownloading(false);
       const doneCount = initialList.length;
@@ -346,6 +398,7 @@ function DataDisplay({
         title="选择输出尺寸"
         open={sizeModalOpen}
         zIndex={1060}
+        className="batch-download-size-modal"
         onCancel={() => { setSizeModalOpen(false); setPendingSingleDownloadItem(null); }}
         footer={[
           <Button key="cancel" onClick={() => { setSizeModalOpen(false); setPendingSingleDownloadItem(null); }}>取消</Button>,
@@ -354,7 +407,7 @@ function DataDisplay({
             ref={startDownloadBtnRef}
             type="primary"
             loading={downloading}
-            disabled={!pendingSingleDownloadItem && selectedIds.size === 0}
+            disabled={(!pendingSingleDownloadItem && selectedIds.size === 0) || selectedSizeIndices.length === 0}
             onClick={() => {
               if (onBatchModeEnteredWithHint && startDownloadBtnRef.current) {
                 onBatchModeEnteredWithHint(startDownloadBtnRef.current.getBoundingClientRect());
@@ -369,17 +422,40 @@ function DataDisplay({
         {!pendingSingleDownloadItem && selectedIds.size === 0 ? (
           <p style={{ color: '#faad14', margin: 0 }}>请先勾选要下载的素材，再确认下载。</p>
         ) : (
-          <Radio.Group
-            value={selectedSizeIndex}
-            onChange={(e) => setSelectedSizeIndex(e.target.value)}
-            style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
-          >
-            {BATCH_DOWNLOAD_SIZE_OPTIONS.map((opt, i) => (
-              <Radio key={i} value={i}>
-                {opt.label}
-              </Radio>
-            ))}
-          </Radio.Group>
+          <>
+            <div style={{ marginBottom: 8 }}>可多选，每个素材将按所选尺寸各输出一份：</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {BATCH_DOWNLOAD_SIZE_OPTIONS.map((opt, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <Checkbox
+                    className="batch-download-size-option"
+                    checked={selectedSizeIndices.includes(i)}
+                    onChange={() => toggleSizeIndex(i)}
+                  >
+                    {opt.label}
+                  </Checkbox>
+                  {i !== 0 && selectedSizeIndices.includes(i) && (
+                    <Tooltip title="当资源比例与所选尺寸比例一致时，直接下载原图">
+                      <span className="batch-download-same-ratio-wrap">
+                        <Checkbox
+                          checked={sameRatioByIndex[i]}
+                          onChange={(e) => {
+                            setSameRatioByIndex((prev) => {
+                              const next = [...prev];
+                              next[i] = e.target.checked;
+                              return next;
+                            });
+                          }}
+                        >
+                          同比例按原图下载
+                        </Checkbox>
+                      </span>
+                    </Tooltip>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </Modal>
     </div>
