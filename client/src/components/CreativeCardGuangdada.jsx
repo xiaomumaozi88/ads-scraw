@@ -159,11 +159,11 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
   };
   const handleDownload = (e) => {
     e.stopPropagation();
-    if (isVideo && onRequestVideoDownload) {
+    // 视频、图片均走尺寸选择弹窗；仅 HTML 直接下载
+    if (onRequestVideoDownload && !htmlUrl) {
       onRequestVideoDownload(item);
       return;
     }
-    // HTML 类型：直接下载 .html，不走尺寸弹窗
     if (htmlUrl) {
       const baseName = getDownloadBaseName();
       const filename = `${baseName}_${Date.now()}.html`;

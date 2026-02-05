@@ -279,10 +279,10 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
     return sanitizeFileName(String(id)) || `creative_${Date.now()}`;
   };
 
-  // 下载素材：视频用 videoUrl（可走尺寸弹窗），图片用 thumbnailUrl
+  // 下载素材：视频、图片均走尺寸选择弹窗
   const handleDownload = (e) => {
     e.stopPropagation();
-    if (isVideo && onRequestVideoDownload) {
+    if (onRequestVideoDownload) {
       onRequestVideoDownload(item);
       return;
     }
