@@ -59,16 +59,27 @@ export async function getProxyMedia(req, res) {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     },
   };
+  // 转发 Range 请求，使视频进度条可拖动（服务端需返回 206 Partial Content）
+  const range = req.headers.range;
+  if (range && typeof range === 'string') {
+    opts.headers.Range = range;
+  }
   protocol
     .get(decodedUrl, opts, (proxyRes) => {
-      if (proxyRes.statusCode !== 200) {
-        res.status(proxyRes.statusCode === 403 ? 502 : proxyRes.statusCode).end();
+      const status = proxyRes.statusCode;
+      if (status !== 200 && status !== 206) {
+        res.status(status === 403 ? 502 : status).end();
         return;
       }
+      res.status(status);
       const contentType = proxyRes.headers['content-type'];
       if (contentType) res.setHeader('Content-Type', contentType);
       const contentLength = proxyRes.headers['content-length'];
       if (contentLength) res.setHeader('Content-Length', contentLength);
+      const contentRange = proxyRes.headers['content-range'];
+      if (contentRange) res.setHeader('Content-Range', contentRange);
+      const acceptRanges = proxyRes.headers['accept-ranges'];
+      if (acceptRanges) res.setHeader('Accept-Ranges', acceptRanges);
       proxyRes.pipe(res);
     })
     .on('error', (err) => {

@@ -67,6 +67,41 @@ export const count = async (req, res) => {
   }
 };
 
+/** 广大大素材内容多模态搜索：仅请求 multi-modal-search 返回 multimodal_md5，供前端显式调用；请求体与广大大实际参数一致 */
+export const multiModalSearch = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const params = {
+      multimodal_search_type: body.multimodal_search_type != null ? String(body.multimodal_search_type) : '1',
+      multimodal_search_content: body.multimodal_search_content != null ? String(body.multimodal_search_content).trim() : (body.keyword != null ? String(body.keyword).trim() : ''),
+      snapshot_flag: body.snapshot_flag != null ? String(body.snapshot_flag) : 'false',
+    };
+    const result = await puppeteerService.fetchMultiModalSearch(params);
+    if (!result.success) {
+      return res.status(200).json({
+        data: result.data,
+        success: false,
+        code: result.code,
+        message: result.message
+      });
+    }
+    res.status(200).json({
+      data: result.data,
+      success: true,
+      code: result.code,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('广大大 multi-modal-search 失败:', error);
+    res.status(200).json({
+      data: { multimodal_md5: null },
+      success: false,
+      code: 500,
+      message: `multi-modal-search 失败: ${error.message || '未知错误'}`
+    });
+  }
+};
+
 /** 广大大广告主联想：搜索框输入时下拉展示广告主列表 */
 export const advertiserAssociation = async (req, res) => {
   try {

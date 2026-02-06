@@ -37,6 +37,7 @@ router.get('/guangdada/status', statusControllerGuangdada.getStatus);
 router.post('/guangdada/clearLogin', clearLoginControllerGuangdada.clearLogin);
 router.post('/guangdada/search', searchControllerGuangdada.search);
 router.post('/guangdada/count', searchControllerGuangdada.count);
+router.post('/guangdada/multi-modal-search', searchControllerGuangdada.multiModalSearch);
 router.get('/guangdada/advertiser-association', searchControllerGuangdada.advertiserAssociation);
 router.post('/guangdada/advertiser-association', searchControllerGuangdada.advertiserAssociation);
 router.get('/guangdada/creative-detail', searchControllerGuangdada.creativeDetail);

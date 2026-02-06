@@ -54,12 +54,40 @@ function DataDisplay({
   /** 单卡片点击「下载视频」时暂存该项，弹窗确认后按所选尺寸下载 */
   const [pendingSingleDownloadItem, setPendingSingleDownloadItem] = useState(null);
   const { downloadList, setDownloadList, downloading, setDownloading, setBatchSizeLabel } = useDownloadList();
+  const scrollToTop = () => {
+    const scrollEl = document.querySelector('.data-card');
+    if (!scrollEl) return;
+    const start = scrollEl.scrollTop;
+    const startTime = performance.now();
+    const duration = 180;
+    const step = (now) => {
+      const t = Math.min((now - startTime) / duration, 1);
+      const ease = 1 - (1 - t) * (1 - t);
+      scrollEl.scrollTop = start * (1 - ease);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+  const backToTopBtn = (
+    <Tooltip title="点击回到顶部" placement="left">
+      <button
+        type="button"
+        className="back-to-top"
+        onClick={scrollToTop}
+        aria-label="回到顶部"
+      >
+        ↑
+      </button>
+    </Tooltip>
+  );
+
   if (!data) {
     return (
       <div className="data-container data-container--empty">
         <div className="data-placeholder">
           <p>暂无数据</p>
         </div>
+        {backToTopBtn}
       </div>
     );
   }
@@ -79,6 +107,7 @@ function DataDisplay({
         <div className="data-placeholder">
           <p className="error-message">{data.message}</p>
         </div>
+        {backToTopBtn}
       </div>
     );
   }
@@ -144,6 +173,7 @@ function DataDisplay({
         <div className="data-placeholder">
           <p>暂无数据</p>
         </div>
+        {backToTopBtn}
       </div>
     );
   }
@@ -459,6 +489,7 @@ function DataDisplay({
           </>
         )}
       </Modal>
+      {backToTopBtn}
     </div>
   );
 }

@@ -815,6 +815,11 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: guangdada-association-fade-in 0.12s ease-out;
+}
+@keyframes guangdada-association-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .guangdada-association-header {
@@ -3155,6 +3160,35 @@ body.insightrackr-fullscreen-active .data-card {
   overflow: visible;
   min-height: 0;
   height: auto;
+}
+
+/* 数据展示页：回到顶部悬浮按钮 */
+.back-to-top {
+  position: fixed;
+  right: 24px;
+  bottom: 80px;
+  z-index: 999;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(102, 126, 234, 0.75);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(102, 126, 234, 0.35);
+  transition: background 0.2s, transform 0.2s;
+}
+.back-to-top:hover {
+  background: rgba(90, 111, 214, 0.9);
+  transform: scale(1.05);
+}
+.back-to-top:active {
+  transform: scale(0.98);
 }
 
 .data-header {

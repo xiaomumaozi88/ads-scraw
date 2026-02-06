@@ -131,6 +131,25 @@ export async function searchData(platform, searchParams) {
   return result;
 }
 
+/** 广大大素材内容多模态搜索：显式请求 multi-modal-search，返回 multimodal_md5；请求体与广大大实际参数一致，便于在 Network 中查看 */
+export async function guangdadaMultiModalSearch(keyword) {
+  const multimodal_search_content = keyword != null
+    ? (typeof keyword === 'string' ? keyword.trim() : (Array.isArray(keyword) && keyword.length > 0 ? String(keyword[0]).trim() : ''))
+    : '';
+  const response = await fetch(`${API_BASE}/guangdada/multi-modal-search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      multimodal_search_type: '1',
+      multimodal_search_content: multimodal_search_content || '',
+      snapshot_flag: 'false',
+    }),
+  });
+  const result = await response.json();
+  return result;
+}
+
 // 广大大广告主联想（搜索框输入时下拉列表）
 export async function getGuangdadaAdvertiserAssociation(keyword, appType = 1) {
   const k = keyword != null ? String(keyword).trim() : '';

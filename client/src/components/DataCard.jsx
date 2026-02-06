@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { message as antdMessage } from 'antd';
 import dayjs from 'dayjs';
 import { getTodayBeijingDayjs, getTodayBeijingStr } from '../utils/beijingDate';
-import { searchData, getCount, getDistributeMedia, getDistributeApp, clearLogin, formatRequestError } from '../utils/api';
+import { searchData, getCount, getDistributeMedia, getDistributeApp, clearLogin, formatRequestError, guangdadaMultiModalSearch } from '../utils/api';
 import { dateRangeToSeenParams } from '../utils/guangdadaApiBody';
 import SearchForm from './SearchForm';
 import DataDisplay from './DataDisplay';
@@ -81,12 +81,31 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
     const keyword = platform === 'guangdada' ? (searchParams.keyword ?? searchParams.keyWord) : searchParams.keyWord;
     addLog(`开始查询数据 [${platform}]，关键词: ${keyword}`, 'info');
 
+    let paramsToUse = searchParams;
+    if (platform === 'guangdada' && (searchParams.guangdada_search_category || searchParams.guangdadaSearchCategory) === '素材内容') {
+      const kw = searchParams.keyword ?? searchParams.keyWord;
+      const kwStr = typeof kw === 'string' ? kw.trim() : (Array.isArray(kw) && kw.length > 0 ? String(kw[0]).trim() : '');
+      if (kwStr) {
+        try {
+          const multiRes = await guangdadaMultiModalSearch(kwStr);
+          if (multiRes.success && multiRes.data && multiRes.data.multimodal_md5) {
+            paramsToUse = { ...searchParams, multimodal_md5: multiRes.data.multimodal_md5 };
+            addLog('multi-modal-search 成功，已带入 list/count', 'info');
+          } else if (!multiRes.success) {
+            addLog(`multi-modal-search 失败: ${multiRes.message || '未返回 multimodal_md5'}`, 'warn');
+          }
+        } catch (err) {
+          addLog(`multi-modal-search 请求异常: ${err.message}`, 'warn');
+        }
+      }
+    }
+
     try {
       // 并行请求搜索数据和总数
       const [searchResult, countResult] = await Promise.all([
-        searchData(platform, searchParams),
+        searchData(platform, paramsToUse),
         (platform === 'insightrackr' || platform === 'guangdada')
-          ? getCount(platform, searchParams).catch(err => {
+          ? getCount(platform, paramsToUse).catch(err => {
               addLog(`获取总数失败: ${err.message}`, 'warn');
               return { success: false, data: null };
             })

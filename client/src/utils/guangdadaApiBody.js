@@ -4,10 +4,11 @@
  */
 import { GUANGDADA_GAME_CATEGORIES_TREE, GAME_FIRST_LEVEL_API_TAG_ID } from '../data/guangdadaGameCategoriesTree.js';
 
-/** API sort_field 有效取值（文档约定，默认 -first_seen） */
+/** API sort_field 有效取值（文档约定，默认 -first_seen）；素材内容多模态用 -multimodal_similarity */
 const SORT_FIELD_ALLOWED = new Set([
   '-correlation', '-impression', '-first_seen', '-last_seen', '-days',
-  '-related_ads_count', '-heat_degree', '-like_count', '-comment_count', '-share_count'
+  '-related_ads_count', '-heat_degree', '-like_count', '-comment_count', '-share_count',
+  '-multimodal_similarity'
 ]);
 
 const ADS_TYPE_MAP = { 图片: 1, 视频: 2, 轮播: 3, HTML: 4, 试玩广告: 7 };
@@ -202,6 +203,7 @@ export function buildGuangdadaApiBody(params = {}) {
     guangdadaIncludePageInfo,
     guangdadaViolationAd,
     guangdadaEndCard,
+    guangdadaSearchCategory,
     exclude_keyword,
     advertiser_key,
   } = params;
@@ -220,10 +222,12 @@ export function buildGuangdadaApiBody(params = {}) {
   }
 
   const pageSizeNum = Math.min(60, parseInt(page_size ?? pageSize, 10) || 60);
-  const sortFieldApi = (sort_field && SORT_FIELD_ALLOWED.has(String(sort_field))) ? String(sort_field) : '-first_seen';
+  const isMaterialContent = guangdadaSearchCategory === '素材内容';
+  const defaultSort = isMaterialContent ? '-multimodal_similarity' : '-first_seen';
+  const sortFieldApi = (sort_field && SORT_FIELD_ALLOWED.has(String(sort_field))) ? String(sort_field) : defaultSort;
 
-  // search_type: 非必填默认"0"，"0"-默认搜索 "1"-精确搜索（API 实际接收字符串）
-  const searchTypeStr = guangdadaExactSearch !== false ? '1' : '0';
+  // search_type: 广告信息传 "1"（字符串），素材内容传 0（数字）
+  const searchType = guangdadaSearchCategory === '素材内容' ? 0 : '1';
   const body = {
     page: Math.max(1, Math.min(500, parseInt(page, 10) || 1)),
     page_size: pageSizeNum,
@@ -231,7 +235,7 @@ export function buildGuangdadaApiBody(params = {}) {
     seen_end: seenEnd,
     sort_field: sortFieldApi,
     duplicate_removal: parseInt(duplicate_removal, 10) || 0,
-    search_type: searchTypeStr,
+    search_type: searchType,
     complete_country_match: !!guangdadaOnlyInSelectedRegion,
     fb_merge: Array.isArray(guangdadaChannels) && guangdadaChannels.includes('merge_facebook'),
     new_ads_flag: guangdadaNewAds ? 1 : 0,
@@ -252,25 +256,35 @@ export function buildGuangdadaApiBody(params = {}) {
     body.position = positionMap[guangdadaSearchType];
   }
 
-  // keyword: str 或 List[str]，多个最多7个；支持输入中用 "\;" 分割，发请求时拆成数组
-  if (Array.isArray(keyWord) && keyWord.length > 0) {
-    body.keyword = keyWord.map((k) => String(k).trim()).filter(Boolean).slice(0, 7);
-  } else if (keyWord != null && String(keyWord).trim() !== '') {
-    const raw = String(keyWord).trim();
-    const parts = raw.split('\\;').map((s) => s.trim()).filter(Boolean).slice(0, 7);
-    if (parts.length > 1) {
-      body.keyword = parts;
-    } else if (parts.length === 1) {
-      body.keyword = parts[0];
-    } else {
-      body.keyword = raw;
+  // 已选广告主时只传 advertiser_key，不传 keyword；否则按关键词逻辑传 keyword
+  // 素材内容模式下即使用户选了广告主，也需传 keyword 供后端 multi-modal-search 使用
+  const hasAdvertiserKey = Array.isArray(advertiser_key) && advertiser_key.length > 0;
+  const setKeywordFromKeyWord = () => {
+    if (Array.isArray(keyWord) && keyWord.length > 0) {
+      body.keyword = keyWord.map((k) => String(k).trim()).filter(Boolean).slice(0, 7);
+    } else if (keyWord != null && String(keyWord).trim() !== '') {
+      const raw = String(keyWord).trim();
+      const parts = raw.split('\\;').map((s) => s.trim()).filter(Boolean).slice(0, 7);
+      if (parts.length > 1) {
+        body.keyword = parts;
+      } else if (parts.length === 1) {
+        body.keyword = parts[0];
+      } else {
+        body.keyword = raw;
+      }
     }
+  };
+  if (hasAdvertiserKey) {
+    body.advertiser_key = advertiser_key.map((k) => String(k).trim()).filter(Boolean);
+    if (isMaterialContent) setKeywordFromKeyWord();
+  } else {
+    setKeywordFromKeyWord();
   }
   if (Array.isArray(exclude_keyword) && exclude_keyword.length > 0) {
     body.exclude_keyword = exclude_keyword.slice(0, 7);
   }
-  if (Array.isArray(advertiser_key) && advertiser_key.length > 0) {
-    body.advertiser_key = advertiser_key.map((k) => String(k).trim()).filter(Boolean);
+  if (guangdadaSearchCategory) {
+    body.guangdada_search_category = guangdadaSearchCategory;
   }
 
   if (Array.isArray(guangdadaChannels) && guangdadaChannels.length > 0) {

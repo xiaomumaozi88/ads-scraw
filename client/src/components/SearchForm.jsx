@@ -153,7 +153,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
 
   // 搜索目标下拉选项（仅在选择「广告信息」时显示），与产品一致
   const GUANGDADA_SEARCH_TYPE_OPTIONS = [
-    { value: '综合', label: '综合', placeholder: '搜索广告主、文案、包名等关键词，在左侧切换类别可获得更精确结果' },
+    { value: '综合', label: '综合', placeholder: '搜索广告主、文案、包名等关键词' },
     { value: '广告文案', label: '广告文案', placeholder: '搜索 广告标题/文案' },
     { value: '广告主', label: '广告主', placeholder: '搜索 广告主名称/包名/开发者/多语言名称' },
     { value: '投放主页', label: '投放主页', placeholder: '搜索 主页名称/ID/帖子ID' },
@@ -206,6 +206,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
   const [associationOpen, setAssociationOpen] = useState(false);
   const [selectedAdvertisers, setSelectedAdvertisers] = useState([]);
   const associationTimerRef = useRef(null);
+  const associationBlurTimerRef = useRef(null);
   const keywordInputWrapRef = useRef(null);
 
   const sameAdvertiser = (a, b) =>
@@ -264,11 +265,23 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
     };
   }, [platform, formData.guangdadaSearchCategory, formData.keyWord, formData.guangdadaPrimaryTab]);
 
+  // 仅切换平台时清空已选广告主；在 广告信息 / 素材内容 之间切换时保留，切回 广告信息 时恢复显示
   useEffect(() => {
-    if (platform !== 'guangdada' || formData.guangdadaSearchCategory !== '广告信息') {
-      setSelectedAdvertisers([]);
-    }
-  }, [platform, formData.guangdadaSearchCategory]);
+    if (platform !== 'guangdada') setSelectedAdvertisers([]);
+  }, [platform]);
+
+  // 广大大广告主联想下拉：点击输入框+下拉区域外时关闭，避免焦点移出仍不关闭
+  useEffect(() => {
+    if (platform !== 'guangdada' || formData.guangdadaSearchCategory !== '广告信息' || !associationOpen) return;
+    const wrap = keywordInputWrapRef.current;
+    if (!wrap) return;
+    const handleMouseDown = (e) => {
+      if (wrap.contains(e.target)) return;
+      setAssociationOpen(false);
+    };
+    document.addEventListener('mousedown', handleMouseDown, true);
+    return () => document.removeEventListener('mousedown', handleMouseDown, true);
+  }, [platform, formData.guangdadaSearchCategory, associationOpen]);
 
   // 游戏分类：父项药丸点击全选/取消后，若下拉仍打开，同步下拉内勾选状态，避免移出再 hover 才更新
   useEffect(() => {
@@ -635,6 +648,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       searchParams.duplicate_removal = guangdadaDedupType ?? formDataToUse.duplicate_removal ?? 0;
       // 广告主类型：1-游戏 2-工具 3-电商
       searchParams.guangdadaPrimaryTab = formDataToUse.guangdadaPrimaryTab || '游戏';
+      searchParams.guangdadaSearchCategory = formDataToUse.guangdadaSearchCategory || '广告信息';
       // 搜索目标 position：0-综合 1-广告文案 2-广告主 4-投放主页 6-落地页域名（暂无 UI 传 0）
       searchParams.guangdadaSearchType = formDataToUse.guangdadaSearchType || '综合';
       searchParams.guangdadaExactSearch = formDataToUse.guangdadaExactSearch !== false;
@@ -673,9 +687,19 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       searchParams.guangdadaIncludePageInfo = !!formDataToUse.guangdadaIncludePageInfo;
       searchParams.guangdadaViolationAd = !!formDataToUse.guangdadaViolationAd;
       searchParams.guangdadaEndCard = !!formDataToUse.guangdadaEndCard;
-      // 已选广告主：请求 creative/list 时带上 advertiser_key（cross_app_id 数组）
-      const advertiserKeys = (selectedAdvertisers || []).map((a) => a.cross_app_id).filter(Boolean);
-      if (advertiserKeys.length > 0) searchParams.advertiser_key = advertiserKeys;
+      // 已选广告主：请求 creative/list 时带上 advertiser_key（选中的 id 数组）。联想返回里 id 取 domain，cross_app_id 常为空
+      const getAdvertiserId = (a) => {
+        const v = (a.domain != null && a.domain !== '') ? a.domain : (a.cross_app_id ?? a.advertiser_key ?? a.id ?? a.advertiser_id);
+        return v != null ? String(v).trim() : '';
+      };
+      const advertiserKeys = (selectedAdvertisers || []).map(getAdvertiserId).filter(Boolean);
+      if (advertiserKeys.length > 0) {
+        searchParams.advertiser_key = advertiserKeys;
+        // 素材内容模式下需保留 keyWord 供后端 multi-modal-search；仅广告信息下选中广告主时不传 keyword
+        if (formDataToUse.guangdadaSearchCategory !== '素材内容') {
+          searchParams.keyWord = '';
+        }
+      }
       // 广大大：直接返回与 guangdada.net 标准请求一致的 API body，便于在 Network 中核对参数
       return buildGuangdadaApiBody(searchParams);
     }
@@ -769,10 +793,11 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                   id="searchKeyword"
                   name="keyword"
                   className="guangdada-search-input"
+                  autoComplete="off"
                   placeholder={
                     formData.guangdadaSearchCategory === '广告信息'
                       ? (GUANGDADA_SEARCH_TYPE_OPTIONS.find((o) => o.value === (formData.guangdadaSearchType || '综合'))?.placeholder ?? GUANGDADA_SEARCH_TYPE_OPTIONS[0].placeholder)
-                      : '搜索广告主、文案、包名等关键词, 在左侧切换类别可获得更...'
+                      : '搜索广告主、文案、包名等关键词'
                   }
                   value={formData.keyWord}
                   onChange={(e) => {
@@ -782,9 +807,19 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                     if (!(v && v.trim())) setAssociationList([]);
                   }}
                   onFocus={() => {
-                    if (associationList.length > 0) setAssociationOpen(true);
+                    if (associationBlurTimerRef.current) {
+                      clearTimeout(associationBlurTimerRef.current);
+                      associationBlurTimerRef.current = null;
+                    }
+                    if (associationList.length > 0 || associationLoading) setAssociationOpen(true);
                   }}
-                  onBlur={() => setTimeout(() => setAssociationOpen(false), 200)}
+                  onBlur={() => {
+                    // 短延时以便点击下拉项时 onMouseDown(preventDefault) 先于 blur 生效；关闭主要依赖「点击外部」监听
+                    associationBlurTimerRef.current = setTimeout(() => {
+                      associationBlurTimerRef.current = null;
+                      setAssociationOpen(false);
+                    }, 120);
+                  }}
                 />
                 {formData.guangdadaSearchCategory === '广告信息' && associationOpen && (associationList.length > 0 || associationLoading) && (
                   <div className="guangdada-association-dropdown">
@@ -838,7 +873,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                 )}
               </div>
             </div>
-            {formData.guangdadaSearchCategory === '广告信息' && selectedAdvertisers.length > 0 && (
+            {(formData.guangdadaSearchCategory === '广告信息' || formData.guangdadaSearchCategory === '素材内容') && selectedAdvertisers.length > 0 && (
               <div className="guangdada-selected-advertiser">
                 <span className="guangdada-selected-advertiser-label">已选</span>
                 <div className="guangdada-selected-advertiser-list">
@@ -961,8 +996,6 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                     <option value="人气值Top10%">人气值Top10%</option>
                   </select>
                 </div>
-                <span className="guangdada-filter-text">已订阅广告主</span>
-                <span className="guangdada-filter-icon" title="已订阅广告主">⊞</span>
                 {formData.guangdadaPrimaryTab === '工具' && (
                   <>
                     <label className="guangdada-checkbox-label">
@@ -2069,6 +2102,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
               value={formData.keyWord}
               onChange={(e) => handleChange('keyWord', e.target.value)}
               allowClear
+              autoComplete="off"
             />
             <div className="insightrackr-global-search-cell">
               <span className="insightrackr-global-search-label">应用/产品</span>
@@ -2096,6 +2130,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
             value={formData.keyWord}
             onChange={(e) => handleChange('keyWord', e.target.value)}
             allowClear
+            autoComplete="off"
           />
         )}
       </div>
