@@ -213,7 +213,7 @@ export const searchGlobal = async (req, res) => {
     }
 };
 
-// 广告发行商/App 信息（distribute/app）- 参数与 search 一致，body 需包含 ids
+// 广告发行商/App 信息（distribute/app）- 参数与 search 一致，body 需包含 ids；试玩广告走 preplay
 export const distributeApp = async (req, res) => {
     try {
         const searchParams = buildSearchParams(req.body);
@@ -235,6 +235,37 @@ export const distributeApp = async (req, res) => {
         });
     } catch (error) {
         logger.error(`请求 distribute/app 失败: ${error}`);
+        res.status(200).json({
+            data: null,
+            success: false,
+            code: 500,
+            message: error.message || '请求失败'
+        });
+    }
+};
+
+// 行动号召分布（distribute/adfaction）- 参数与 search 一致，body 需包含 ids；试玩广告走 preplay
+export const distributeAdfaction = async (req, res) => {
+    try {
+        const searchParams = buildSearchParams(req.body);
+        const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+        const result = await puppeteerService.fetchDistributeAdfaction(searchParams, ids);
+        if (!result.success && result.code === 'NO_LOGIN_PAGE') {
+            return res.status(200).json({
+                data: null,
+                success: false,
+                code: result.code,
+                message: result.message || '请先登录'
+            });
+        }
+        res.json({
+            data: result.data,
+            success: result.success,
+            code: result.code,
+            message: result.message
+        });
+    } catch (error) {
+        logger.error(`请求 distribute/adfaction 失败: ${error}`);
         res.status(200).json({
             data: null,
             success: false,

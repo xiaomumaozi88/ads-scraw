@@ -31,6 +31,15 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
   const [appDistribute, setAppDistribute] = useState({});
   const [batchDownloadMode, setBatchDownloadMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  /** Insightrackr 顶部 Tab：图片和视频 | 试玩广告 */
+  const [insightrackrSearchTab, setInsightrackrSearchTab] = useState('imagevideo');
+  /** Insightrackr 双 Tab 各自维护：表单状态（切换 tab 时恢复） */
+  const [insightrackrFormByTab, setInsightrackrFormByTab] = useState({ imagevideo: null, playable: null });
+  /** Insightrackr 双 Tab 各自维护：搜索结果（data、countData、params、mediaDistribute、appDistribute） */
+  const [insightrackrResultByTab, setInsightrackrResultByTab] = useState({
+    imagevideo: { data: null, countData: null, params: null, mediaDistribute: {}, appDistribute: {} },
+    playable: { data: null, countData: null, params: null, mediaDistribute: {}, appDistribute: {} },
+  });
 
   const toggleSelect = useCallback((id) => {
     setSelectedIds((prev) => {
@@ -52,11 +61,22 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
   }, []);
 
   const handleSearch = async (searchParams) => {
-    // 保存当前搜索参数
-    setCurrentSearchParams(searchParams);
+    const isInsightrackrTab = platform === 'insightrackr';
+    const tab = isInsightrackrTab ? (searchParams.insightrackrSearchTab === 'playable' ? 'playable' : 'imagevideo') : null;
+
+    if (!isInsightrackrTab) {
+      setCurrentSearchParams(searchParams);
+    } else {
+      setInsightrackrResultByTab((prev) => ({
+        ...prev,
+        [tab]: { ...prev[tab], data: null, countData: null, params: searchParams, mediaDistribute: {}, appDistribute: {} },
+      }));
+    }
     setLoading(true);
-    setData(null);
-    setCountData(null);
+    if (!isInsightrackrTab) {
+      setData(null);
+      setCountData(null);
+    }
 
     const keyword = platform === 'guangdada' ? (searchParams.keyword ?? searchParams.keyWord) : searchParams.keyWord;
     addLog(`开始查询数据 [${platform}]，关键词: ${keyword}`, 'info');
@@ -75,36 +95,77 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
 
       if (searchResult.success) {
         addLog('数据查询成功', 'success');
-        setData(searchResult.data);
-        setMediaDistribute({});
-        setAppDistribute({});
+        const countInner = countResult.success && countResult.data
+          ? (platform === 'guangdada' ? countResult.data : (countResult.data.data || countResult.data))
+          : null;
 
-        // count 接口：Insightrackr 为 { data: { code, data: { totalSize, newNum, latestDate } } }；广大大为 { data: { id, data: { result_total, all_total, default_total } } }
-        if (countResult.success && countResult.data) {
-          const inner = platform === 'guangdada' ? countResult.data : (countResult.data.data || countResult.data);
-          setCountData(inner);
-        }
+        if (isInsightrackrTab && tab) {
+          setInsightrackrResultByTab((prev) => ({
+            ...prev,
+            [tab]: {
+              ...prev[tab],
+              data: searchResult.data,
+              countData: countInner,
+              params: searchParams,
+              mediaDistribute: {},
+              appDistribute: {},
+            },
+          }));
 
-        // Insightrackr：用当前列表创意 id 拉取流量分布渠道与 App 信息
-        if (platform === 'insightrackr' && searchResult.data) {
-          const raw = searchResult.data;
-          const list = raw?.list || raw?.data?.list || (Array.isArray(raw?.data) ? raw.data : []);
-          const ids = list.map((item) => item.id || item.search_flag || item.ad_key || item.bizId || item.materialId).filter(Boolean);
-          if (ids.length > 0) {
-            const body = { ...searchParams, ids };
-            Promise.all([
-              getDistributeMedia(platform, body).catch((e) => {
-                addLog(`流量分布渠道获取失败: ${e.message}`, 'warn');
-                return { data: {} };
-              }),
-              getDistributeApp(platform, body).catch((e) => {
-                addLog(`App 信息获取失败: ${e.message}`, 'warn');
-                return { data: {} };
-              }),
-            ]).then(([mediaRes, appRes]) => {
-              setMediaDistribute(mediaRes.data || {});
-              setAppDistribute(appRes.data || {});
-            });
+          // Insightrackr：用当前列表创意 id 拉取流量分布渠道与 App 信息
+          if (searchResult.data) {
+            const raw = searchResult.data;
+            const list = raw?.list || raw?.data?.list || (Array.isArray(raw?.data) ? raw.data : []);
+            const ids = list.map((item) => item.id || item.search_flag || item.ad_key || item.bizId || item.materialId).filter(Boolean);
+            if (ids.length > 0) {
+              const body = { ...searchParams, ids };
+              Promise.all([
+                getDistributeMedia(platform, body).catch((e) => {
+                  addLog(`流量分布渠道获取失败: ${e.message}`, 'warn');
+                  return { data: {} };
+                }),
+                getDistributeApp(platform, body).catch((e) => {
+                  addLog(`App 信息获取失败: ${e.message}`, 'warn');
+                  return { data: {} };
+                }),
+              ]).then(([mediaRes, appRes]) => {
+                setInsightrackrResultByTab((prev) => ({
+                  ...prev,
+                  [tab]: {
+                    ...prev[tab],
+                    mediaDistribute: mediaRes.data || {},
+                    appDistribute: appRes.data || {},
+                  },
+                }));
+              });
+            }
+          }
+        } else {
+          setData(searchResult.data);
+          setCurrentSearchParams(searchParams);
+          setMediaDistribute({});
+          setAppDistribute({});
+          setCountData(countInner);
+          if (platform === 'insightrackr' && searchResult.data) {
+            const raw = searchResult.data;
+            const list = raw?.list || raw?.data?.list || (Array.isArray(raw?.data) ? raw.data : []);
+            const ids = list.map((item) => item.id || item.search_flag || item.ad_key || item.bizId || item.materialId).filter(Boolean);
+            if (ids.length > 0) {
+              const body = { ...searchParams, ids };
+              Promise.all([
+                getDistributeMedia(platform, body).catch((e) => {
+                  addLog(`流量分布渠道获取失败: ${e.message}`, 'warn');
+                  return { data: {} };
+                }),
+                getDistributeApp(platform, body).catch((e) => {
+                  addLog(`App 信息获取失败: ${e.message}`, 'warn');
+                  return { data: {} };
+                }),
+              ]).then(([mediaRes, appRes]) => {
+                setMediaDistribute(mediaRes.data || {});
+                setAppDistribute(appRes.data || {});
+              });
+            }
           }
         }
       } else {
@@ -141,34 +202,40 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
   };
 
   const todayBeijing = getTodayBeijingDayjs();
-  const dateRangeValue = currentSearchParams
+  const effectiveParams = platform === 'insightrackr' ? insightrackrResultByTab[insightrackrSearchTab]?.params : currentSearchParams;
+  const effectiveData = platform === 'insightrackr' ? insightrackrResultByTab[insightrackrSearchTab]?.data : data;
+  const effectiveCountData = platform === 'insightrackr' ? insightrackrResultByTab[insightrackrSearchTab]?.countData : countData;
+  const effectiveMediaDistribute = platform === 'insightrackr' ? (insightrackrResultByTab[insightrackrSearchTab]?.mediaDistribute || {}) : mediaDistribute;
+  const effectiveAppDistribute = platform === 'insightrackr' ? (insightrackrResultByTab[insightrackrSearchTab]?.appDistribute || {}) : appDistribute;
+
+  const dateRangeValue = effectiveParams
     ? (platform === 'guangdada'
         ? {
-            startTime: currentSearchParams.startTime ?? (currentSearchParams.seen_begin != null
-              ? dayjs(currentSearchParams.seen_begin * 1000).format('YYYY-MM-DD')
+            startTime: effectiveParams.startTime ?? (effectiveParams.seen_begin != null
+              ? dayjs(effectiveParams.seen_begin * 1000).format('YYYY-MM-DD')
               : todayBeijing.subtract(1, 'year').format('YYYY-MM-DD')),
-            endTime: currentSearchParams.endTime ?? (currentSearchParams.seen_end != null
-              ? dayjs(currentSearchParams.seen_end * 1000).format('YYYY-MM-DD')
+            endTime: effectiveParams.endTime ?? (effectiveParams.seen_end != null
+              ? dayjs(effectiveParams.seen_end * 1000).format('YYYY-MM-DD')
               : todayBeijing.format('YYYY-MM-DD'))
           }
-        : { startTime: currentSearchParams.baseOption?.startTime, endTime: currentSearchParams.baseOption?.endTime })
+        : { startTime: effectiveParams.baseOption?.startTime, endTime: effectiveParams.baseOption?.endTime })
     : { startTime: todayBeijing.subtract(1, 'year').format('YYYY-MM-DD'), endTime: todayBeijing.format('YYYY-MM-DD') };
 
   const handleDateChange = (dateRange) => {
     if (!dateRange?.startTime || !dateRange?.endTime) return;
-    if (currentSearchParams) {
+    if (effectiveParams) {
       const updatedParams =
         platform === 'guangdada'
           ? {
-              ...currentSearchParams,
+              ...effectiveParams,
               startTime: dateRange.startTime,
               endTime: dateRange.endTime,
               ...dateRangeToSeenParams(dateRange.startTime, dateRange.endTime)
             }
           : {
-              ...currentSearchParams,
+              ...effectiveParams,
               baseOption: {
-                ...(currentSearchParams.baseOption || {}),
+                ...(effectiveParams.baseOption || {}),
                 startTime: dateRange.startTime,
                 endTime: dateRange.endTime
               }
@@ -179,40 +246,61 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
 
   const handleSortDedupChange = (updates) => {
     if (platform !== 'guangdada') return;
-    if (currentSearchParams) {
-      handleSearch({ ...currentSearchParams, ...updates });
+    if (effectiveParams) {
+      handleSearch({ ...effectiveParams, ...updates });
     }
   };
 
   return (
     <div className="card data-card">
+      {platform === 'insightrackr' && (
+        <div className="insightrackr-search-tabs">
+          <button
+            type="button"
+            className={`insightrackr-search-tab ${insightrackrSearchTab === 'imagevideo' ? 'active' : ''}`}
+            onClick={() => setInsightrackrSearchTab('imagevideo')}
+          >
+            图片和视频
+          </button>
+          <button
+            type="button"
+            className={`insightrackr-search-tab ${insightrackrSearchTab === 'playable' ? 'active' : ''}`}
+            onClick={() => setInsightrackrSearchTab('playable')}
+          >
+            试玩广告
+          </button>
+        </div>
+      )}
       <SearchForm
         platform={platform}
         onSearch={handleSearch}
         loading={loading}
-        guangdadaSortField={platform === 'guangdada' ? currentSearchParams?.sort_field : undefined}
-        guangdadaDedupType={platform === 'guangdada' ? currentSearchParams?.duplicate_removal : undefined}
+        guangdadaSortField={platform === 'guangdada' ? effectiveParams?.sort_field : undefined}
+        guangdadaDedupType={platform === 'guangdada' ? effectiveParams?.duplicate_removal : undefined}
         guangdadaDateRange={platform === 'guangdada' ? dateRangeValue : undefined}
+        insightrackrSearchTab={platform === 'insightrackr' ? insightrackrSearchTab : undefined}
+        insightrackrInitialFormData={platform === 'insightrackr' ? insightrackrFormByTab[insightrackrSearchTab] : undefined}
+        onInsightrackrFormDataChange={platform === 'insightrackr' ? (formData) => setInsightrackrFormByTab((prev) => ({ ...prev, [insightrackrSearchTab]: formData })) : undefined}
       />
       <div className="data-area">
         {platform === 'guangdada' && (
           <>
             <div className="time-filter-row">
               <TimeFilter value={dateRangeValue} onChange={handleDateChange} />
-              {countData?.data && (
+              {effectiveCountData?.data && (
                 <div className="guangdada-count-info">
-                  共找到{' '}{formatGuangdadaCount(countData.data.all_total)}{' '}个相关广告，
+                  共找到{' '}{formatGuangdadaCount(effectiveCountData.data.all_total)}{' '}个相关广告，
                   <span className="guangdada-count-highlight">默认去重后</span>
-                  {' '}{formatGuangdadaCount(countData.data.default_total)}，
+                  {' '}{formatGuangdadaCount(effectiveCountData.data.default_total)}，
                   <span className="guangdada-count-highlight">按广告严格去重后</span>{' '}
-                  {' '}{formatGuangdadaCount(countData.data.result_total)}{' '}
+                  {' '}{formatGuangdadaCount(effectiveCountData.data.result_total)}{' '}
                 </div>
               )}
             </div>
             <SortDedupBar
-            sortField={currentSearchParams?.sort_field ?? '-first_seen'}
-            dedupType={currentSearchParams?.duplicate_removal ?? 0}
-            hasKeyword={!!(currentSearchParams?.keyWord?.trim())}
+            sortField={effectiveParams?.sort_field ?? '-first_seen'}
+            dedupType={effectiveParams?.duplicate_removal ?? 0}
+            hasKeyword={!!(effectiveParams?.keyWord?.trim())}
             onSortChange={(sort_field) => handleSortDedupChange({ sort_field })}
             onDedupChange={(duplicate_removal) => handleSortDedupChange({ duplicate_removal })}
             />
@@ -226,22 +314,22 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
             </div>
           </div>
         )}
-        {!loading && !data && (
+        {!loading && !effectiveData && (
           <div className="data-container data-container--empty">
             <div className="data-placeholder">
               <p>{isLoggedIn ? '暂无数据' : '登录后查看数据'}</p>
             </div>
           </div>
         )}
-        {!loading && data && (
+        {!loading && effectiveData && (
           <DataDisplay
-            data={data}
+            data={effectiveData}
             platform={platform}
             onSortChange={handleSearch}
-            currentSearchParams={currentSearchParams}
-            countData={countData}
-            mediaDistribute={mediaDistribute}
-            appDistribute={appDistribute}
+            currentSearchParams={effectiveParams}
+            countData={effectiveCountData}
+            mediaDistribute={effectiveMediaDistribute}
+            appDistribute={effectiveAppDistribute}
             batchDownloadMode={batchDownloadMode}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
@@ -251,13 +339,13 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
             onBatchModeEnteredWithHint={onBatchModeEnteredWithHint}
             onExitBatchMode={exitBatchMode}
             onPageChange={(page) => {
-              if (currentSearchParams) {
+              if (effectiveParams) {
                 const updatedParams = platform === 'guangdada'
-                  ? { ...currentSearchParams, page }
+                  ? { ...effectiveParams, page }
                   : {
-                      ...currentSearchParams,
+                      ...effectiveParams,
                       baseOption: {
-                        ...(currentSearchParams.baseOption || {}),
+                        ...(effectiveParams.baseOption || {}),
                         pageIndex: page
                       }
                     };

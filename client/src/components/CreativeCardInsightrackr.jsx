@@ -32,9 +32,12 @@ function renderWithRedHighlight(str) {
   return parts.length === 0 ? str : <>{parts}</>;
 }
 
-function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', mediaChannels = [], appList = [], batchMode = false, selected = false, onToggleSelect, onEnterBatchMode, onOpenDetail, onRequestVideoDownload }) {
+function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', mediaChannels = [], appList = [], batchMode = false, selected = false, onToggleSelect, onEnterBatchMode, onOpenDetail, onRequestVideoDownload, isPlayable = false }) {
+  // 试玩广告：用 playHtmlUrl 在卡片内嵌 iframe 展示，无详情弹窗
+  const playHtmlUrl = isPlayable && item.playHtmlUrl ? (item.playHtmlUrl.trim() || '') : '';
   // 使用 useMemo 缓存计算结果
   const { isVideo, thumbnailUrl, videoUrl } = useMemo(() => {
+    if (isPlayable) return { isVideo: false, thumbnailUrl: '', videoUrl: '' };
     const isVideo = item.materialType === 2 || (item.videoUrl && item.videoUrl.trim() !== '');
     
     let thumbnailUrl = '';
@@ -59,7 +62,7 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
     }
     
     return { isVideo, thumbnailUrl, videoUrl };
-  }, [item.materialType, item.videoUrl, item.thumbnailConverUrl, item.converUrl, item.thumbnailImageUrl, item.imageUrl]);
+  }, [isPlayable, item.materialType, item.videoUrl, item.thumbnailConverUrl, item.converUrl, item.thumbnailImageUrl, item.imageUrl]);
   
   // 使用 state 来跟踪图片加载错误和视频播放状态
   const [imageError, setImageError] = useState(false);
@@ -121,11 +124,11 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
           : item.creativeCnt.toString();
         return `关联创意组数 ${creativeValue}`;
       
-      case '3': // 首次发现时间
+      case '3': // 首次发现时间（向上取整）
         if (!item.globalFirstTime) return null;
         const firstTime = new Date(item.globalFirstTime);
         const now = new Date();
-        const hoursDiff = Math.floor((now - firstTime) / (1000 * 60 * 60));
+        const hoursDiff = Math.ceil((now - firstTime) / (1000 * 60 * 60));
         let timeStr = '';
         if (hoursDiff < 1) {
           timeStr = '<1h';
@@ -134,7 +137,7 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
         } else if (hoursDiff < 24) {
           timeStr = `<${hoursDiff}h`;
         } else {
-          const days = Math.floor(hoursDiff / 24);
+          const days = Math.ceil(hoursDiff / 24);
           timeStr = `<${days}d`;
         }
         return `首次发现时间 ${timeStr}`;
@@ -319,19 +322,21 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
   };
 
   const handleCardClick = (e) => {
-    if (e.target.closest('.batch-card-checkbox') || e.target.closest('.card-thumbnail-download') || e.target.closest('.play-icon-center') || e.target.closest('.video-player-modal')) {
+    if (e.target.closest('.batch-card-checkbox') || e.target.closest('.card-thumbnail-download') || e.target.closest('.play-icon-center') || e.target.closest('.video-player-modal') || e.target.closest('.card-thumbnail-open-playable')) {
       return;
     }
     onOpenDetail?.(item);
   };
 
+  const effectiveOnOpenDetail = isPlayable ? undefined : onOpenDetail;
+
   return (
     <div
-      className={`creative-card${onOpenDetail ? ' creative-card--clickable' : ''}${batchMode ? ' creative-card--batch-mode' : ''}`}
-      role={onOpenDetail ? 'button' : undefined}
-      tabIndex={onOpenDetail ? 0 : undefined}
-      onKeyDown={onOpenDetail ? (e) => e.key === 'Enter' && handleCardClick(e) : undefined}
-      onClick={onOpenDetail ? handleCardClick : undefined}
+      className={`creative-card${effectiveOnOpenDetail ? ' creative-card--clickable' : ''}${batchMode ? ' creative-card--batch-mode' : ''}${isPlayable ? ' creative-card--playable' : ''}`}
+      role={effectiveOnOpenDetail ? 'button' : undefined}
+      tabIndex={effectiveOnOpenDetail ? 0 : undefined}
+      onKeyDown={effectiveOnOpenDetail ? (e) => e.key === 'Enter' && handleCardClick(e) : undefined}
+      onClick={effectiveOnOpenDetail ? handleCardClick : undefined}
     >
       <div
         className={`batch-card-checkbox ${selected ? 'batch-card-checkbox--checked' : ''}`}
@@ -341,8 +346,17 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
       >
         {selected ? '✓' : ''}
       </div>
-      <div className="card-thumbnail">
-        {!imageError && thumbnailUrl ? (
+      <div className={`card-thumbnail${isPlayable && playHtmlUrl ? ' card-thumbnail--playable' : ''}`}>
+        {isPlayable && playHtmlUrl ? (
+          <div className="card-thumbnail-playable-wrap">
+            <iframe
+              src={playHtmlUrl}
+              title="试玩广告"
+              className="card-thumbnail-iframe"
+              sandbox="allow-scripts allow-same-origin"
+            />
+          </div>
+        ) : !imageError && thumbnailUrl ? (
           <img
             key={thumbnailUrl}
             src={thumbnailUrl}
@@ -377,6 +391,13 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
         {isVideo && videoDurationFormatted && (
           <div className="video-duration-badge">{videoDurationFormatted}</div>
         )}
+        {/* 试玩广告：在新窗口打开 */}
+        {isPlayable && playHtmlUrl && (
+          <div className="card-thumbnail-open-playable" onClick={(e) => { e.stopPropagation(); window.open(playHtmlUrl, '_blank', 'noopener'); }}>
+            <span className="card-download-icon" title="在新窗口打开试玩">↗</span>
+            <span className="card-download-text">打开试玩</span>
+          </div>
+        )}
         {/* 视频播放按钮 - 居中显示，可点击 */}
         {isVideo && (
           <div 
@@ -391,8 +412,8 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
             <span className="play-symbol">▶</span>
           </div>
         )}
-        {/* 下载按钮 - 位于 thumbnail 底部，hover 卡片时显示 */}
-        {downloadUrl && (
+        {/* 下载按钮 - 位于 thumbnail 底部，hover 卡片时显示（试玩广告不显示，改用「打开试玩」） */}
+        {!isPlayable && downloadUrl && (
           <div className="card-thumbnail-download" onClick={handleDownload}>
             <span className="card-download-icon" title={isVideo ? '下载视频' : '下载图片'}>⬇</span>
             <span className="card-download-text">{isVideo ? '下载视频' : '下载图片'}</span>

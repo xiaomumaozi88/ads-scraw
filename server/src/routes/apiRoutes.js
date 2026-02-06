@@ -29,6 +29,7 @@ router.post('/insightrackr/search-global', searchControllerInsightrackr.searchGl
 router.post('/insightrackr/count', searchControllerInsightrackr.count);
 router.post('/insightrackr/distribute/media', searchControllerInsightrackr.distributeMedia);
 router.post('/insightrackr/distribute/app', searchControllerInsightrackr.distributeApp);
+router.post('/insightrackr/distribute/adfaction', searchControllerInsightrackr.distributeAdfaction);
 
 // 广大大网站路由
 router.post('/guangdada/login', loginControllerGuangdada.login);

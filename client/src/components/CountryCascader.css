@@ -1,4 +1,58 @@
+/* 触发器（与表单其它控件宽度一致） */
+.country-cascader-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 11px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.country-cascader-trigger:hover {
+  border-color: #40a9ff;
+}
+.country-cascader-placeholder {
+  color: #bfbfbf;
+}
+.country-cascader-arrow {
+  color: rgba(0,0,0,.25);
+  font-size: 10px;
+  margin-left: 8px;
+}
 
+/* 下拉面板 */
+.country-cascader-dropdown {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,.08);
+  min-width: 280px;
+  max-height: 500px;
+  display: flex;
+  flex-direction: column;
+}
+.country-cascader-dropdown-header {
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.country-cascader-dropdown-content {
+  padding: 8px;
+  overflow-y: auto;
+  max-height: 380px;
+}
+.country-cascader-dropdown-footer {
+  padding: 8px;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.country-cascader-tree .ant-tree-node-content-wrapper {
+  vertical-align: middle;
+}
 
 .country-cascader-popup .ant-cascader-menus{
   .ant-cascader-menu{

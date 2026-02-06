@@ -1144,6 +1144,17 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
         requestBody.productOption = deepMerge(baseParams.productOption, filteredParams.productOption);
     }
     
+    // 试玩广告：使用 preplay 接口，请求体与官方示例一致
+    const isPlayable = searchParams.insightrackrSearchTab === 'playable';
+    if (isPlayable) {
+        requestBody.materialType = '';
+        requestBody.demoadFormats = [];
+        if (requestBody.baseOption) {
+            requestBody.baseOption.dayMode = 'DD';
+            requestBody.baseOption.gptSearch = true;
+        }
+    }
+    
     try {
         // 首先尝试获取 authorization token
         let authorizationToken = loginInfo.authorization;
@@ -1234,8 +1245,10 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
         }
         
         // 打印实际请求信息到控制台
-        const searchUrl = isInit ? '/cas/api/v2/imagevideo/search?init' : '/cas/api/v2/imagevideo/search';
+        const searchPath = isPlayable ? '/cas/api/v2/preplay/search' : '/cas/api/v2/imagevideo/search';
+        const searchUrl = isInit ? `${searchPath}?init` : searchPath;
         const fullUrl = `https://data.insightrackr.com${searchUrl}`;
+        const refererBase = isPlayable ? 'https://data.insightrackr.com/creative/preplay' : (isInit ? 'https://data.insightrackr.com/creative/material' : 'https://data.insightrackr.com/search/material?keyWord=' + encodeURIComponent(requestBody.keyWord || '') + '&gpt=1');
         const requestHeaders = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -1246,7 +1259,7 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
             'ECF07FD99F7847C0': loginInfo.deviceId || 'a54ebcd25f886dac0d630e00cc831337', // 从实际请求中获取，如果没有则使用默认值
             'Email': loginInfo.email || '',
             'Origin': 'https://data.insightrackr.com',
-            'Referer': isInit ? 'https://data.insightrackr.com/creative/material' : 'https://data.insightrackr.com/search/material?keyWord=' + encodeURIComponent(requestBody.keyWord || '') + '&gpt=1',
+            'Referer': refererBase,
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'cache-control': 'max-age=0',
             'upgrade-insecure-requests': '1'
@@ -1540,6 +1553,17 @@ export const fetchCountData = async (searchParams = {}) => {
         requestBody.productOption = deepMerge(baseParams.productOption, filteredParams.productOption);
     }
     
+    // 试玩广告：使用 preplay count 接口，请求体与官方示例一致
+    const isPlayableCount = searchParams.insightrackrSearchTab === 'playable';
+    if (isPlayableCount) {
+        requestBody.materialType = '';
+        requestBody.demoadFormats = [];
+        if (requestBody.baseOption) {
+            requestBody.baseOption.dayMode = 'DD';
+            requestBody.baseOption.gptSearch = true;
+        }
+    }
+    
     try {
         // 首先尝试获取 authorization token
         let authorizationToken = loginInfo.authorization;
@@ -1567,8 +1591,10 @@ export const fetchCountData = async (searchParams = {}) => {
         }
         
         // 打印实际请求信息到控制台
-        const countUrl = '/cas/api/v3/imagevideo/count';
+        const countPath = isPlayableCount ? '/cas/api/v3/preplay/count' : '/cas/api/v3/imagevideo/count';
+        const countUrl = countPath;
         const fullUrl = `https://data.insightrackr.com${countUrl}`;
+        const countReferer = isPlayableCount ? 'https://data.insightrackr.com/creative/preplay' : 'https://data.insightrackr.com/creative/material';
         const requestHeaders = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -1579,7 +1605,7 @@ export const fetchCountData = async (searchParams = {}) => {
             'ECF07FD99F7847C0': loginInfo.deviceId || 'a54ebcd25f886dac0d630e00cc831337',
             'Email': loginInfo.email || '',
             'Origin': 'https://data.insightrackr.com',
-            'Referer': 'https://data.insightrackr.com/creative/material',
+            'Referer': countReferer,
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'cache-control': 'max-age=0',
             'upgrade-insecure-requests': '1'
@@ -1743,7 +1769,7 @@ export const fetchDistributeMedia = async (searchParams = {}, ids = []) => {
                 logger.warn('从存储获取 token 失败:', e.message);
             }
         }
-        const path = '/cas/api/v3/imagevideo/distribute/media';
+        const { path, referer } = getDistributePathAndReferer(searchParams, 'media');
         const fullUrl = `https://data.insightrackr.com${path}`;
         const requestHeaders = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
@@ -1755,7 +1781,7 @@ export const fetchDistributeMedia = async (searchParams = {}, ids = []) => {
             'ECF07FD99F7847C0': loginInfo.deviceId || 'a54ebcd25f886dac0d630e00cc831337',
             'Email': loginInfo.email || '',
             'Origin': 'https://data.insightrackr.com',
-            'Referer': 'https://data.insightrackr.com/creative/material',
+            'Referer': referer,
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'cache-control': 'max-age=0',
             'upgrade-insecure-requests': '1'
@@ -1799,6 +1825,14 @@ export const fetchDistributeMedia = async (searchParams = {}, ids = []) => {
     }
 };
 
+// 试玩广告用 preplay 路径，图片和视频用 imagevideo 路径
+function getDistributePathAndReferer(searchParams, resource) {
+    const isPlayable = searchParams.insightrackrSearchTab === 'playable';
+    const base = isPlayable ? '/cas/api/v3/preplay' : '/cas/api/v3/imagevideo';
+    const referer = isPlayable ? 'https://data.insightrackr.com/creative/preplay' : 'https://data.insightrackr.com/creative/material';
+    return { path: `${base}/distribute/${resource}`, referer };
+}
+
 // 请求广告发行商/App 信息（distribute/app）
 export const fetchDistributeApp = async (searchParams = {}, ids = []) => {
     if (!loginPage || loginPage.isClosed()) {
@@ -1834,7 +1868,7 @@ export const fetchDistributeApp = async (searchParams = {}, ids = []) => {
                 logger.warn('从存储获取 token 失败:', e.message);
             }
         }
-        const path = '/cas/api/v3/imagevideo/distribute/app';
+        const { path, referer } = getDistributePathAndReferer(searchParams, 'app');
         const fullUrl = `https://data.insightrackr.com${path}`;
         const requestHeaders = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
@@ -1846,7 +1880,7 @@ export const fetchDistributeApp = async (searchParams = {}, ids = []) => {
             'ECF07FD99F7847C0': loginInfo.deviceId || 'a54ebcd25f886dac0d630e00cc831337',
             'Email': loginInfo.email || '',
             'Origin': 'https://data.insightrackr.com',
-            'Referer': 'https://data.insightrackr.com/creative/material',
+            'Referer': referer,
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'cache-control': 'max-age=0',
             'upgrade-insecure-requests': '1'
@@ -1886,6 +1920,96 @@ export const fetchDistributeApp = async (searchParams = {}, ids = []) => {
         };
     } catch (error) {
         logger.error('请求 distribute/app 失败:', error);
+        return { data: null, success: false, code: 500, message: error.message };
+    }
+};
+
+// 请求行动号召分布（distribute/adfaction）- 试玩广告用 preplay，图片和视频用 imagevideo
+export const fetchDistributeAdfaction = async (searchParams = {}, ids = []) => {
+    if (!loginPage || loginPage.isClosed()) {
+        logger.info('登录页面不存在或已关闭，无法请求 distribute/adfaction');
+        return {
+            data: null,
+            success: false,
+            code: 'NO_LOGIN_PAGE',
+            message: '请先登录'
+        };
+    }
+    const requestBody = buildDistributeRequestBody(searchParams, ids);
+    if (requestBody.ids.length === 0) {
+        return { data: {}, success: true, code: 200, message: '无创意 id' };
+    }
+    try {
+        let authorizationToken = loginInfo.authorization;
+        if (!authorizationToken) {
+            try {
+                const storageToken = await loginPage.evaluate(() => {
+                    const keys = ['authorization', 'token', 'authToken', 'accessToken', 'bearerToken', 'Authorization'];
+                    for (const key of keys) {
+                        const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+                        if (value) return value;
+                    }
+                    return null;
+                });
+                if (storageToken) {
+                    authorizationToken = storageToken;
+                    loginInfo.authorization = storageToken;
+                }
+            } catch (e) {
+                logger.warn('从存储获取 token 失败:', e.message);
+            }
+        }
+        const { path, referer } = getDistributePathAndReferer(searchParams, 'adfaction');
+        const requestHeaders = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Content-Type': 'application/json;charset=UTF-8',
+            'presentationSortType': '1',
+            'showTrendType': '1',
+            'Language': 'en',
+            'ECF07FD99F7847C0': loginInfo.deviceId || 'a54ebcd25f886dac0d630e00cc831337',
+            'Email': loginInfo.email || '',
+            'Origin': 'https://data.insightrackr.com',
+            'Referer': referer,
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'cache-control': 'max-age=0',
+            'upgrade-insecure-requests': '1'
+        };
+        if (authorizationToken) {
+            requestHeaders['Authorization'] = authorizationToken;
+        }
+        const response = await loginPage.evaluate(async (body, authToken, headers, url) => {
+            try {
+                if (authToken) headers['Authorization'] = authToken;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers,
+                    credentials: 'include',
+                    body: JSON.stringify(body)
+                });
+                const text = await res.text();
+                let data = null;
+                if (text && text.trim()) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        return { ok: false, status: res.status, statusText: res.statusText, data: { code: -1, message: 'JSON 解析失败' } };
+                    }
+                }
+                return { ok: res.ok, status: res.status, statusText: res.statusText, data };
+            } catch (err) {
+                return { ok: false, status: 500, statusText: err.message, data: { code: -1, message: err.message } };
+            }
+        }, requestBody, authorizationToken, requestHeaders, path);
+        const inner = response.data && response.data.data !== undefined ? response.data.data : (response.data || {});
+        return {
+            data: inner,
+            success: response.ok,
+            code: response.status,
+            message: response.ok ? '请求成功' : (response.data?.message || response.statusText)
+        };
+    } catch (error) {
+        logger.error('请求 distribute/adfaction 失败:', error);
         return { data: null, success: false, code: 500, message: error.message };
     }
 };

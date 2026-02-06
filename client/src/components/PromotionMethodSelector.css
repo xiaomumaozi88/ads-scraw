@@ -3,6 +3,57 @@
   width: 100%;
 }
 
+.promotion-method-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 11px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.promotion-method-trigger:hover {
+  border-color: #40a9ff;
+}
+.promotion-method-placeholder {
+  color: #bfbfbf;
+}
+.promotion-method-arrow {
+  color: rgba(0,0,0,.25);
+  font-size: 10px;
+  margin-left: 8px;
+}
+
+.promotion-method-dropdown {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,.08);
+  min-width: 260px;
+  max-height: 500px;
+  display: flex;
+  flex-direction: column;
+}
+.promotion-method-dropdown-header {
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.promotion-method-dropdown-content {
+  padding: 8px;
+  overflow-y: auto;
+  max-height: 380px;
+}
+.promotion-method-dropdown-footer {
+  padding: 8px;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .selector-trigger {
   position: relative;
   display: flex;

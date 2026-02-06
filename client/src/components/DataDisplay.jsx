@@ -326,7 +326,7 @@ function DataDisplay({
             <Button onClick={onBatchDownloadCancel}>取消</Button>
           </div>
         )}
-        <div className="results-container">
+        <div className={`results-container${platform === 'insightrackr' && currentSearchParams?.insightrackrSearchTab === 'playable' ? ' results-container--playable' : ''}`}>
           {dataList.map((item, index) => {
             const key = item.ad_key || item.id || item.search_flag || index;
             const creativeId = item.id || item.search_flag || item.ad_key || item.bizId || item.materialId;
@@ -356,7 +356,8 @@ function DataDisplay({
                   sortRule={sortRule}
                   mediaChannels={creativeId ? (mediaDistribute[creativeId] || []) : []}
                   appList={creativeId ? (appDistribute[creativeId] || []) : []}
-                  onOpenDetail={() => setInsightrackrDetailItem(item)}
+                  isPlayable={platform === 'insightrackr' && currentSearchParams?.insightrackrSearchTab === 'playable'}
+                  onOpenDetail={platform === 'insightrackr' && currentSearchParams?.insightrackrSearchTab === 'playable' ? undefined : () => setInsightrackrDetailItem(item)}
                   onRequestVideoDownload={handleRequestVideoDownload}
                   {...cardBatchProps}
                 />

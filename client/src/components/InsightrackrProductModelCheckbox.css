@@ -1,0 +1,8 @@
+/* 与推广方式等表单项一致：由 .form-group-inline 统一控制宽度，下拉使用与 ant-cascader 一致的视觉 */
+.insightrackr-product-model-select.ant-select {
+  width: 100%;
+}
+
+.insightrackr-product-model-popup.ant-select-dropdown {
+  /* 与其它筛选项下拉风格统一 */
+}

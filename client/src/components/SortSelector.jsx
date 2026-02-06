@@ -4,7 +4,7 @@ import { QuestionCircleOutlined } from '@ant-design/icons';
 import './SortSelector.css';
 
 // 排序选项配置（按用户提供的值映射）
-const SORT_OPTIONS = [
+const SORT_OPTIONS_ALL = [
   { label: '相关性', value: '11' },
   { label: '关联创意组数', value: '14' },
   { label: '首次发现时间', value: '3' },
@@ -18,6 +18,11 @@ const SORT_OPTIONS = [
   { label: '素材热度', value: '17' },
 ];
 
+// 试玩广告 Tab 仅保留：相关性、首次发现时间、投放天数、曝光预估
+const SORT_OPTIONS_PLAYABLE = SORT_OPTIONS_ALL.filter(
+  (o) => ['11', '3', '4', '15'].includes(o.value)
+);
+
 // 排序说明文案（完整版）
 const SORT_DESCRIPTION = `相关性
 根据与搜索词关联度从高到低排序
@@ -26,11 +31,13 @@ const SORT_DESCRIPTION = `相关性
 首次发现时间
 所选时间范围，数据首次被发现的时间正序或倒序排列`;
 
-function SortSelector({ sortField, sortRule, onSortChange, platform }) {
+function SortSelector({ sortField, sortRule, onSortChange, platform, insightrackrSearchTab = 'imagevideo' }) {
   // 只对 Insightrackr 平台显示
   if (platform !== 'insightrackr') {
     return null;
   }
+
+  const sortOptions = insightrackrSearchTab === 'playable' ? SORT_OPTIONS_PLAYABLE : SORT_OPTIONS_ALL;
 
   // 点击排序字段时切换排序方向
   const handleFieldChange = (newField) => {
@@ -56,7 +63,7 @@ function SortSelector({ sortField, sortRule, onSortChange, platform }) {
     <div className="sort-selector">
       <span className="sort-label">排序：</span>
       <div className="sort-options-container">
-        {SORT_OPTIONS.map(option => {
+        {sortOptions.map(option => {
           const isSelected = sortField === option.value;
           const arrow = isSelected 
             ? (currentSortRule === 'desc' ? '↓' : '↑')

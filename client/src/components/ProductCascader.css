@@ -1,4 +1,57 @@
-/* 行业类型级联下拉框高度 500px */
+/* 触发器 */
+.product-cascader-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 11px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.product-cascader-trigger:hover {
+  border-color: #40a9ff;
+}
+.product-cascader-placeholder {
+  color: #bfbfbf;
+}
+.product-cascader-arrow {
+  color: rgba(0,0,0,.25);
+  font-size: 10px;
+  margin-left: 8px;
+}
+
+/* 下拉面板 */
+.product-cascader-dropdown {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,.08);
+  min-width: 280px;
+  max-height: 500px;
+  display: flex;
+  flex-direction: column;
+}
+.product-cascader-dropdown-header {
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.product-cascader-dropdown-content {
+  padding: 8px;
+  overflow-y: auto;
+  max-height: 380px;
+}
+.product-cascader-dropdown-footer {
+  padding: 8px;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 行业类型级联下拉框高度 500px（保留兼容） */
 .product-cascader-popup .ant-cascader-menus .ant-cascader-menu {
   height: 500px !important;
 }

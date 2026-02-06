@@ -1,91 +1,180 @@
-import React, { useMemo } from 'react';
-import { Cascader } from 'antd';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Tree, Input, Button, Dropdown } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 import type5Data from '../data/type5.json';
 import './ProductCascader.css';
 
 function ProductCascader({ value = [], onChange }) {
-  // 行业类型数据（type5.json）：level 2 为主分类（游戏、泛娱乐等），level 3 为子分类（卡牌、RPG 等）
-  const options = useMemo(() => {
+  const [open, setOpen] = useState(false);
+  const [expandedKeys, setExpandedKeys] = useState([]);
+  const [searchValue, setSearchValue] = useState('');
+  const [autoExpandParent, setAutoExpandParent] = useState(true);
+
+  const { treeData, allProductCodes, categoryToProducts } = useMemo(() => {
     const categories = [];
     const productsByCategory = {};
+    const categoryToProductsMap = {};
+    const allProductCodesSet = new Set();
 
-    // 先收集所有主分类和子分类
     type5Data.data.forEach(item => {
       if (item.level === 2 && (item.parentElementCode === '' || item.parentElementCode === null)) {
-        // 主分类（如"游戏"、"电商"）
         categories.push(item);
         productsByCategory[item.elementCode] = [];
       } else if (item.level === 3 && item.parentElementCode) {
-        // 子分类（如"RPG"、"策略"）
         if (!productsByCategory[item.parentElementCode]) {
           productsByCategory[item.parentElementCode] = [];
         }
         productsByCategory[item.parentElementCode].push(item);
+        allProductCodesSet.add(item.ccode);
       }
     });
 
-    // 按 orderNum 排序
     categories.sort((a, b) => (b.orderNum || 0) - (a.orderNum || 0));
     Object.keys(productsByCategory).forEach(key => {
       productsByCategory[key].sort((a, b) => (a.orderNum || 0) - (b.orderNum || 0));
+      categoryToProductsMap[key] = (productsByCategory[key] || []).map(p => p.ccode);
     });
 
-    // 转换为 antd Cascader 格式
-    return categories.map(category => ({
-      value: category.elementCode,
-      label: category.nameCn,
+    const treeData = categories.map(category => ({
+      key: category.elementCode,
+      title: category.nameCn,
+      searchLabel: category.nameCn,
       children: (productsByCategory[category.elementCode] || []).map(product => ({
-        value: product.ccode,
-        label: product.nameCn,
-      }))
+        key: product.ccode,
+        title: product.nameCn,
+        searchLabel: product.nameCn,
+      })),
     }));
+
+    return {
+      treeData,
+      allProductCodes: allProductCodesSet,
+      categoryToProducts: categoryToProductsMap,
+    };
   }, []);
 
-  // 将 value (产品代码数组) 转换为 Cascader 需要的路径格式
-  const cascaderValue = useMemo(() => {
-    if (!value || value.length === 0) return [];
-    
-    // 建立行业/产品代码到路径的映射
-    const productToPathMap = {};
-    type5Data.data.forEach(item => {
-      if (item.level === 3 && item.parentElementCode) {
-        productToPathMap[item.ccode] = [item.parentElementCode, item.ccode];
+  const checkedKeys = useMemo(() => {
+    const keys = [...(value || [])];
+    Object.keys(categoryToProducts).forEach(catCode => {
+      const children = categoryToProducts[catCode] || [];
+      if (children.length > 0 && children.every(c => (value || []).includes(c))) {
+        keys.push(catCode);
       }
     });
-    
-    // 为每个选中的产品代码找到对应的路径
-    return value
-      .map(productCode => productToPathMap[productCode])
-      .filter(Boolean);
-  }, [value]);
+    return keys;
+  }, [value, categoryToProducts]);
 
-  // 处理 Cascader 的变化
-  const handleChange = (selectedPaths, selectedOptions) => {
-    // selectedPaths 是二维数组，例如 [[categoryCode1, productCode1], [categoryCode2, productCode2]]
-    // 我们需要提取所有的产品代码
-    const productCodes = selectedPaths.map(path => path[1]).filter(Boolean);
-    onChange(productCodes);
+  const onCheck = (checkedKeysValue) => {
+    const keys = Array.isArray(checkedKeysValue) ? checkedKeysValue : (checkedKeysValue.checked || []);
+    const leafOnly = keys.filter(k => allProductCodes.has(k));
+    onChange(leafOnly);
   };
 
+  const filteredTreeData = useMemo(() => {
+    if (!searchValue.trim()) return treeData;
+    const kw = searchValue.toLowerCase();
+    const filter = (nodes) =>
+      nodes
+        .map(node => {
+          const text = (node.searchLabel != null ? node.searchLabel : (typeof node.title === 'string' ? node.title : '')).toString().toLowerCase();
+          const match = text.includes(kw);
+          const children = node.children ? filter(node.children) : undefined;
+          const hasChild = children && children.length > 0;
+          if (match || hasChild) {
+            return { ...node, children: hasChild ? children : node.children };
+          }
+          return null;
+        })
+        .filter(Boolean);
+    return filter(treeData);
+  }, [treeData, searchValue]);
+
+  const onExpand = (expandedKeysValue) => {
+    setExpandedKeys(expandedKeysValue);
+    setAutoExpandParent(false);
+  };
+
+  useEffect(() => {
+    if (open) {
+      setExpandedKeys(treeData.map(n => n.key));
+    }
+  }, [open, treeData]);
+
+  const displayText = useMemo(() => {
+    if (!value || value.length === 0) return '搜索行业类型';
+    if (value.length <= 3) {
+      const names = value.map(cc => {
+        const p = type5Data.data.find(item => item.level === 3 && item.ccode === cc);
+        return p ? p.nameCn : cc;
+      });
+      return names.join(', ');
+    }
+    return `已选择 ${value.length} 项`;
+  }, [value]);
+
+  const handleReset = () => {
+    onChange([]);
+    setSearchValue('');
+  };
+
+  const handleConfirm = () => {
+    setOpen(false);
+    setSearchValue('');
+  };
+
+  const dropdownContent = (
+    <div className="product-cascader-dropdown">
+      <div className="product-cascader-dropdown-header">
+        <Input
+          placeholder="搜索行业类型"
+          value={searchValue}
+          onChange={(e) => {
+            setSearchValue(e.target.value);
+            if (e.target.value) {
+              setExpandedKeys(treeData.map(n => n.key));
+              setAutoExpandParent(true);
+            }
+          }}
+          prefix={<SearchOutlined />}
+          allowClear
+        />
+      </div>
+      <div className="product-cascader-dropdown-content">
+        <Tree
+          checkable
+          checkedKeys={checkedKeys}
+          onCheck={onCheck}
+          expandedKeys={expandedKeys}
+          autoExpandParent={autoExpandParent}
+          onExpand={onExpand}
+          treeData={filteredTreeData}
+          className="product-cascader-tree"
+          blockNode
+        />
+      </div>
+      <div className="product-cascader-dropdown-footer">
+        <Button size="small" onClick={handleReset}>重置</Button>
+        <Button type="primary" size="small" onClick={handleConfirm}>确定</Button>
+      </div>
+    </div>
+  );
+
   return (
-    <Cascader
-      options={options}
-      value={cascaderValue}
-      onChange={handleChange}
-      multiple
-      maxTagCount="responsive"
-      expandTrigger="hover"
-      placeholder="搜索行业类型"
-      showSearch={{
-        filter: (inputValue, path) => {
-          return path.some(option => 
-            option.label.toLowerCase().includes(inputValue.toLowerCase())
-          );
-        }
-      }}
-      style={{ width: '100%' }}
-      popupClassName="product-cascader-popup"
-    />
+    <Dropdown
+      open={open}
+      onOpenChange={setOpen}
+      dropdownRender={() => dropdownContent}
+      trigger={['click']}
+      placement="bottomLeft"
+      getPopupContainer={(node) => node?.parentElement || document.body}
+    >
+      <div className="product-cascader-trigger">
+        <span className={!value?.length ? 'product-cascader-placeholder' : ''}>
+          {displayText}
+        </span>
+        <span className="product-cascader-arrow">▼</span>
+      </div>
+    </Dropdown>
   );
 }
 

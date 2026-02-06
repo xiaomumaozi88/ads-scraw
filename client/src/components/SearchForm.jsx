@@ -22,6 +22,7 @@ import AdTypeSelector from './AdTypeSelector';
 import OSSelector from './OSSelector';
 import ProductCascader from './ProductCascader';
 import ProductTypeSelector from './ProductTypeSelector';
+import InsightrackrProductModelCheckbox from './InsightrackrProductModelCheckbox';
 import PromotionMethodSelector from './PromotionMethodSelector';
 import GameThemeSelector from './GameThemeSelector';
 import ProductThemeSelector from './ProductThemeSelector';
@@ -43,90 +44,96 @@ import InsightrackrGlobalSearch from './InsightrackrGlobalSearch';
 
 const { RangePicker } = DatePicker;
 
-function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdadaDedupType, guangdadaDateRange }) {
-  const [formData, setFormData] = useState({
+function getDefaultInsightrackrFormState() {
+  return {
     keyWord: '',
-    dateRange: [dayjs().subtract(1, 'year'), dayjs()], // 默认：过去一年至今
-    sortField: '15', // 默认：曝光预估
+    dateRange: [dayjs().subtract(1, 'year'), dayjs()],
+    sortField: '15',
     sortRule: 'desc',
-    isNew: false, // 只看新增
-    countryLevel2: [], // 国家/地区
-    mediaIds: [], // 流量渠道
-    adMediaType: '', // 广告类型
-    device: [], // 操作系统
-    productType: [], // 产品类型（级联选择）
-    productModel: '', // 产品类型（下拉选择）
-    selling: [], // 搜索推广方式
-    classIds: [], // 游戏题材
-    seelTargets: [], // 产品主题
-    monetization: '', // 变现类型
-    payType: '', // 下载类型
-    listingStatus: '', // 上架状态
-    creativeType: '', // 创意类型
-    creativeSpec: {}, // 创意规格
-    languages: '', // 标题语言
-    appealTypeList: [], // 行动号召
-    interactionList: [], // 素材标签
-    audienceAnalysis: {}, // 受众分析
-    exposureEstimateRange: '', // 曝光预估
-    interactionMetrics: {}, // 互动指标
-    insightrackrProductIds: [], // Insightrackr 全局搜索选中项回填的 productIds（包名/产品ID），列表查询时传入
-    // 广大大专用
-    guangdadaPrimaryTab: '游戏', // 游戏 | 工具
-    guangdadaSearchCategory: '广告信息', // 广告信息 | 素材内容
-    guangdadaSearchType: '综合', // 综合
-    guangdadaExactSearch: true, // 精确搜索
-    guangdadaExcludeKeyword: [], // 排除关键词，数组，最多 7 个
-    sort_field: '-first_seen', // 广大大排序字段（API 取值见 guangdadaSortOptions.js）
-    duplicate_removal: 0, // 广大大去重：0-广告 1-素材 2-广告主
-    // 游戏分类筛选项
-    guangdadaNewAds: false, // 新广告
-    guangdadaIsTheater: false, // 短剧（仅工具类显示）
-    guangdadaIsAiApp: false, // AI App（仅工具类显示）
-    guangdadaMediaType: '', // 图片&视频
-    guangdadaTopCreative: '', // Top创意
-    guangdadaGameCategories: [], // 游戏分类多选（兼容）：选中的一级分类名数组
-    guangdadaGameCategoryCodes: [], // 游戏分类多选（子项 code）：选中的二级 code 数组，用于 dropdown 勾选
-    guangdadaGameCategorySearch: '', // 游戏分类快速检索
-    guangdadaToolCategories: [], // 工具分类多选（兼容）：选中的一级分类名数组
-    guangdadaToolCategoryCodes: [], // 工具分类多选（子项 code）：选中的二级 code 数组，用于 dropdown 勾选
-    guangdadaToolCategorySearch: '', // 工具分类快速检索
-    guangdadaChannels: [], // 渠道多选：空为“全部”，否则为选中的渠道 value 数组
-    guangdadaCountry: [], // 国家/地区多选：选中的国家/地区 value 数组（仅从产品 HTML 提取）
-    guangdadaOnlyInSelectedRegion: false, // 仅在该国家地区投放
-    guangdadaCopyLangs: [], // 文案语言多选：选中的语言 value 数组（仅从产品 HTML 提取）
-    guangdadaCreativeAttr: {
-      ...GUANGDADA_CREATIVE_ATTR_DEFAULT,
-      size: [],
-      quality: [],
-      resolution: [],
-      resolutionCustom: [],
-    }, // 素材属性（仅从产品 HTML 提取：视频时长、尺寸、画质、分辨率）
-    guangdadaImageAnalysis: [], // 图片智能分析多选：选中的 value 数组（仅从产品 HTML 提取：人物类型、美术风格、画面颜色、创意形式）
-    guangdadaVideoAnalysis: [], // 视频智能分析多选：选中的 value 数组（仅从产品 HTML 提取：视频类型、美术风格、营销卖点）
-    guangdadaCreativeSpec: '', // 素材规格
-    // 高级筛选项
-    guangdadaAdvertiserSystem: '', // 广告主系统：单选（仅从产品 HTML 提取）
-    guangdadaCoreTrack: [], // 核心赛道/玩法/主题/IP 多选：选中的 value 数组（仅从产品 HTML 提取）
-    guangdadaPreorderAd: [], // 预约广告：级联选择，值为路径数组如 ['1'] / ['1','1-1'] / ['2']
-    guangdadaMonetizationType: '', // 内购/非内购：单选
-    guangdadaFbAudience: { gender: [], age: [] }, // FB受众画像：性别/年龄多选（仅选择 Facebook 系平台时可用）
-    guangdadaCta: '', // 营销目标(CTA)：单选
-    guangdadaFbSpend: { value: '', min: undefined, max: undefined }, // FB广告花费：预设或自定义区间
-    guangdadaSocialEngagement: { like: { value: '', min: undefined, max: undefined }, comment: { value: '', min: undefined, max: undefined }, share: { value: '', min: undefined, max: undefined } }, // 社媒互动：点赞/评论/分享 各预设或自定义区间
-    guangdadaCpi: { cpiRange: [], currency: [] }, // CPI信息：CPI范围 + 币种多选
-    guangdadaLandingPageType: [], // 落地页类型：级联选择，值为路径数组如 ['1'] / ['2','2-1'] / ['3'] / ['-1']
-    guangdadaCreativeForm: '', // 创意形式：单选
-    guangdadaPlacement: '', // 广告版位：单选
-    guangdadaLinkType: [], // 链接类型：级联选择，值为路径数组如 ['1'] / ['2','2-1'] / ['2','2-2']
-    guangdadaRetargeting: '', // 重投广告：单选
-    guangdadaIncludePageInfo: false, // 包含主页信息
-    guangdadaViolationAd: false, // 违规广告
-    guangdadaEndCard: false, // 结束卡片
-  });
+    isNew: false,
+    countryLevel2: [],
+    mediaIds: [],
+    adMediaType: '',
+    device: [],
+    productType: [],
+    productModel: [],
+    selling: [],
+    classIds: [],
+    seelTargets: [],
+    monetization: '',
+    payType: '',
+    listingStatus: '',
+    creativeType: '',
+    creativeSpec: {},
+    languages: '',
+    appealTypeList: [],
+    interactionList: [],
+    audienceAnalysis: {},
+    exposureEstimateRange: '',
+    interactionMetrics: {},
+    insightrackrProductIds: [],
+    guangdadaPrimaryTab: '游戏',
+    guangdadaSearchCategory: '广告信息',
+    guangdadaSearchType: '综合',
+    guangdadaExactSearch: true,
+    guangdadaExcludeKeyword: [],
+    sort_field: '-first_seen',
+    duplicate_removal: 0,
+    guangdadaNewAds: false,
+    guangdadaIsTheater: false,
+    guangdadaIsAiApp: false,
+    guangdadaMediaType: '',
+    guangdadaTopCreative: '',
+    guangdadaGameCategories: [],
+    guangdadaGameCategoryCodes: [],
+    guangdadaGameCategorySearch: '',
+    guangdadaToolCategories: [],
+    guangdadaToolCategoryCodes: [],
+    guangdadaToolCategorySearch: '',
+    guangdadaChannels: [],
+    guangdadaCountry: [],
+    guangdadaOnlyInSelectedRegion: false,
+    guangdadaCopyLangs: [],
+    guangdadaCreativeAttr: { ...GUANGDADA_CREATIVE_ATTR_DEFAULT, size: [], quality: [], resolution: [], resolutionCustom: [] },
+    guangdadaImageAnalysis: [],
+    guangdadaVideoAnalysis: [],
+    guangdadaCreativeSpec: '',
+    guangdadaAdvertiserSystem: '',
+    guangdadaCoreTrack: [],
+    guangdadaPreorderAd: [],
+    guangdadaMonetizationType: '',
+    guangdadaFbAudience: { gender: [], age: [] },
+    guangdadaCta: '',
+    guangdadaFbSpend: { value: '', min: undefined, max: undefined },
+    guangdadaSocialEngagement: { like: { value: '', min: undefined, max: undefined }, comment: { value: '', min: undefined, max: undefined }, share: { value: '', min: undefined, max: undefined } },
+    guangdadaCpi: { cpiRange: [], currency: [] },
+    guangdadaLandingPageType: [],
+    guangdadaCreativeForm: '',
+    guangdadaPlacement: '',
+    guangdadaLinkType: [],
+    guangdadaRetargeting: '',
+    guangdadaIncludePageInfo: false,
+    guangdadaViolationAd: false,
+    guangdadaEndCard: false,
+  };
+}
+
+function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdadaDedupType, guangdadaDateRange, insightrackrSearchTab = 'imagevideo', insightrackrInitialFormData, onInsightrackrFormDataChange }) {
+  const [formData, setFormData] = useState(() =>
+    platform === 'insightrackr' && insightrackrInitialFormData != null
+      ? insightrackrInitialFormData
+      : getDefaultInsightrackrFormState()
+  );
 
   const [excludePopoverOpen, setExcludePopoverOpen] = useState(false);
   const [excludeKeywordDraft, setExcludeKeywordDraft] = useState([]);
+
+  // Insightrackr 双 Tab：切换 tab 时恢复该 tab 的表单状态
+  useEffect(() => {
+    if (platform === 'insightrackr' && (insightrackrInitialFormData !== undefined || insightrackrSearchTab != null)) {
+      setFormData(insightrackrInitialFormData != null ? insightrackrInitialFormData : getDefaultInsightrackrFormState());
+    }
+  }, [platform, insightrackrSearchTab, insightrackrInitialFormData]);
 
   useEffect(() => {
     if (excludePopoverOpen) {
@@ -427,7 +434,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
         device: formDataToUse.device || [], // 操作系统（对应：操作系统选择器）- 在 baseOption 中
         topicType: [], // 主题类型（未使用）
         dayMode: "DY", // 日期模式（固定值："DY"）
-        productModel: formDataToUse.productModel ? [formDataToUse.productModel] : [], // 产品模型（对应：产品模型选择器）- 在 baseOption 中，且是数组格式
+        productModel: Array.isArray(formDataToUse.productModel) ? formDataToUse.productModel.map(String) : (formDataToUse.productModel ? [String(formDataToUse.productModel)] : []), // 产品模型多选 - 在 baseOption 中，数组格式
         startTime: startTime, // 开始时间（从 dateRange 转换）- 在 baseOption 中
         endTime: endTime, // 结束时间（从 dateRange 转换）- 在 baseOption 中
         compareEndDate: "", // 对比结束日期（未使用）
@@ -449,7 +456,18 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       
       searchParams.classIds = formDataToUse.classIds || []; // 游戏题材（对应：游戏题材选择器）
       searchParams.seelTargets = formDataToUse.seelTargets || []; // 产品主题（对应：产品主题选择器）
-      searchParams.demoadFormats = formDataToUse.creativeType ? [formDataToUse.creativeType] : []; // 创意类型（对应：创意类型选择器）
+      // 顶部 Tab「试玩广告」时走 preplay 接口，请求体与官方示例一致：materialType ""、demoadFormats []、dayMode "DD"、gptSearch true，且每页 4 条
+      if (insightrackrSearchTab === 'playable') {
+        searchParams.demoadFormats = [];
+        searchParams.materialType = '';
+        searchParams.baseOption.dayMode = 'DD';
+        searchParams.baseOption.gptSearch = true;
+        searchParams.baseOption.pageIndex = 1;
+        searchParams.baseOption.pageSize = 4;
+      } else {
+        searchParams.demoadFormats = formDataToUse.creativeType ? [formDataToUse.creativeType] : [];
+      }
+      searchParams.insightrackrSearchTab = insightrackrSearchTab; // 服务端据此切换 preplay / imagevideo 接口
       searchParams.webTools = []; // 未使用
       
       // 创意规格：转换为 creativeList 格式 [{creativeKey, creativeValue}]
@@ -553,8 +571,10 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       };
       
       // ========== 其他参数 ==========
-      // 素材类型（对应：创意类型选择器，如"2"表示视频）
-      searchParams.materialType = formDataToUse.creativeType || "";
+      // 素材类型（对应：创意类型选择器；试玩广告 Tab 时已在上面设为 '3'）
+      if (insightrackrSearchTab !== 'playable') {
+        searchParams.materialType = formDataToUse.creativeType || "";
+      }
       
       searchParams.creativeTeam = []; // 创意团队（未使用）
       searchParams.materialRemovalRepeat = false; // 素材去重（固定值：false，但示例中是true）
@@ -669,7 +689,11 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
   };
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const next = { ...prev, [field]: value };
+      if (platform === 'insightrackr' && onInsightrackrFormDataChange) onInsightrackrFormDataChange(next);
+      return next;
+    });
   };
 
   return (
@@ -2103,6 +2127,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                   }}
                 />
               </div>
+              {insightrackrSearchTab !== 'playable' && (
               <div className="form-group-inline">
                 <label htmlFor="adTypeSelector">广告类型</label>
                 <AdTypeSelector
@@ -2112,6 +2137,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                   }}
                 />
               </div>
+              )}
               <div className="form-group-inline">
                 <label htmlFor="osSelector">操作系统</label>
                 <OSSelector
@@ -2141,14 +2167,15 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                 />
               </div>
               <div className="form-group-inline">
-                <label htmlFor="productTypeSelector">产品模型</label>
-                <ProductTypeSelector
-                  value={formData.productModel || ''}
-                  onChange={(selectedType) => {
-                    handleChange('productModel', selectedType);
+                <label htmlFor="productModelCheckbox">产品模型</label>
+                <InsightrackrProductModelCheckbox
+                  value={formData.productModel || []}
+                  onChange={(selected) => {
+                    handleChange('productModel', selected);
                   }}
                 />
               </div>
+              {insightrackrSearchTab !== 'playable' && (
               <div className="form-group-inline">
                 <label htmlFor="promotionMethodSelector">推广方式</label>
                 <PromotionMethodSelector
@@ -2158,6 +2185,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                   }}
                 />
               </div>
+              )}
               <div className="form-group-inline">
                 <label htmlFor="gameThemeSelector">游戏题材</label>
                 <GameThemeSelector
@@ -2176,6 +2204,8 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                   }}
                 />
               </div>
+              {insightrackrSearchTab !== 'playable' && (
+              <>
               <div className="form-group-inline">
                 <label htmlFor="monetizationTypeSelector">变现类型</label>
                 <MonetizationTypeSelector
@@ -2203,10 +2233,13 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                   }}
                 />
               </div>
+              </>
+              )}
             </div>
           </div>
 
-          {/* 创意 */}
+          {/* 创意 - 试玩广告下不展示 */}
+          {insightrackrSearchTab !== 'playable' && (
           <div className="search-category">
             <div className="category-header">
               <span className="category-dot category-dot-creative"></span>
@@ -2269,8 +2302,10 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
               </div>
             </div>
           </div>
+          )}
 
-          {/* 指标 */}
+          {/* 指标 - 试玩广告下不展示 */}
+          {insightrackrSearchTab !== 'playable' && (
           <div className="search-category">
             <div className="category-header">
               <span className="category-dot category-dot-metrics"></span>
@@ -2297,6 +2332,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
               </div>
             </div>
           </div>
+          )}
 
           {/* 时间范围 */}
           <div className="form-group-inline" style={{ marginTop: '16px' }}>
@@ -2343,6 +2379,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
               }));
             }}
             platform={platform}
+            insightrackrSearchTab={insightrackrSearchTab}
           />
         </div>
       )}
