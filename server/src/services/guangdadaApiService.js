@@ -77,6 +77,15 @@ const TOOL_CATEGORY_TAG_IDS = {
   工具网赚: ['30233341', '5005', '5006', '30233342', '30233343', '30233344', '30233345'],
 };
 
+/** 独立网站分类下所有 value（与前端 GUANGDADA_WEBSITE_TYPE_TREE 独立网站一致），用于过滤 independent_website */
+const INDEPENDENT_WEBSITE_VALUES = [
+  'shopify', 'woocommerce', 'wordpress', 'magento', 'bigcommerce', 'opencart', 'prestashop', 'wix', 'squarespace',
+  'ecwid', 'salesforce', 'ueeshop', 'bigcartel', 'strikingly', '3dcart', 'volusion', 'miva'
+];
+function getIndependentWebsiteValues() {
+  return INDEPENDENT_WEBSITE_VALUES;
+}
+
 /** 重投广告前端值 -> API resume_or_new_ads: 0-全部 1-初次 2-重复 */
 function retargetingToApi(v) {
   if (!v) return 0;
@@ -216,6 +225,9 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
     guangdadaIncludePageInfo,
     guangdadaViolationAd,
     guangdadaEndCard,
+    guangdadaCodFlag,
+    guangdadaSearchArbitrageFlag,
+    guangdadaWebsiteTypeCodes,
     exclude_keyword,
     advertiser_key,
   } = searchParams;
@@ -257,14 +269,21 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
 
   /** app_type 为必传：1-游戏 2-工具 3-电商 */
   body.app_type = (guangdadaPrimaryTab === '工具') ? 2 : 1;
-  if (guangdadaPrimaryTab === '电商') body.app_type = 3;
+  if (guangdadaPrimaryTab === '电商' || guangdadaPrimaryTab === '电商/品牌') body.app_type = 3;
   if (body.app_type === 2) {
     body.is_theater = guangdadaIsTheater ? 1 : 0;
     body.is_ai_app = guangdadaIsAiApp ? 1 : 0;
   }
-  const positionMap = { '综合': 0, '广告文案': 1, '广告主': 2, '投放主页': 4, '落地页域名': 6 };
-  if (guangdadaSearchType && positionMap[guangdadaSearchType] != null && positionMap[guangdadaSearchType] !== 0) {
-    body.position = positionMap[guangdadaSearchType];
+  // position：电商/品牌时 guangdadaSearchType 为 '0'/'4'/'6'/'1'，列表及 count 均需传；游戏/工具时为中文映射
+  const isEcom = guangdadaPrimaryTab === '电商/品牌' || guangdadaPrimaryTab === '电商';
+  if (isEcom && guangdadaSearchType != null && guangdadaSearchType !== '') {
+    const pos = parseInt(guangdadaSearchType, 10);
+    if (!Number.isNaN(pos)) body.position = pos;
+  } else {
+    const positionMap = { '综合': 0, '广告文案': 1, '广告主': 2, '投放主页': 4, '落地页域名': 6 };
+    if (guangdadaSearchType && positionMap[guangdadaSearchType] != null && positionMap[guangdadaSearchType] !== 0) {
+      body.position = positionMap[guangdadaSearchType];
+    }
   }
 
   // keyword: str 或 List[str]，多个最多7个；支持输入中用 "\;" 分割，发请求时拆成数组
@@ -327,6 +346,15 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
       if (toolTagIds.length > 0) body.tag_ids = toTagIdsInts(toolTagIds);
     }
   }
+  if (body.app_type === 3 && Array.isArray(guangdadaWebsiteTypeCodes) && guangdadaWebsiteTypeCodes.length > 0) {
+    const independentWebsiteValues = getIndependentWebsiteValues();
+    const independentSelected = guangdadaWebsiteTypeCodes
+      .map((c) => String(c).trim())
+      .filter((c) => c && independentWebsiteValues.includes(c));
+    if (independentSelected.length > 0) {
+      body.independent_website = independentSelected;
+    }
+  }
   if (body.app_type !== 2) {
     const core = splitCoreTrack(guangdadaCoreTrack);
     if (core.tag_ids.length > 0 && !(Array.isArray(body.tag_ids) && body.tag_ids.length > 0)) {
@@ -363,12 +391,22 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
   if (guangdadaCta) {
     body.cta_type = guangdadaCta;
   }
-  if (guangdadaPlacement) {
+  // 广告版位：多选时为 value 字符串数组（一项可能为 "104,124,..."），展开为整数数组
+  if (Array.isArray(guangdadaPlacement) && guangdadaPlacement.length > 0) {
+    body.ad_positions = guangdadaPlacement.flatMap((v) =>
+      String(v)
+        .split(',')
+        .map((n) => parseInt(n, 10))
+        .filter((n) => !Number.isNaN(n))
+    );
+  } else if (guangdadaPlacement && typeof guangdadaPlacement === 'string') {
     body.ad_positions = [parseInt(guangdadaPlacement, 10)].filter((n) => !Number.isNaN(n));
   }
   if (guangdadaIncludePageInfo) body.account_flag = true;
   if (guangdadaViolationAd) body.view_illegal = true;
   if (guangdadaEndCard) body.end_card = 1;
+  body.cod_flag = (guangdadaCodFlag != null && Number(guangdadaCodFlag) === 1) ? 1 : 0;
+  body.search_arbitrage_flag = (guangdadaSearchArbitrageFlag != null && Number(guangdadaSearchArbitrageFlag) === 1) ? 1 : 0;
 
   const fbAudience = guangdadaFbAudience || {};
   if (Array.isArray(fbAudience.gender) && fbAudience.gender.length > 0) {

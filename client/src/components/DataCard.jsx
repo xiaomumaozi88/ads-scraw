@@ -319,7 +319,14 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
             <SortDedupBar
             sortField={effectiveParams?.sort_field ?? '-first_seen'}
             dedupType={effectiveParams?.duplicate_removal ?? 0}
-            hasKeyword={!!(effectiveParams?.keyWord?.trim())}
+            hasKeyword={platform === 'guangdada'
+              ? (() => {
+                  const kw = effectiveParams?.keyword;
+                  if (kw == null) return false;
+                  if (typeof kw === 'string') return !!String(kw).trim();
+                  return Array.isArray(kw) && kw.some((k) => String(k).trim());
+                })()
+              : !!(effectiveParams?.keyWord?.trim())}
             onSortChange={(sort_field) => handleSortDedupChange({ sort_field })}
             onDedupChange={(duplicate_removal) => handleSortDedupChange({ duplicate_removal })}
             />

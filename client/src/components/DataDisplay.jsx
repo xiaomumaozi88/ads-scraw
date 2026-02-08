@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Button, Modal, Checkbox, Tooltip, message } from 'antd';
+import { Button, Modal, Checkbox, Tooltip, message, InputNumber } from 'antd';
 import CreativeCardInsightrackr from './CreativeCardInsightrackr';
 import CreativeCardGuangdada from './CreativeCardGuangdada';
 import GuangdadaDetailModal from './GuangdadaDetailModal';
@@ -12,6 +12,9 @@ import {
   getBatchDownloadInfo,
   BATCH_DOWNLOAD_SIZE_OPTIONS,
   processAndDownloadItem,
+  CUSTOM_SIZE_INDEX,
+  CUSTOM_SIZE_MIN,
+  CUSTOM_SIZE_MAX,
   getMediaDimensions,
   isSameAspectRatio,
   getCompetitorName,
@@ -37,12 +40,25 @@ function DataDisplay({
 }) {
   const startDownloadBtnRef = useRef(null);
   const [sizeModalOpen, setSizeModalOpen] = useState(false);
-  /** 多选尺寸：选中的尺寸下标数组，如 [0,1,3] 表示 原尺寸、720×1280、800×800 */
+  /** 多选尺寸：选中的尺寸下标数组，如 [0,1,3] 表示 原尺寸、720×1280、800×800；含 CUSTOM_SIZE_INDEX 表示自定义 */
   const [selectedSizeIndices, setSelectedSizeIndices] = useState([0]);
-  /** 同比例按原图下载：按尺寸下标，仅对非原尺寸（i>0）有效 */
+  /** 同比例按原图下载：按尺寸下标，仅对非原尺寸（i>0）有效；含自定义下标占位 */
   const [sameRatioByIndex, setSameRatioByIndex] = useState(() =>
-    BATCH_DOWNLOAD_SIZE_OPTIONS.map(() => false)
+    [...BATCH_DOWNLOAD_SIZE_OPTIONS.map(() => false), false]
   );
+  /** 自定义尺寸宽、高（仅当选中「自定义尺寸」时生效），范围 CUSTOM_SIZE_MIN～CUSTOM_SIZE_MAX */
+  const [customSizeWidth, setCustomSizeWidth] = useState(720);
+  const [customSizeHeight, setCustomSizeHeight] = useState(1280);
+
+  /** 根据下标取尺寸配置（预设或自定义） */
+  const getSizeOptionAtIndex = (index) => {
+    if (index === CUSTOM_SIZE_INDEX) {
+      const w = Math.max(CUSTOM_SIZE_MIN, Math.min(CUSTOM_SIZE_MAX, Math.floor(Number(customSizeWidth)) || CUSTOM_SIZE_MIN));
+      const h = Math.max(CUSTOM_SIZE_MIN, Math.min(CUSTOM_SIZE_MAX, Math.floor(Number(customSizeHeight)) || CUSTOM_SIZE_MIN));
+      return { label: `自定义 ${w}×${h}`, width: w, height: h, originalSize: false };
+    }
+    return BATCH_DOWNLOAD_SIZE_OPTIONS[index];
+  };
 
   const toggleSizeIndex = (index) => {
     setSelectedSizeIndices((prev) =>
@@ -231,11 +247,20 @@ function DataDisplay({
     list.map((item) => (item.id === id ? { ...item, ...updates } : item));
 
   const handleStartBatchDownload = async () => {
-    const selectedSizes = BATCH_DOWNLOAD_SIZE_OPTIONS.filter((_, i) => selectedSizeIndices.includes(i));
-    if (selectedSizes.length === 0) {
+    if (selectedSizeIndices.length === 0) {
       message.warning('请至少选择一种输出尺寸');
       return;
     }
+    if (selectedSizeIndices.includes(CUSTOM_SIZE_INDEX)) {
+      const w = Number(customSizeWidth);
+      const h = Number(customSizeHeight);
+      if (!Number.isInteger(w) || w < CUSTOM_SIZE_MIN || w > CUSTOM_SIZE_MAX ||
+          !Number.isInteger(h) || h < CUSTOM_SIZE_MIN || h > CUSTOM_SIZE_MAX) {
+        message.warning(`自定义尺寸宽、高须为 ${CUSTOM_SIZE_MIN}～${CUSTOM_SIZE_MAX} 之间的整数`);
+        return;
+      }
+    }
+    const selectedSizes = selectedSizeIndices.map((i) => getSizeOptionAtIndex(i));
     const isSingle = !!pendingSingleDownloadItem;
     const selectedItems = isSingle
       ? (() => {
@@ -261,7 +286,7 @@ function DataDisplay({
     const tasks = [];
     selectedItems.forEach((one) => {
       selectedSizeIndices.forEach((sizeIndex) => {
-        const opt = BATCH_DOWNLOAD_SIZE_OPTIONS[sizeIndex];
+        const opt = getSizeOptionAtIndex(sizeIndex);
         const sizeLabel = opt.originalSize ? '原尺寸' : `${opt.width}x${opt.height}`;
         tasks.push({
           ...one,
@@ -429,6 +454,7 @@ function DataDisplay({
         title="选择输出尺寸"
         open={sizeModalOpen}
         zIndex={1060}
+        width={700}
         className="batch-download-size-modal"
         onCancel={() => { setSizeModalOpen(false); setPendingSingleDownloadItem(null); }}
         footer={[
@@ -438,7 +464,18 @@ function DataDisplay({
             ref={startDownloadBtnRef}
             type="primary"
             loading={downloading}
-            disabled={(!pendingSingleDownloadItem && selectedIds.size === 0) || selectedSizeIndices.length === 0}
+            disabled={
+              (!pendingSingleDownloadItem && selectedIds.size === 0) ||
+              selectedSizeIndices.length === 0 ||
+              (selectedSizeIndices.includes(CUSTOM_SIZE_INDEX) && (
+                (() => {
+                  const w = Number(customSizeWidth);
+                  const h = Number(customSizeHeight);
+                  return !Number.isInteger(w) || w < CUSTOM_SIZE_MIN || w > CUSTOM_SIZE_MAX ||
+                    !Number.isInteger(h) || h < CUSTOM_SIZE_MIN || h > CUSTOM_SIZE_MAX;
+                })()
+              ))
+            }
             onClick={() => {
               if (onBatchModeEnteredWithHint && startDownloadBtnRef.current) {
                 onBatchModeEnteredWithHint(startDownloadBtnRef.current.getBoundingClientRect());
@@ -485,6 +522,64 @@ function DataDisplay({
                   )}
                 </div>
               ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <Checkbox
+                  className="batch-download-size-option"
+                  checked={selectedSizeIndices.includes(CUSTOM_SIZE_INDEX)}
+                  onChange={() => toggleSizeIndex(CUSTOM_SIZE_INDEX)}
+                >
+                  自定义尺寸
+                </Checkbox>
+                {selectedSizeIndices.includes(CUSTOM_SIZE_INDEX) && (
+                  <>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <label style={{ whiteSpace: 'nowrap' }}>
+                        宽：<InputNumber
+                          min={CUSTOM_SIZE_MIN}
+                          max={CUSTOM_SIZE_MAX}
+                          step={1}
+                          value={customSizeWidth}
+                          onChange={(v) => {
+                            const n = v != null ? Math.round(Number(v)) : CUSTOM_SIZE_MIN;
+                            setCustomSizeWidth(Number.isNaN(n) ? CUSTOM_SIZE_MIN : Math.max(CUSTOM_SIZE_MIN, Math.min(CUSTOM_SIZE_MAX, n)));
+                          }}
+                          style={{ width: 96 }}
+                        />
+                      </label>
+                      <label style={{ whiteSpace: 'nowrap' }}>
+                        高：<InputNumber
+                          min={CUSTOM_SIZE_MIN}
+                          max={CUSTOM_SIZE_MAX}
+                          step={1}
+                          value={customSizeHeight}
+                          onChange={(v) => {
+                            const n = v != null ? Math.round(Number(v)) : CUSTOM_SIZE_MIN;
+                            setCustomSizeHeight(Number.isNaN(n) ? CUSTOM_SIZE_MIN : Math.max(CUSTOM_SIZE_MIN, Math.min(CUSTOM_SIZE_MAX, n)));
+                          }}
+                          style={{ width: 96 }}
+                        />
+                      </label>
+                      <span style={{ color: '#999', fontSize: 12 }}>（{CUSTOM_SIZE_MIN}～{CUSTOM_SIZE_MAX} 像素）</span>
+                    </span>
+                    <Tooltip title="当资源比例与所选尺寸比例一致时，直接下载原图">
+                      <span className="batch-download-same-ratio-wrap">
+                        <Checkbox
+                          checked={sameRatioByIndex[CUSTOM_SIZE_INDEX]}
+                          onChange={(e) => {
+                            setSameRatioByIndex((prev) => {
+                              const next = [...prev];
+                              next[CUSTOM_SIZE_INDEX] = e.target.checked;
+                              return next;
+                            });
+                          }}
+                        >
+                          同比例按原图下载
+                        </Checkbox>
+                      </span>
+                    </Tooltip>
+                  </>
+                )}
+              </div>
             </div>
           </>
         )}

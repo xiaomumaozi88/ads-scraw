@@ -887,7 +887,8 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
                     e.stopPropagation();
                     if (htmlUrl) {
                       handleDownload(e);
-                    } else if (isVideo && onRequestDownload && item) {
+                    } else if (onRequestDownload && item) {
+                      // 视频、图片均走尺寸选择弹窗
                       onRequestDownload(item);
                     } else {
                       handleDownload(e);

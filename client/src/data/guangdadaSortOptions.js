@@ -6,7 +6,7 @@
 export const GUANGDADA_SORT_OPTIONS = [
   { value: '-first_seen', label: '最新创意', disabled: false },
   { value: '-last_seen', label: '最后看见', disabled: false },
-  { value: '-correlation', label: '相关性', disabled: true },
+  { value: '-correlation', label: '相关性', disabled: false },
   { value: '-impression', label: '展示估值', disabled: false },
   { value: '-days', label: '投放天数', disabled: false },
   { value: '-related_ads_count', label: '关联广告数', disabled: false },

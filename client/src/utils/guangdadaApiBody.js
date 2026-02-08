@@ -3,6 +3,7 @@
  * 用于前端直接发送与 guangdada.net 标准请求一致的 body，便于在 Network 中核对参数
  */
 import { GUANGDADA_GAME_CATEGORIES_TREE, GAME_FIRST_LEVEL_API_TAG_ID } from '../data/guangdadaGameCategoriesTree.js';
+import { GUANGDADA_WEBSITE_TYPE_TREE } from '../data/guangdadaWebsiteTypeTree.js';
 
 /** API sort_field 有效取值（文档约定，默认 -first_seen）；素材内容多模态用 -multimodal_similarity */
 const SORT_FIELD_ALLOWED = new Set([
@@ -203,6 +204,9 @@ export function buildGuangdadaApiBody(params = {}) {
     guangdadaIncludePageInfo,
     guangdadaViolationAd,
     guangdadaEndCard,
+    guangdadaCodFlag,
+    guangdadaSearchArbitrageFlag,
+    guangdadaWebsiteTypeCodes,
     guangdadaSearchCategory,
     exclude_keyword,
     advertiser_key,
@@ -244,16 +248,23 @@ export function buildGuangdadaApiBody(params = {}) {
     landing_page: 0,
   };
 
-  /** app_type 为必传：1-游戏 2-工具 3-电商 */
+  /** app_type 为必传：1-游戏 2-工具 3-电商/品牌 */
   body.app_type = (guangdadaPrimaryTab === '工具') ? 2 : 1;
-  if (guangdadaPrimaryTab === '电商') body.app_type = 3;
+  if (guangdadaPrimaryTab === '电商/品牌') body.app_type = 3;
   if (body.app_type === 2) {
     body.is_theater = guangdadaIsTheater ? 1 : 0;
     body.is_ai_app = guangdadaIsAiApp ? 1 : 0;
   }
-  const positionMap = { 综合: 0, 广告文案: 1, 广告主: 2, 投放主页: 4, 落地页域名: 6 };
-  if (guangdadaSearchType && positionMap[guangdadaSearchType] != null && positionMap[guangdadaSearchType] !== 0) {
-    body.position = positionMap[guangdadaSearchType];
+  // position：电商/品牌时 guangdadaSearchType 为 '0'/'4'/'6'/'1'，列表及 count 等接口均需传；游戏/工具时为文案/广告主等中文映射
+  const isEcom = guangdadaPrimaryTab === '电商/品牌';
+  if (isEcom && guangdadaSearchType != null && guangdadaSearchType !== '') {
+    const pos = parseInt(guangdadaSearchType, 10);
+    if (!Number.isNaN(pos)) body.position = pos;
+  } else {
+    const positionMap = { 综合: 0, 广告文案: 1, 广告主: 2, 投放主页: 4, 落地页域名: 6 };
+    if (guangdadaSearchType && positionMap[guangdadaSearchType] != null && positionMap[guangdadaSearchType] !== 0) {
+      body.position = positionMap[guangdadaSearchType];
+    }
   }
 
   // 已选广告主时只传 advertiser_key，不传 keyword；否则按关键词逻辑传 keyword
@@ -276,7 +287,8 @@ export function buildGuangdadaApiBody(params = {}) {
   };
   if (hasAdvertiserKey) {
     body.advertiser_key = advertiser_key.map((k) => String(k).trim()).filter(Boolean);
-    if (isMaterialContent) setKeywordFromKeyWord();
+    // 素材内容需 keyword 供 multi-modal-search；电商/品牌下 searchKeyword 输入始终作为 keyword
+    if (isMaterialContent || isEcom) setKeywordFromKeyWord();
   } else {
     setKeywordFromKeyWord();
   }
@@ -333,6 +345,15 @@ export function buildGuangdadaApiBody(params = {}) {
       if (toolTagIds.length > 0) body.tag_ids = toTagIdsInts(toolTagIds);
     }
   }
+  if (body.app_type === 3 && Array.isArray(guangdadaWebsiteTypeCodes) && guangdadaWebsiteTypeCodes.length > 0) {
+    const independentWebsiteValues = (GUANGDADA_WEBSITE_TYPE_TREE[0]?.children || []).map((ch) => ch.value);
+    const independentSelected = guangdadaWebsiteTypeCodes
+      .map((c) => String(c).trim())
+      .filter((c) => c && independentWebsiteValues.includes(c));
+    if (independentSelected.length > 0) {
+      body.independent_website = independentSelected;
+    }
+  }
   if (body.app_type !== 2) {
     const core = splitCoreTrack(guangdadaCoreTrack);
     if (core.tag_ids.length > 0 && !(Array.isArray(body.tag_ids) && body.tag_ids.length > 0)) {
@@ -367,12 +388,22 @@ export function buildGuangdadaApiBody(params = {}) {
   if (monetModel !== 0) body.monetization_model = monetModel;
 
   if (guangdadaCta) body.cta_type = guangdadaCta;
-  if (guangdadaPlacement) {
+  // 广告版位：多选时为 value 字符串数组（一项可能为 "104,124,..."），展开为整数数组
+  if (Array.isArray(guangdadaPlacement) && guangdadaPlacement.length > 0) {
+    body.ad_positions = guangdadaPlacement.flatMap((v) =>
+      String(v)
+        .split(',')
+        .map((n) => parseInt(n, 10))
+        .filter((n) => !Number.isNaN(n))
+    );
+  } else if (guangdadaPlacement && typeof guangdadaPlacement === 'string') {
     body.ad_positions = [parseInt(guangdadaPlacement, 10)].filter((n) => !Number.isNaN(n));
   }
   if (guangdadaIncludePageInfo) body.account_flag = true;
   if (guangdadaViolationAd) body.view_illegal = true;
   if (guangdadaEndCard) body.end_card = 1;
+  body.cod_flag = (guangdadaCodFlag != null && Number(guangdadaCodFlag) === 1) ? 1 : 0;
+  body.search_arbitrage_flag = (guangdadaSearchArbitrageFlag != null && Number(guangdadaSearchArbitrageFlag) === 1) ? 1 : 0;
 
   const fbAudience = guangdadaFbAudience || {};
   if (Array.isArray(fbAudience.gender) && fbAudience.gender.length > 0) {

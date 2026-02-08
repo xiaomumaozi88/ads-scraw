@@ -18,6 +18,8 @@ import GuangdadaSocialEngagementPopover, { hasSocialEngagementSet } from './Guan
 import GuangdadaCpiPopover, { getCpiSelectedCount } from './GuangdadaCpiPopover';
 import { GUANGDADA_TOOL_CATEGORIES, GUANGDADA_TOOL_CATEGORIES_TREE } from '../data/guangdadaToolCategories';
 import { GUANGDADA_GAME_CATEGORIES_TREE } from '../data/guangdadaGameCategoriesTree';
+import { GUANGDADA_WEBSITE_TYPE_TREE, GUANGDADA_INDEPENDENT_WEBSITE_PILLS } from '../data/guangdadaWebsiteTypeTree';
+import { GUANGDADA_PLACEMENT_ADMOB, GUANGDADA_PLACEMENT_YOUTUBE } from '../data/guangdadaPlacementOptions';
 import AdTypeSelector from './AdTypeSelector';
 import OSSelector from './OSSelector';
 import ProductCascader from './ProductCascader';
@@ -109,12 +111,15 @@ function getDefaultInsightrackrFormState() {
     guangdadaCpi: { cpiRange: [], currency: [] },
     guangdadaLandingPageType: [],
     guangdadaCreativeForm: '',
-    guangdadaPlacement: '',
+    guangdadaPlacement: [], // 广告版位多选：存选中项 value 字符串数组，仅渠道单选 Admob/YouTube 时可用
     guangdadaLinkType: [],
     guangdadaRetargeting: '',
     guangdadaIncludePageInfo: false,
     guangdadaViolationAd: false,
     guangdadaEndCard: false,
+    guangdadaCodFlag: 0,
+    guangdadaSearchArbitrageFlag: 0,
+    guangdadaWebsiteTypeCodes: [],
   };
 }
 
@@ -151,7 +156,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
     }
   }, [platform, guangdadaDateRange?.startTime, guangdadaDateRange?.endTime]);
 
-  // 搜索目标下拉选项（仅在选择「广告信息」时显示），与产品一致
+  // 搜索目标下拉选项（仅在选择「广告信息」时显示），与产品一致；position 对应：综合 0、广告文案 1、广告主 2、投放主页 4、落地页域名 6
   const GUANGDADA_SEARCH_TYPE_OPTIONS = [
     { value: '综合', label: '综合', placeholder: '搜索广告主、文案、包名等关键词' },
     { value: '广告文案', label: '广告文案', placeholder: '搜索 广告标题/文案' },
@@ -159,6 +164,14 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
     { value: '投放主页', label: '投放主页', placeholder: '搜索 主页名称/ID/帖子ID' },
     { value: '落地页域名', label: '落地页域名', placeholder: '搜索 关键词/域名' },
   ];
+  // 电商/品牌 tab 下搜索类型仅此 4 项，value 为接口 position：综合'0'、投放主页'4'、落地页域名'6'、广告文案'1'，默认综合
+  const GUANGDADA_SEARCH_TYPE_OPTIONS_ECOMMERCE = [
+    { value: '0', label: '综合', placeholder: '搜索广告主、文案、包名等关键词' },
+    { value: '4', label: '投放主页', placeholder: '搜索 主页名称/ID/帖子ID' },
+    { value: '6', label: '落地页域名', placeholder: '搜索 关键词/域名' },
+    { value: '1', label: '广告文案', placeholder: '搜索 广告标题/文案' },
+  ];
+  const ECOM_SEARCH_TYPE_VALUES = ['0', '4', '6', '1'];
   // 游戏分类选项见 GUANGDADA_GAME_CATEGORIES_TREE（一级名称用于药丸，二级 value/label 用于下拉勾选）
   // 渠道行快捷标签：展示名 -> API value；Facebook系 为 hover 子渠道下拉
   const FACEBOOK_FAMILY_VALUES = FACEBOOK_FAMILY_ITEMS.map((i) => i.value);
@@ -201,6 +214,12 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
   const [channelGoogleLocalValues, setChannelGoogleLocalValues] = useState([]);
   const [gameCategorySearchFocused, setGameCategorySearchFocused] = useState(false);
   const [toolCategorySearchFocused, setToolCategorySearchFocused] = useState(false);
+  const [websiteTypePopoverOpen, setWebsiteTypePopoverOpen] = useState(false);
+  const [websiteTypeLocalCodes, setWebsiteTypeLocalCodes] = useState([]);
+  const [websiteTypeSearch, setWebsiteTypeSearch] = useState('');
+  const [placementPopoverOpen, setPlacementPopoverOpen] = useState(false);
+  const [placementLocalValues, setPlacementLocalValues] = useState([]);
+  const [placementSearch, setPlacementSearch] = useState('');
   const [associationList, setAssociationList] = useState([]);
   const [associationLoading, setAssociationLoading] = useState(false);
   const [associationOpen, setAssociationOpen] = useState(false);
@@ -228,9 +247,9 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
     setSelectedAdvertisers((prev) => prev.filter((s) => !sameAdvertiser(s, item)));
   };
 
-  // 广大大广告主联想：输入关键词防抖请求，展示下拉列表
+  // 广大大广告主联想：输入关键词防抖请求，展示下拉列表；电商/品牌下不展示联想
   useEffect(() => {
-    if (platform !== 'guangdada' || formData.guangdadaSearchCategory !== '广告信息') {
+    if (platform !== 'guangdada' || formData.guangdadaSearchCategory !== '广告信息' || formData.guangdadaPrimaryTab === '电商/品牌') {
       setAssociationOpen(false);
       setAssociationList([]);
       return;
@@ -313,6 +332,44 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
     setChannelGoogleLocalValues((formData.guangdadaChannels || []).filter((c) => GOOGLE_FAMILY_VALUES.includes(c)));
   }, [channelGoogleDropdownOpen, formData.guangdadaChannels]);
 
+  // 网站类型（电商/品牌）：打开「更多」时同步已选
+  useEffect(() => {
+    if (websiteTypePopoverOpen) {
+      setWebsiteTypeLocalCodes(formData.guangdadaWebsiteTypeCodes || []);
+    }
+  }, [websiteTypePopoverOpen, formData.guangdadaWebsiteTypeCodes]);
+
+  // 广告版位：打开 Popover 时同步已选
+  useEffect(() => {
+    if (placementPopoverOpen) {
+      const raw = formData.guangdadaPlacement;
+      setPlacementLocalValues(Array.isArray(raw) ? raw : raw ? [String(raw)] : []);
+    }
+  }, [placementPopoverOpen, formData.guangdadaPlacement]);
+
+  // 广告版位：仅渠道单选 Admob/YouTube 时可用，渠道变化时清空
+  useEffect(() => {
+    const ch = formData.guangdadaChannels || [];
+    const placementEnabled = ch.length === 1 && (ch[0] === 'admob' || ch[0] === 'youtube');
+    if (!placementEnabled) {
+      setFormData((prev) => {
+        const cur = prev.guangdadaPlacement;
+        const has = Array.isArray(cur) ? cur.length > 0 : !!cur;
+        if (!has) return prev;
+        return { ...prev, guangdadaPlacement: [] };
+      });
+    }
+  }, [formData.guangdadaChannels]);
+
+  // 电商/品牌 tab：搜索类型 value 为 '0'/'4'/'6'/'1'，切换过来时若当前不在该列表则重置为「综合」'0'
+  useEffect(() => {
+    if (formData.guangdadaPrimaryTab !== '电商/品牌') return;
+    const current = formData.guangdadaSearchType ?? '0';
+    if (!ECOM_SEARCH_TYPE_VALUES.includes(String(current))) {
+      handleChange('guangdadaSearchType', '0');
+    }
+  }, [formData.guangdadaPrimaryTab]);
+
   /** 根据关键词从分类树生成搜索建议：一级分类 或 一级/二级 子项 */
   const getCategorySearchSuggestions = (tree, searchTrimmed) => {
     if (!searchTrimmed || !Array.isArray(tree)) return [];
@@ -378,8 +435,6 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
     { value: '2', label: '动态广告' },
     { value: '3', label: '试玩广告' },
   ];
-  // 广告版位：仅在选择 Admob 或 YouTube 平台时可用，选项待产品 HTML 补充
-  const GUANGDADA_PLACEMENT_OPTIONS = [{ value: '', label: '广告版位' }];
   // 链接类型：级联选择（从产品 HTML 提取，一级：重定向链接、DSP分发平台；二级仅 DSP分发平台：有DSP平台分发、无DSP平台分发）
   const GUANGDADA_LINK_TYPE_CASCADER_OPTIONS = [
     { value: '1', label: '重定向链接' },
@@ -644,7 +699,12 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       searchParams.pageSize = formDataToUse.pageSize ?? 60;
       searchParams.startTime = startTime;
       searchParams.endTime = endTime;
-      searchParams.sort_field = guangdadaSortField ?? formDataToUse.sort_field ?? '-first_seen';
+      // 电商/品牌下有关键词时默认选中「相关性」排序
+      if (formDataToUse.guangdadaPrimaryTab === '电商/品牌' && (formDataToUse.keyWord || '').trim()) {
+        searchParams.sort_field = '-correlation';
+      } else {
+        searchParams.sort_field = guangdadaSortField ?? formDataToUse.sort_field ?? '-first_seen';
+      }
       searchParams.duplicate_removal = guangdadaDedupType ?? formDataToUse.duplicate_removal ?? 0;
       // 广告主类型：1-游戏 2-工具 3-电商
       searchParams.guangdadaPrimaryTab = formDataToUse.guangdadaPrimaryTab || '游戏';
@@ -662,6 +722,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       searchParams.guangdadaGameCategorySearch = formDataToUse.guangdadaGameCategorySearch || '';
       searchParams.guangdadaToolCategories = formDataToUse.guangdadaToolCategories || [];
       searchParams.guangdadaToolCategoryCodes = formDataToUse.guangdadaToolCategoryCodes || [];
+      searchParams.guangdadaWebsiteTypeCodes = formDataToUse.guangdadaWebsiteTypeCodes || [];
       searchParams.guangdadaToolCategorySearch = formDataToUse.guangdadaToolCategorySearch || '';
       searchParams.guangdadaChannels = formDataToUse.guangdadaChannels || [];
       searchParams.guangdadaCountry = formDataToUse.guangdadaCountry || [];
@@ -681,12 +742,14 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       searchParams.guangdadaCpi = formDataToUse.guangdadaCpi || { cpiRange: [], currency: [] };
       searchParams.guangdadaLandingPageType = formDataToUse.guangdadaLandingPageType || [];
       searchParams.guangdadaCreativeForm = formDataToUse.guangdadaCreativeForm || '';
-      searchParams.guangdadaPlacement = formDataToUse.guangdadaPlacement || '';
+      searchParams.guangdadaPlacement = Array.isArray(formDataToUse.guangdadaPlacement) ? formDataToUse.guangdadaPlacement : (formDataToUse.guangdadaPlacement ? [String(formDataToUse.guangdadaPlacement)] : []);
       searchParams.guangdadaLinkType = formDataToUse.guangdadaLinkType || [];
       searchParams.guangdadaRetargeting = formDataToUse.guangdadaRetargeting || '';
       searchParams.guangdadaIncludePageInfo = !!formDataToUse.guangdadaIncludePageInfo;
       searchParams.guangdadaViolationAd = !!formDataToUse.guangdadaViolationAd;
       searchParams.guangdadaEndCard = !!formDataToUse.guangdadaEndCard;
+      searchParams.guangdadaCodFlag = formDataToUse.guangdadaCodFlag != null ? Number(formDataToUse.guangdadaCodFlag) : 0;
+      searchParams.guangdadaSearchArbitrageFlag = formDataToUse.guangdadaSearchArbitrageFlag != null ? Number(formDataToUse.guangdadaSearchArbitrageFlag) : 0;
       // 已选广告主：请求 creative/list 时带上 advertiser_key（选中的 id 数组）。联想返回里 id 取 domain，cross_app_id 常为空
       const getAdvertiserId = (a) => {
         const v = (a.domain != null && a.domain !== '') ? a.domain : (a.cross_app_id ?? a.advertiser_key ?? a.id ?? a.advertiser_id);
@@ -695,8 +758,8 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       const advertiserKeys = (selectedAdvertisers || []).map(getAdvertiserId).filter(Boolean);
       if (advertiserKeys.length > 0) {
         searchParams.advertiser_key = advertiserKeys;
-        // 素材内容模式下需保留 keyWord 供后端 multi-modal-search；仅广告信息下选中广告主时不传 keyword
-        if (formDataToUse.guangdadaSearchCategory !== '素材内容') {
+        // 素材内容模式下需保留 keyWord 供 multi-modal-search；电商/品牌下搜索框内容始终作为 keyword 传入，不清空
+        if (formDataToUse.guangdadaSearchCategory !== '素材内容' && formDataToUse.guangdadaPrimaryTab !== '电商/品牌') {
           searchParams.keyWord = '';
         }
       }
@@ -725,7 +788,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       {platform === 'guangdada' ? (
         <div className="guangdada-search-top">
           <div className="guangdada-search-top-content">
-{/* 一级分类：游戏 / 工具 */}
+{/* 一级分类：游戏 / 工具 / 电商/品牌 */}
 <div className="guangdada-primary-tabs">
             <button
               type="button"
@@ -741,6 +804,16 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
             >
               工具
             </button>
+            <button
+              type="button"
+              className={`guangdada-tab ${formData.guangdadaPrimaryTab === '电商/品牌' ? 'active' : ''}`}
+              onClick={() => {
+                handleChange('guangdadaPrimaryTab', '电商/品牌');
+                if (formData.guangdadaSearchCategory === '素材内容') handleChange('guangdadaSearchCategory', '广告信息');
+              }}
+            >
+              电商/品牌
+            </button>
           </div>
           {/* 二级分类与关键词提示同一行：tabs 左，hint 右 */}
           <div className="guangdada-category-row">
@@ -752,13 +825,15 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
               >
                 广告信息
               </button>
-              <button
-                type="button"
-                className={`guangdada-category-tab ${formData.guangdadaSearchCategory === '素材内容' ? 'active' : ''}`}
-                onClick={() => handleChange('guangdadaSearchCategory', '素材内容')}
-              >
-                素材内容
-              </button>
+              {formData.guangdadaPrimaryTab !== '电商/品牌' && (
+                <button
+                  type="button"
+                  className={`guangdada-category-tab ${formData.guangdadaSearchCategory === '素材内容' ? 'active' : ''}`}
+                  onClick={() => handleChange('guangdadaSearchCategory', '素材内容')}
+                >
+                  素材内容
+                </button>
+              )}
             </div>
             <p className="guangdada-keyword-hint">
               可使用
@@ -779,9 +854,9 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
               {formData.guangdadaSearchCategory === '广告信息' && (
                 <Select
                   className="guangdada-search-type"
-                  value={formData.guangdadaSearchType || '综合'}
+                  value={formData.guangdadaPrimaryTab === '电商/品牌' ? (formData.guangdadaSearchType ?? '0') : (formData.guangdadaSearchType || '综合')}
                   onChange={(v) => handleChange('guangdadaSearchType', v)}
-                  options={GUANGDADA_SEARCH_TYPE_OPTIONS.map(({ value, label }) => ({ value, label }))}
+                  options={(formData.guangdadaPrimaryTab === '电商/品牌' ? GUANGDADA_SEARCH_TYPE_OPTIONS_ECOMMERCE : GUANGDADA_SEARCH_TYPE_OPTIONS).map(({ value, label }) => ({ value, label }))}
                   suffixIcon={<span className="guangdada-search-type-arrow" aria-hidden>▼</span>}
                   getPopupContainer={(n) => n?.parentElement ?? document.body}
                   popupClassName="guangdada-search-type-dropdown"
@@ -796,7 +871,11 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                   autoComplete="off"
                   placeholder={
                     formData.guangdadaSearchCategory === '广告信息'
-                      ? (GUANGDADA_SEARCH_TYPE_OPTIONS.find((o) => o.value === (formData.guangdadaSearchType || '综合'))?.placeholder ?? GUANGDADA_SEARCH_TYPE_OPTIONS[0].placeholder)
+                      ? (() => {
+                          const opts = formData.guangdadaPrimaryTab === '电商/品牌' ? GUANGDADA_SEARCH_TYPE_OPTIONS_ECOMMERCE : GUANGDADA_SEARCH_TYPE_OPTIONS;
+                          const current = formData.guangdadaPrimaryTab === '电商/品牌' ? (formData.guangdadaSearchType ?? '0') : (formData.guangdadaSearchType || '综合');
+                          return opts.find((o) => o.value === current)?.placeholder ?? opts[0].placeholder;
+                        })()
                       : '搜索广告主、文案、包名等关键词'
                   }
                   value={formData.keyWord}
@@ -811,7 +890,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                       clearTimeout(associationBlurTimerRef.current);
                       associationBlurTimerRef.current = null;
                     }
-                    if (associationList.length > 0 || associationLoading) setAssociationOpen(true);
+                    if (formData.guangdadaPrimaryTab !== '电商/品牌' && (associationList.length > 0 || associationLoading)) setAssociationOpen(true);
                   }}
                   onBlur={() => {
                     // 短延时以便点击下拉项时 onMouseDown(preventDefault) 先于 blur 生效；关闭主要依赖「点击外部」监听
@@ -821,7 +900,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                     }, 120);
                   }}
                 />
-                {formData.guangdadaSearchCategory === '广告信息' && associationOpen && (associationList.length > 0 || associationLoading) && (
+                {formData.guangdadaSearchCategory === '广告信息' && formData.guangdadaPrimaryTab !== '电商/品牌' && associationOpen && (associationList.length > 0 || associationLoading) && (
                   <div className="guangdada-association-dropdown">
                     <div className="guangdada-association-header">
                       <span className="guangdada-association-header-label">广告主</span>
@@ -962,6 +1041,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
           <div className="guangdada-filters">
               {/* 热门筛选 */}
               <div className="guangdada-filter-row guangdada-filter-row--hot">
+                <span className="guangdada-filter-label">热门筛选</span>
                 <label className="guangdada-checkbox-label">
                   <input
                     type="checkbox"
@@ -984,18 +1064,21 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                     <option value="HTML">HTML</option>
                   </select>
                 </div>
-                <div className="guangdada-filter-dropdown-wrap">
-                  <select
-                    value={formData.guangdadaTopCreative}
-                    onChange={(e) => handleChange('guangdadaTopCreative', e.target.value)}
-                    className="guangdada-filter-select"
-                    aria-label="Top创意"
-                  >
-                    <option value="">Top创意</option>
-                    <option value="人气值Top1%">人气值Top1%</option>
-                    <option value="人气值Top10%">人气值Top10%</option>
-                  </select>
-                </div>
+                {formData.guangdadaPrimaryTab !== '电商/品牌' && (
+                  <div className="guangdada-filter-dropdown-wrap">
+                    <select
+                      value={formData.guangdadaTopCreative}
+                      onChange={(e) => handleChange('guangdadaTopCreative', e.target.value)}
+                      className="guangdada-filter-select"
+                      aria-label="Top创意"
+                    >
+                      <option value="">Top创意</option>
+                      <option value="人气值Top1%">人气值Top1%</option>
+                      <option value="人气值Top10%">人气值Top10%</option>
+                    </select>
+                  </div>
+                )}
+                {/* 短剧、AI App 仅工具 tab 显示；电商/品牌与游戏一致不显示 */}
                 {formData.guangdadaPrimaryTab === '工具' && (
                   <>
                     <label className="guangdada-checkbox-label">
@@ -1302,6 +1385,134 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                         );
                       })()}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 电商/品牌：网站类型（在渠道上方），交互类似工具分类 + 更多弹层 */}
+              {formData.guangdadaPrimaryTab === '电商/品牌' && (
+                <div className="guangdada-filter-row guangdada-filter-row--game guangdada-website-type-row">
+                  <span className="guangdada-filter-label">网站类型</span>
+                  <div className="guangdada-tool-category-pills">
+                    <button
+                      type="button"
+                      className={`guangdada-pill guangdada-pill-all ${(formData.guangdadaWebsiteTypeCodes || []).length === 0 ? 'active' : ''}`}
+                      onClick={() => handleChange('guangdadaWebsiteTypeCodes', [])}
+                    >
+                      <span>全 部</span>
+                    </button>
+                    {GUANGDADA_INDEPENDENT_WEBSITE_PILLS.map(({ value: pillValue, label: pillLabel }) => {
+                      const selected = formData.guangdadaWebsiteTypeCodes || [];
+                      const isActive = selected.includes(pillValue);
+                      return (
+                        <button
+                          key={pillValue}
+                          type="button"
+                          className={`guangdada-pill ${isActive ? 'active' : ''}`}
+                          onClick={() => {
+                            if (isActive) {
+                              handleChange('guangdadaWebsiteTypeCodes', selected.filter((c) => c !== pillValue));
+                            } else {
+                              handleChange('guangdadaWebsiteTypeCodes', [...selected, pillValue]);
+                            }
+                          }}
+                        >
+                          <span>{pillLabel}</span>
+                        </button>
+                      );
+                    })}
+                    <Popover
+                      open={websiteTypePopoverOpen}
+                      onOpenChange={setWebsiteTypePopoverOpen}
+                      trigger="click"
+                      placement="bottom"
+                      title={
+                        <div className="guangdada-website-type-popover-title">
+                          <Input
+                            placeholder="快速检索网站类型"
+                            value={websiteTypeSearch}
+                            onChange={(e) => setWebsiteTypeSearch(e.target.value)}
+                            allowClear
+                            className="guangdada-website-type-search"
+                          />
+                          <Button type="text" onClick={() => setWebsiteTypeLocalCodes(GUANGDADA_WEBSITE_TYPE_TREE.flatMap((c) => (c.children || []).map((ch) => ch.value)))}>
+                            全部
+                          </Button>
+                        </div>
+                      }
+                      content={
+                        <div className="guangdada-website-type-popover-inner" style={{ width: 800 }}>
+                          <div className="guangdada-website-type-popover-body">
+                            {GUANGDADA_WEBSITE_TYPE_TREE.map((category) => {
+                              const q = (websiteTypeSearch || '').trim().toLowerCase();
+                              const filtered = q
+                                ? (category.children || []).filter((ch) => (ch.label || '').toLowerCase().includes(q) || (ch.value || '').toLowerCase().includes(q))
+                                : (category.children || []);
+                              if (filtered.length === 0) return null;
+                              const allSelected = filtered.length > 0 && filtered.every((ch) => websiteTypeLocalCodes.includes(ch.value));
+                              const indeterminate = filtered.some((ch) => websiteTypeLocalCodes.includes(ch.value)) && !allSelected;
+                              return (
+                                <div key={category.name} className="guangdada-website-type-category">
+                                  <div className="guangdada-website-type-category-title">
+                                    <label className="ant-checkbox-wrapper guangdada-website-type-category-label">
+                                      <Checkbox
+                                        checked={allSelected}
+                                        indeterminate={indeterminate}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setWebsiteTypeLocalCodes((prev) => [...new Set([...prev, ...filtered.map((ch) => ch.value)])]);
+                                          } else {
+                                            setWebsiteTypeLocalCodes((prev) => prev.filter((c) => !filtered.some((ch) => ch.value === c)));
+                                          }
+                                        }}
+                                      />
+                                      <span>{category.name}</span>
+                                    </label>
+                                  </div>
+                                  <Checkbox.Group
+                                    value={websiteTypeLocalCodes}
+                                    onChange={(vals) => setWebsiteTypeLocalCodes(vals || [])}
+                                    className="guangdada-website-type-checkbox-group"
+                                  >
+                                    {filtered.map((ch) => (
+                                      <label key={ch.value} className="ant-checkbox-wrapper checkbox-custom popover-checkbox guangdada-website-type-checkbox-item">
+                                        <Checkbox value={ch.value} />
+                                        <span>{ch.label}</span>
+                                      </label>
+                                    ))}
+                                  </Checkbox.Group>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="guangdada-website-type-popover-footer">
+                            <Button size="small" onClick={() => setWebsiteTypePopoverOpen(false)} className="guangdada-website-type-footer-btn">
+                              取 消
+                            </Button>
+                            <Button
+                              type="primary"
+                              size="small"
+                              onClick={() => {
+                                handleChange('guangdadaWebsiteTypeCodes', websiteTypeLocalCodes);
+                                setWebsiteTypePopoverOpen(false);
+                              }}
+                              className="guangdada-website-type-footer-btn"
+                            >
+                              确 定
+                            </Button>
+                          </div>
+                        </div>
+                      }
+                      overlayClassName="guangdada-website-type-popover-overlay"
+                      getPopupContainer={(node) => node?.parentElement ?? document.body}
+                    >
+                      <button type="button" className="guangdada-filter-more guangdada-website-type-more">
+                        {(formData.guangdadaWebsiteTypeCodes || []).length === 0
+                          ? '更多'
+                          : `已选 ${(formData.guangdadaWebsiteTypeCodes || []).length} 项`}
+                        <span className="guangdada-search-type-arrow" aria-hidden>▼</span>
+                      </button>
+                    </Popover>
                   </div>
                 </div>
               )}
@@ -1736,10 +1947,11 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
               {/* 高级筛选项：点击高级筛选后在下方展示；选择「工具」时不重复广告信息/素材属性（已在上一行） */}
               {advancedFilterOpen && (
                 <div className="guangdada-advanced-filters-panel">
-                  <div className="guangdada-advanced-row">
+                  <div className={`guangdada-advanced-row${formData.guangdadaPrimaryTab === '电商/品牌' ? ' guangdada-advanced-row--ecom' : ''}`}>
                     <div className="guangdada-advanced-group">
                       <span className="guangdada-advanced-label">广告主</span>
                       <div className="guangdada-advanced-fields">
+                        {formData.guangdadaPrimaryTab !== '电商/品牌' && (
                         <Select
                           placeholder="广告主系统"
                           allowClear
@@ -1749,6 +1961,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                           className="guangdada-advanced-select"
                           getPopupContainer={(node) => node?.parentElement ?? document.body}
                         />
+                        )}
                         {formData.guangdadaPrimaryTab === '游戏' && (
                           <>
                             <div className="guangdada-filter-select-wrap">
@@ -1792,15 +2005,17 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                             />
                           </>
                         )}
-                        <Select
-                          placeholder="内购/非内购"
-                          allowClear
-                          value={formData.guangdadaMonetizationType || undefined}
-                          onChange={(v) => handleChange('guangdadaMonetizationType', v ?? '')}
-                          options={GUANGDADA_MONETIZATION_OPTIONS}
-                          className="guangdada-advanced-select"
-                          getPopupContainer={(node) => node?.parentElement ?? document.body}
-                        />
+                        {formData.guangdadaPrimaryTab !== '电商/品牌' && (
+                          <Select
+                            placeholder="内购/非内购"
+                            allowClear
+                            value={formData.guangdadaMonetizationType || undefined}
+                            onChange={(v) => handleChange('guangdadaMonetizationType', v ?? '')}
+                            options={GUANGDADA_MONETIZATION_OPTIONS}
+                            className="guangdada-advanced-select"
+                            getPopupContainer={(node) => node?.parentElement ?? document.body}
+                          />
+                        )}
                       </div>
                     </div>
                     <div className="guangdada-advanced-group">
@@ -1879,6 +2094,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                     <div className="guangdada-advanced-group">
                       <span className="guangdada-advanced-label">数据指标</span>
                       <div className="guangdada-advanced-fields">
+                        {formData.guangdadaPrimaryTab !== '电商/品牌' && (
                         <Popover
                           open={fbSpendPopoverOpen}
                           onOpenChange={setFbSpendPopoverOpen}
@@ -1910,6 +2126,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                             {getFbSpendDisplayText(formData.guangdadaFbSpend) || 'FB广告花费'}
                           </button>
                         </Popover>
+                        )}
                         <Popover
                           open={socialEngagementPopoverOpen}
                           onOpenChange={setSocialEngagementPopoverOpen}
@@ -1941,6 +2158,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                             {hasSocialEngagementSet(formData.guangdadaSocialEngagement) ? '社媒互动（已设置）' : '社媒互动'}
                           </button>
                         </Popover>
+                        {formData.guangdadaPrimaryTab !== '电商/品牌' && (
                         <Popover
                           open={cpiPopoverOpen}
                           onOpenChange={setCpiPopoverOpen}
@@ -1974,6 +2192,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                             })()}
                           </button>
                         </Popover>
+                        )}
                       </div>
                     </div>
                     <div className="guangdada-advanced-group">
@@ -1999,30 +2218,118 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                           getPopupContainer={(node) => node?.parentElement ?? document.body}
                         />
                         {(() => {
-                          const placementChannels = (formData.guangdadaChannels || []).filter((c) =>
-                            ['admob', 'youtube'].includes(c)
-                          );
-                          const placementEnabled = placementChannels.length > 0;
-                          const placementSelect = (
-                            <Select
-                              placeholder="广告版位"
-                              allowClear
+                          const channels = formData.guangdadaChannels || [];
+                          const placementEnabled = channels.length === 1 && (channels[0] === 'admob' || channels[0] === 'youtube');
+                          const placementOptions = channels[0] === 'youtube' ? GUANGDADA_PLACEMENT_YOUTUBE : GUANGDADA_PLACEMENT_ADMOB;
+                          const placementPlatformName = channels[0] === 'youtube' ? 'Youtube' : 'Admob';
+                          const placementCols = channels[0] === 'youtube' ? 6 : 5;
+                          const placementContentWidth = channels[0] === 'youtube' ? 800 : 666;
+                          const placementSelected = Array.isArray(formData.guangdadaPlacement) ? formData.guangdadaPlacement : (formData.guangdadaPlacement ? [String(formData.guangdadaPlacement)] : []);
+                          const placementCount = placementSelected.length;
+                          const triggerBtn = (
+                            <button
+                              type="button"
+                              className="guangdada-filter-select guangdada-filter-select--field guangdada-filter-select-trigger"
                               disabled={!placementEnabled}
-                              value={formData.guangdadaPlacement || undefined}
-                              onChange={(v) => handleChange('guangdadaPlacement', v ?? '')}
-                              options={GUANGDADA_PLACEMENT_OPTIONS}
-                              className="guangdada-advanced-select"
-                              getPopupContainer={(node) => node?.parentElement ?? document.body}
-                            />
+                            >
+                              {placementCount === 0 ? '广告版位' : `广告版位（已选 ${placementCount} 项）`}
+                            </button>
                           );
-                          if (placementEnabled) return placementSelect;
+                          if (!placementEnabled) {
+                            return (
+                              <Tooltip
+                                title="仅在选择一个渠道且为 Admob 或 YouTube 时可用"
+                                getPopupContainer={(node) => node?.parentElement ?? document.body}
+                              >
+                                <span className="guangdada-filter-trigger-disabled" style={{ display: 'inline-block' }}>{triggerBtn}</span>
+                              </Tooltip>
+                            );
+                          }
+                          const filteredPlacementOptions = (placementSearch || '').trim()
+                            ? placementOptions.filter((o) => (o.label || '').toLowerCase().includes((placementSearch || '').trim().toLowerCase()))
+                            : placementOptions;
+                          const allPlacementSelected = filteredPlacementOptions.length > 0 && filteredPlacementOptions.every((o) => placementLocalValues.includes(o.value));
+                          const placementIndeterminate = filteredPlacementOptions.some((o) => placementLocalValues.includes(o.value)) && !allPlacementSelected;
                           return (
-                            <Tooltip
-                              title="仅在选择Admob或YouTube平台时可用"
+                            <Popover
+                              open={placementPopoverOpen}
+                              onOpenChange={(open) => {
+                                setPlacementPopoverOpen(open);
+                                if (!open) setPlacementSearch('');
+                              }}
+                              trigger="click"
+                              placement="bottom"
+                              title={
+                                <div className="guangdada-placement-popover-title">
+                                  <Input
+                                    placeholder="检索广告版位"
+                                    value={placementSearch}
+                                    onChange={(e) => setPlacementSearch(e.target.value)}
+                                    allowClear
+                                    className="guangdada-placement-popover-search"
+                                  />
+                                  <Button type="text" onClick={() => setPlacementLocalValues(placementOptions.map((o) => o.value))}>
+                                    全部
+                                  </Button>
+                                </div>
+                              }
+                              content={
+                                <div className="guangdada-placement-popover-inner" style={{ width: placementContentWidth }}>
+                                  <div className="guangdada-placement-popover-body">
+                                    <div className="guangdada-placement-popover-category">
+                                      <div className="guangdada-placement-popover-category-header">
+                                        <label className="ant-checkbox-wrapper guangdada-placement-popover-category-label">
+                                          <Checkbox
+                                            checked={allPlacementSelected}
+                                            indeterminate={placementIndeterminate}
+                                            onChange={(e) => {
+                                              if (e.target.checked) {
+                                                setPlacementLocalValues((prev) => [...new Set([...prev, ...filteredPlacementOptions.map((o) => o.value)])]);
+                                              } else {
+                                                setPlacementLocalValues((prev) => prev.filter((v) => !filteredPlacementOptions.some((o) => o.value === v)));
+                                              }
+                                            }}
+                                          />
+                                          <span>{placementPlatformName}</span>
+                                        </label>
+                                      </div>
+                                      <Checkbox.Group
+                                        value={placementLocalValues}
+                                        onChange={(vals) => setPlacementLocalValues(vals || [])}
+                                        className={`guangdada-placement-popover-grid guangdada-placement-popover-grid--cols-${placementCols}`}
+                                      >
+                                        {filteredPlacementOptions.map((o) => (
+                                          <label key={o.value} className="ant-checkbox-wrapper checkbox-custom popover-checkbox guangdada-placement-popover-item">
+                                            <Checkbox value={o.value} />
+                                            <span className="guangdada-placement-popover-item-label">{o.label}</span>
+                                          </label>
+                                        ))}
+                                      </Checkbox.Group>
+                                    </div>
+                                  </div>
+                                  <div className="guangdada-placement-popover-footer">
+                                    <Button size="small" onClick={() => setPlacementPopoverOpen(false)} className="guangdada-placement-popover-footer-btn">
+                                      取 消
+                                    </Button>
+                                    <Button
+                                      type="primary"
+                                      size="small"
+                                      className="guangdada-placement-popover-footer-btn"
+                                      onClick={() => {
+                                        handleChange('guangdadaPlacement', placementLocalValues);
+                                        setPlacementPopoverOpen(false);
+                                      }}
+                                    >
+                                      确 定
+                                    </Button>
+                                  </div>
+                                </div>
+                              }
+                              overlayClassName="guangdada-placement-popover-overlay"
                               getPopupContainer={(node) => node?.parentElement ?? document.body}
                             >
-                              <span style={{ display: 'inline-block' }}>{placementSelect}</span>
-                            </Tooltip>
+                              {triggerBtn}
+                            </Popover>
                           );
                         })()}
                       </div>
@@ -2032,6 +2339,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                     <div className="guangdada-advanced-group">
                       <span className="guangdada-advanced-label">其它</span>
                       <div className="guangdada-advanced-fields">
+                        {formData.guangdadaPrimaryTab !== '电商/品牌' && (
                         <div className="guangdada-filter-select-wrap">
                           <Cascader
                             placeholder="链接类型"
@@ -2044,6 +2352,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                             displayRender={(labels) => labels.join(' / ')}
                           />
                         </div>
+                        )}
                         <Select
                           placeholder="重投广告"
                           allowClear
@@ -2053,26 +2362,47 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                           className="guangdada-advanced-select"
                           getPopupContainer={(node) => node?.parentElement ?? document.body}
                         />
-                        <label className="guangdada-advanced-checkbox">
-                          <Checkbox
-                            checked={!!formData.guangdadaIncludePageInfo}
-                            onChange={(e) => handleChange('guangdadaIncludePageInfo', e.target.checked)}
-                          />
-                          <span>包含主页信息</span>
-                        </label>
+                        {formData.guangdadaPrimaryTab === '电商/品牌' ? (
+                          <>
+                            <label className="guangdada-advanced-checkbox">
+                              <Checkbox
+                                checked={formData.guangdadaCodFlag === 1}
+                                onChange={(e) => handleChange('guangdadaCodFlag', e.target.checked ? 1 : 0)}
+                              />
+                              <span>货到付款</span>
+                            </label>
+                            <label className="guangdada-advanced-checkbox">
+                              <Checkbox
+                                checked={formData.guangdadaSearchArbitrageFlag === 1}
+                                onChange={(e) => handleChange('guangdadaSearchArbitrageFlag', e.target.checked ? 1 : 0)}
+                              />
+                              <span>搜索套利</span>
+                            </label>
+                          </>
+                        ) : (
+                          <>
+                            <label className="guangdada-advanced-checkbox">
+                              <Checkbox
+                                checked={!!formData.guangdadaIncludePageInfo}
+                                onChange={(e) => handleChange('guangdadaIncludePageInfo', e.target.checked)}
+                              />
+                              <span>包含主页信息</span>
+                            </label>
+                            <label className="guangdada-advanced-checkbox">
+                              <Checkbox
+                                checked={!!formData.guangdadaEndCard}
+                                onChange={(e) => handleChange('guangdadaEndCard', e.target.checked)}
+                              />
+                              <span>结束卡片</span>
+                            </label>
+                          </>
+                        )}
                         <label className="guangdada-advanced-checkbox">
                           <Checkbox
                             checked={!!formData.guangdadaViolationAd}
                             onChange={(e) => handleChange('guangdadaViolationAd', e.target.checked)}
                           />
                           <span>违规广告</span>
-                        </label>
-                        <label className="guangdada-advanced-checkbox">
-                          <Checkbox
-                            checked={!!formData.guangdadaEndCard}
-                            onChange={(e) => handleChange('guangdadaEndCard', e.target.checked)}
-                          />
-                          <span>结束卡片</span>
                         </label>
                       </div>
                     </div>

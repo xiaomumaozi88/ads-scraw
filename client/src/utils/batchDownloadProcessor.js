@@ -126,8 +126,9 @@ function loadImage(url) {
 }
 
 /**
- * 计算等比缩放后居中绘制的 src 区域与目标区域
+ * 计算等比缩放后水平垂直居中绘制的 src 区域与目标区域
  * scaleMode: 'contain' 完整显示 | 'cover' 铺满
+ * 返回整数 drawW/drawH/offsetX/offsetY，保证素材在画布上严格居中
  */
 function fitRect(srcW, srcH, dstW, dstH, scaleMode = 'contain') {
   const scale = scaleMode === 'cover'
@@ -135,13 +136,13 @@ function fitRect(srcW, srcH, dstW, dstH, scaleMode = 'contain') {
     : Math.min(dstW / srcW, dstH / srcH);
   const drawW = Math.round(srcW * scale);
   const drawH = Math.round(srcH * scale);
-  const offsetX = (dstW - drawW) / 2;
-  const offsetY = (dstH - drawH) / 2;
+  const offsetX = Math.round((dstW - drawW) / 2);
+  const offsetY = Math.round((dstH - drawH) / 2);
   return { drawW, drawH, offsetX, offsetY, scale };
 }
 
 /**
- * 图片 → 固定尺寸 Blob（等比缩放居中 + 空白区高斯模糊）
+ * 图片 → 固定尺寸 Blob（前景等比 contain 居中 + 背景等比 cover 铺满后模糊，无留白）
  * 当原尺寸 = 目标尺寸时直接返回原图 blob，否则按规则处理
  * @param {string} imageUrl - 图片 URL
  * @param {number} targetW - 目标宽
@@ -174,17 +175,18 @@ export async function processImageToBlob(imageUrl, targetW, targetH, onProgress 
   const cover = fitRect(srcW, srcH, targetW, targetH, 'cover');
   const contain = fitRect(srcW, srcH, targetW, targetH, 'contain');
 
-  // 1) 背景层：原图按 cover 缩放后高斯模糊铺满画布
+  // 1) 背景层：原图按原比例放大铺满规定尺寸（cover），居中绘制，无留白，再高斯模糊
+  // cover 时 offsetX/offsetY 为负或零，绘制起点 (offsetX, offsetY) 使放大图居中并盖满画布
   ctx.save();
   ctx.filter = `blur(${BLUR_RADIUS}px)`;
   ctx.drawImage(
     img,
     0, 0, srcW, srcH,
-    -cover.offsetX, -cover.offsetY, cover.drawW, cover.drawH
+    cover.offsetX, cover.offsetY, cover.drawW, cover.drawH
   );
   ctx.restore();
 
-  // 2) 前景层：原图按 contain 等比缩放居中，清晰
+  // 2) 前景层：原图按 contain 等比缩放水平垂直居中，清晰
   ctx.drawImage(
     img,
     0, 0, srcW, srcH,
@@ -205,8 +207,8 @@ export async function processImageToBlob(imageUrl, targetW, targetH, onProgress 
 }
 
 /**
- * 视频 → 固定尺寸 Blob（移植自 cat-catch：等比缩放居中 + 空白区拉伸模糊）
- * 逻辑：画布=目标尺寸；背景=原视频拉伸铺满画布后高斯模糊；前景=原视频等比 contain 居中
+ * 视频 → 固定尺寸 Blob（前景等比 contain 居中 + 背景等比 cover 铺满后模糊，无留白）
+ * 逻辑：画布=目标尺寸；背景=原视频按原比例放大铺满画布后高斯模糊；前景=原视频等比 contain 居中
  * @param {string} videoUrl - 视频 URL
  * @param {number} targetW - 目标宽
  * @param {number} targetH - 目标高
@@ -268,18 +270,25 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
 
           const videoAspect = vw / vh;
           const outputAspect = width / height;
+          // 前景：contain 等比缩放水平垂直居中
           let scaledWidth, scaledHeight, offsetX, offsetY;
           if (videoAspect > outputAspect) {
             scaledWidth = width;
-            scaledHeight = width / videoAspect;
+            scaledHeight = Math.round(width / videoAspect);
             offsetX = 0;
-            offsetY = (height - scaledHeight) / 2;
+            offsetY = Math.round((height - scaledHeight) / 2);
           } else {
-            scaledWidth = height * videoAspect;
+            scaledWidth = Math.round(height * videoAspect);
             scaledHeight = height;
-            offsetX = (width - scaledWidth) / 2;
+            offsetX = Math.round((width - scaledWidth) / 2);
             offsetY = 0;
           }
+          // 背景：cover 按原比例放大铺满规定尺寸，无留白
+          const coverScale = Math.max(width / vw, height / vh);
+          const coverW = Math.round(vw * coverScale);
+          const coverH = Math.round(vh * coverScale);
+          const coverX = Math.round((width - coverW) / 2);
+          const coverY = Math.round((height - coverH) / 2);
 
           const canvas = document.createElement('canvas');
           canvas.width = width;
@@ -291,10 +300,10 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
           tempCanvas.height = height;
           const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
+          // 背景层：原视频按原比例放大铺满画布（cover）后高斯模糊，居中绘制，无留白
           const applyBlurBg = () => {
-            tempCtx.clearRect(0, 0, width, height);
             tempCtx.filter = `blur(${BLUR_PX}px)`;
-            tempCtx.drawImage(video, 0, 0, width, height);
+            tempCtx.drawImage(video, coverX, coverY, coverW, coverH);
             tempCtx.filter = 'none';
             ctx.drawImage(tempCanvas, 0, 0);
           };
@@ -507,6 +516,12 @@ export const BATCH_DOWNLOAD_SIZE_OPTIONS = [
   { label: '1280×720（横版）', width: 1280, height: 720 },
   { label: '800×800（方形）', width: 800, height: 800 },
 ];
+
+/** 自定义尺寸在「选择尺寸」中的下标 */
+export const CUSTOM_SIZE_INDEX = BATCH_DOWNLOAD_SIZE_OPTIONS.length;
+/** 自定义宽高范围：8～4096（像素） */
+export const CUSTOM_SIZE_MIN = 8;
+export const CUSTOM_SIZE_MAX = 4096;
 
 /** 比例相等判定容差（避免浮点误差） */
 const ASPECT_RATIO_TOLERANCE = 0.02;
