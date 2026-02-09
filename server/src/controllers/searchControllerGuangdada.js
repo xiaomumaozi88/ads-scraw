@@ -135,6 +135,39 @@ export const advertiserAssociation = async (req, res) => {
   }
 };
 
+/** 广大大隐藏信息（hidden-info），用于「不看该广告主创意」获取 advertiser_id */
+export const hiddenInfo = async (req, res) => {
+  try {
+    const query = req.query || req.body || {};
+    const ad_key = query.ad_key;
+    const app_type = query.app_type != null ? Number(query.app_type) : 1;
+    const created_at = query.created_at != null ? Number(query.created_at) : undefined;
+    const result = await puppeteerService.fetchHiddenInfo({ ad_key, app_type, created_at });
+    if (!result.success) {
+      return res.status(200).json({
+        data: result.data,
+        success: false,
+        code: result.code,
+        message: result.message
+      });
+    }
+    res.status(200).json({
+      data: result.data,
+      success: true,
+      code: 200,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('广大大 hidden-info 失败:', error);
+    res.status(200).json({
+      data: null,
+      success: false,
+      code: 500,
+      message: `请求失败: ${error.message || '未知错误'}`
+    });
+  }
+};
+
 /** 广大大创意详情 detail-v2，用于弹窗展示文案语言、地区、素材尺寸、material_id 等 */
 export const creativeDetail = async (req, res) => {
   try {
@@ -165,6 +198,38 @@ export const creativeDetail = async (req, res) => {
       success: false,
       code: 500,
       message: `请求创意详情失败: ${error.message || '未知错误'}`
+    });
+  }
+};
+
+/** 广大大文案翻译（translate-text），需已登录 */
+export const translateText = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const text = body.text;
+    const target_lan = body.target_lan != null ? String(body.target_lan).trim() : 'zh-CN';
+    const result = await puppeteerService.fetchTranslateText({ text, target_lan });
+    if (!result.success) {
+      return res.status(200).json({
+        data: result.data,
+        success: false,
+        code: result.code,
+        message: result.message
+      });
+    }
+    res.status(200).json({
+      data: result.data,
+      success: true,
+      code: 200,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('广大大翻译失败:', error);
+    res.status(200).json({
+      data: { result: [] },
+      success: false,
+      code: 500,
+      message: `翻译请求失败: ${error.message || '未知错误'}`
     });
   }
 };

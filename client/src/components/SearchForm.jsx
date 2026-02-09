@@ -123,7 +123,7 @@ function getDefaultInsightrackrFormState() {
   };
 }
 
-function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdadaDedupType, guangdadaDateRange, insightrackrSearchTab = 'imagevideo', insightrackrInitialFormData, onInsightrackrFormDataChange }) {
+function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdadaDedupType, guangdadaDateRange, insightrackrSearchTab = 'imagevideo', insightrackrInitialFormData, onInsightrackrFormDataChange, guangdadaBlockedAdvertisers = [], onGuangdadaUnblockAdvertiser }) {
   const [formData, setFormData] = useState(() =>
     platform === 'insightrackr' && insightrackrInitialFormData != null
       ? insightrackrInitialFormData
@@ -533,7 +533,13 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
         searchParams.baseOption.pageIndex = 1;
         searchParams.baseOption.pageSize = 4;
       } else {
-        searchParams.demoadFormats = formDataToUse.creativeType ? [formDataToUse.creativeType] : [];
+        // 图片/视频 Tab：与官方 imagevideo 请求完全一致，materialType 筛选才生效
+        searchParams.demoadFormats = [];
+        searchParams.baseOption.dayMode = 'DD';
+        searchParams.baseOption.gptSearch = true;
+        searchParams.baseOption.globalSearch = false; // 官方请求无此字段，传 false 与官方行为一致
+        searchParams.baseOption.sortField = '3';     // 官方 imagevideo 默认 sortField "3"
+        searchParams.baseOption.pageSize = 40;      // 官方 imagevideo 默认 pageSize 40
       }
       searchParams.insightrackrSearchTab = insightrackrSearchTab; // 服务端据此切换 preplay / imagevideo 接口
       searchParams.webTools = []; // 未使用
@@ -2406,6 +2412,28 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                         </label>
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+              {/* 已屏蔽广告主：横向展示头像，点击可取消屏蔽 */}
+              {guangdadaBlockedAdvertisers.length > 0 && (
+                <div className="guangdada-blocked-advertisers-row">
+                  <span className="guangdada-blocked-advertisers-label">已屏蔽广告主</span>
+                  <div className="guangdada-blocked-advertisers-avatars">
+                    {guangdadaBlockedAdvertisers.map((b) => (
+                      <button
+                        key={b.advertiser_id}
+                        type="button"
+                        className="guangdada-blocked-advertiser-avatar"
+                        onClick={() => onGuangdadaUnblockAdvertiser?.(b.advertiser_id)}
+                        title={b.advertiser_name || b.advertiser_id}
+                      >
+                        {b.logo_url ? (
+                          <img src={b.logo_url} alt="" referrerPolicy="no-referrer" onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling?.classList?.add('guangdada-blocked-avatar-fallback--show'); }} />
+                        ) : null}
+                        <span className="guangdada-blocked-avatar-fallback" aria-hidden>{b.advertiser_name ? String(b.advertiser_name).slice(0, 1) : (b.advertiser_id ? String(b.advertiser_id).slice(0, 1) : '?')}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}

@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { message as antdMessage } from 'antd';
 import dayjs from 'dayjs';
 import { getTodayBeijingDayjs, getTodayBeijingStr } from '../utils/beijingDate';
-import { searchData, getCount, getDistributeMedia, getDistributeApp, clearLogin, formatRequestError, guangdadaMultiModalSearch } from '../utils/api';
+import { searchData, getCount, getDistributeMedia, getDistributeApp, clearLogin, formatRequestError, guangdadaMultiModalSearch, getGuangdadaHiddenInfo } from '../utils/api';
 import { dateRangeToSeenParams } from '../utils/guangdadaApiBody';
 import SearchForm from './SearchForm';
 import DataDisplay from './DataDisplay';
@@ -40,6 +40,8 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
     imagevideo: { data: null, countData: null, params: null, mediaDistribute: {}, appDistribute: {} },
     playable: { data: null, countData: null, params: null, mediaDistribute: {}, appDistribute: {} },
   });
+  /** 广大大：已屏蔽的广告主（不看该广告主创意），用于 exclude_advertiser_key */
+  const [blockedAdvertisers, setBlockedAdvertisers] = useState([]);
 
   const toggleSelect = useCallback((id) => {
     setSelectedIds((prev) => {
@@ -61,15 +63,19 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
   }, []);
 
   const handleSearch = async (searchParams) => {
+    let paramsToUse = searchParams;
+    if (platform === 'guangdada' && blockedAdvertisers.length > 0 && searchParams.exclude_advertiser_key === undefined) {
+      paramsToUse = { ...searchParams, exclude_advertiser_key: blockedAdvertisers.map((b) => b.advertiser_id) };
+    }
     const isInsightrackrTab = platform === 'insightrackr';
-    const tab = isInsightrackrTab ? (searchParams.insightrackrSearchTab === 'playable' ? 'playable' : 'imagevideo') : null;
+    const tab = isInsightrackrTab ? (paramsToUse.insightrackrSearchTab === 'playable' ? 'playable' : 'imagevideo') : null;
 
     if (!isInsightrackrTab) {
-      setCurrentSearchParams(searchParams);
+      setCurrentSearchParams(paramsToUse);
     } else {
       setInsightrackrResultByTab((prev) => ({
         ...prev,
-        [tab]: { ...prev[tab], data: null, countData: null, params: searchParams, mediaDistribute: {}, appDistribute: {} },
+        [tab]: { ...prev[tab], data: null, countData: null, params: paramsToUse, mediaDistribute: {}, appDistribute: {} },
       }));
     }
     setLoading(true);
@@ -78,18 +84,17 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
       setCountData(null);
     }
 
-    const keyword = platform === 'guangdada' ? (searchParams.keyword ?? searchParams.keyWord) : searchParams.keyWord;
+    const keyword = platform === 'guangdada' ? (paramsToUse.keyword ?? paramsToUse.keyWord) : paramsToUse.keyWord;
     addLog(`开始查询数据 [${platform}]，关键词: ${keyword}`, 'info');
 
-    let paramsToUse = searchParams;
-    if (platform === 'guangdada' && (searchParams.guangdada_search_category || searchParams.guangdadaSearchCategory) === '素材内容') {
-      const kw = searchParams.keyword ?? searchParams.keyWord;
+    if (platform === 'guangdada' && (paramsToUse.guangdada_search_category || paramsToUse.guangdadaSearchCategory) === '素材内容') {
+      const kw = paramsToUse.keyword ?? paramsToUse.keyWord;
       const kwStr = typeof kw === 'string' ? kw.trim() : (Array.isArray(kw) && kw.length > 0 ? String(kw[0]).trim() : '');
       if (kwStr) {
         try {
           const multiRes = await guangdadaMultiModalSearch(kwStr);
           if (multiRes.success && multiRes.data && multiRes.data.multimodal_md5) {
-            paramsToUse = { ...searchParams, multimodal_md5: multiRes.data.multimodal_md5 };
+            paramsToUse = { ...paramsToUse, multimodal_md5: multiRes.data.multimodal_md5 };
             addLog('multi-modal-search 成功，已带入 list/count', 'info');
           } else if (!multiRes.success) {
             addLog(`multi-modal-search 失败: ${multiRes.message || '未返回 multimodal_md5'}`, 'warn');
@@ -105,7 +110,7 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
       const [searchResult, countResult] = await Promise.all([
         searchData(platform, paramsToUse),
         (platform === 'insightrackr' || platform === 'guangdada')
-          ? getCount(platform, paramsToUse).catch(err => {
+          ? getCount(platform, paramsToUse).catch((err) => {
               addLog(`获取总数失败: ${err.message}`, 'warn');
               return { success: false, data: null };
             })
@@ -270,6 +275,48 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
     }
   };
 
+  /** 广大大：点击「不看该广告主创意」后请求 hidden-info，加入屏蔽列表并立即 refetch */
+  const handleBlockAdvertiser = useCallback(async (item) => {
+    if (platform !== 'guangdada' || !item?.ad_key) return;
+    try {
+      const res = await getGuangdadaHiddenInfo({
+        ad_key: item.ad_key,
+        app_type: item.app_type ?? 1,
+        created_at: item.created_at,
+      });
+      const hid = res?.data?.hidden_info;
+      const advertiser_id = hid?.advertiser_id;
+      if (!advertiser_id) {
+        addLog('获取广告主信息失败，无法屏蔽', 'warn');
+        return;
+      }
+      setBlockedAdvertisers((prev) => {
+        const next = [...prev, { advertiser_id, logo_url: item.logo_url, advertiser_name: item.advertiser_name }];
+        if (effectiveParams) {
+          handleSearch({ ...effectiveParams, exclude_advertiser_key: next.map((b) => b.advertiser_id) });
+        }
+        return next;
+      });
+      addLog(`已屏蔽广告主: ${advertiser_id}`, 'info');
+    } catch (err) {
+      addLog(`屏蔽广告主失败: ${err?.message || err}`, 'warn');
+      if (err?.requiresLogin && onRequireLogin) onRequireLogin();
+    }
+  }, [platform, effectiveParams, addLog, onRequireLogin]);
+
+  const handleUnblockAdvertiser = useCallback((advertiser_id) => {
+    setBlockedAdvertisers((prev) => {
+      const next = prev.filter((b) => b.advertiser_id !== advertiser_id);
+      if (effectiveParams && next.length === 0) {
+        const { exclude_advertiser_key, ...rest } = effectiveParams;
+        handleSearch(rest);
+      } else if (effectiveParams) {
+        handleSearch({ ...effectiveParams, exclude_advertiser_key: next.map((b) => b.advertiser_id) });
+      }
+      return next;
+    });
+  }, [effectiveParams]);
+
   return (
     <div className="card data-card">
       {platform === 'insightrackr' && (
@@ -300,6 +347,8 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
         insightrackrSearchTab={platform === 'insightrackr' ? insightrackrSearchTab : undefined}
         insightrackrInitialFormData={platform === 'insightrackr' ? insightrackrFormByTab[insightrackrSearchTab] : undefined}
         onInsightrackrFormDataChange={platform === 'insightrackr' ? (formData) => setInsightrackrFormByTab((prev) => ({ ...prev, [insightrackrSearchTab]: formData })) : undefined}
+        guangdadaBlockedAdvertisers={platform === 'guangdada' ? blockedAdvertisers : []}
+        onGuangdadaUnblockAdvertiser={platform === 'guangdada' ? handleUnblockAdvertiser : undefined}
       />
       <div className="data-area">
         {platform === 'guangdada' && (
@@ -364,6 +413,7 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
             onEnterBatchMode={() => setBatchDownloadMode(true)}
             onBatchModeEnteredWithHint={onBatchModeEnteredWithHint}
             onExitBatchMode={exitBatchMode}
+            onBlockAdvertiser={platform === 'guangdada' ? handleBlockAdvertiser : undefined}
             onPageChange={(page) => {
               if (effectiveParams) {
                 const updatedParams = platform === 'guangdada'

@@ -1883,6 +1883,170 @@ export const fetchCreativeDetail = async (params = {}) => {
 };
 
 /**
+ * 广大大隐藏信息（GET hidden-info），用于「不看该广告主创意」获取 advertiser_id
+ * @param {{ ad_key: string, app_type: number, created_at: number }} params
+ */
+export const fetchHiddenInfo = async (params = {}) => {
+    if (status.current !== LoginStatus.ONLINE) {
+        return { data: null, success: false, code: 'NOT_LOGGED_IN', message: '未登录，请先登录' };
+    }
+    if (!loginPage || loginPage.isClosed()) {
+        return { data: null, success: false, code: 'NO_LOGIN_PAGE', message: '登录页面已关闭，请重新登录' };
+    }
+    const { ad_key, app_type = 1, created_at } = params;
+    if (!ad_key) {
+        return { data: null, success: false, code: 400, message: '缺少 ad_key' };
+    }
+    try {
+        let authorizationToken = loginInfo.authorization;
+        let deviceId = loginInfo.deviceId;
+        let userToken = loginInfo.userToken;
+        if (!authorizationToken) {
+            try {
+                const storageData = await loginPage.evaluate(() => {
+                    const keys = ['authorization', 'token', 'Authorization', 'user-token', 'device-id'];
+                    const result = {};
+                    for (const key of keys) {
+                        const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+                        if (value) result[key] = value;
+                    }
+                    return result;
+                });
+                if (storageData.authorization || storageData.Authorization || storageData.token) {
+                    authorizationToken = storageData.authorization || storageData.Authorization || storageData.token;
+                    loginInfo.authorization = authorizationToken;
+                }
+                if (storageData['user-token']) { userToken = storageData['user-token']; loginInfo.userToken = userToken; }
+                if (storageData['device-id']) { deviceId = storageData['device-id']; loginInfo.deviceId = deviceId; }
+            } catch (e) { logger.warn('从存储获取 token 失败:', e.message); }
+        }
+        const qs = new URLSearchParams({ ad_key, app_type: String(app_type) });
+        if (created_at != null) qs.set('created_at', String(created_at));
+        const url = `/napi/v1/creative/hidden-info?${qs.toString()}`;
+        const response = await loginPage.evaluate(async (requestUrl, authToken, devId, uToken) => {
+            try {
+                const headers = {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,ja;q=0.8,en;q=0.7',
+                    'Authorization': authToken || '',
+                    'Origin': 'https://guangdada.net',
+                    'Referer': 'https://guangdada.net/modules/creative/display-ads',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+                };
+                if (devId) headers['x-device-id'] = devId;
+                if (uToken) headers['x-nbs-user-token'] = uToken;
+                headers['x-product-id'] = '2';
+                headers['x-timezone'] = '+0800';
+                const res = await fetch(requestUrl, { method: 'GET', headers, credentials: 'include' });
+                const text = await res.text();
+                let data = null;
+                if (text && text.trim()) {
+                    try { data = JSON.parse(text); } catch (e) { return { ok: false, status: res.status, data: null }; }
+                }
+                return { ok: res.ok, status: res.status, data };
+            } catch (err) {
+                return { ok: false, status: 500, data: null };
+            }
+        }, url, authorizationToken, deviceId, userToken);
+        const apiData = response.data;
+        const success = response.ok && apiData && (apiData.id === 'SUCCESS' || apiData.code === 0);
+        const hiddenInfo = (apiData && apiData.data && apiData.data.hidden_info) ? apiData.data.hidden_info : null;
+        return {
+            data: hiddenInfo ? { hidden_info: hiddenInfo } : null,
+            success: !!success,
+            code: response.status,
+            message: success ? 'success' : (apiData?.message || '请求失败')
+        };
+    } catch (error) {
+        logger.error('广大大 hidden-info 请求失败:', error);
+        return { data: null, success: false, code: 500, message: `请求失败: ${error.message}` };
+    }
+};
+
+/**
+ * 广大大文案翻译（POST translate-text）
+ * @param {{ text: string | string[], target_lan: string }} params - text 单条或数组，target_lan 如 zh-CN / en
+ */
+export const fetchTranslateText = async (params = {}) => {
+    if (status.current !== LoginStatus.ONLINE) {
+        return { data: null, success: false, code: 'NOT_LOGGED_IN', message: '未登录，请先登录' };
+    }
+    if (!loginPage || loginPage.isClosed()) {
+        return { data: null, success: false, code: 'NO_LOGIN_PAGE', message: '登录页面已关闭，请重新登录' };
+    }
+    const { text, target_lan } = params;
+    const textArr = Array.isArray(text) ? text : (text != null && String(text).trim() !== '' ? [String(text).trim()] : []);
+    if (textArr.length === 0) {
+        return { data: { result: [] }, success: true, code: 200, message: 'success' };
+    }
+    const targetLan = target_lan && String(target_lan).trim() ? String(target_lan).trim() : 'zh-CN';
+    try {
+        let authorizationToken = loginInfo.authorization;
+        let deviceId = loginInfo.deviceId;
+        let userToken = loginInfo.userToken;
+        if (!authorizationToken) {
+            try {
+                const storageData = await loginPage.evaluate(() => {
+                    const keys = ['authorization', 'token', 'Authorization', 'user-token', 'device-id'];
+                    const result = {};
+                    for (const key of keys) {
+                        const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+                        if (value) result[key] = value;
+                    }
+                    return result;
+                });
+                if (storageData.authorization || storageData.Authorization || storageData.token) {
+                    authorizationToken = storageData.authorization || storageData.Authorization || storageData.token;
+                    loginInfo.authorization = authorizationToken;
+                }
+                if (storageData['user-token']) { userToken = storageData['user-token']; loginInfo.userToken = userToken; }
+                if (storageData['device-id']) { deviceId = storageData['device-id']; loginInfo.deviceId = deviceId; }
+            } catch (e) { logger.warn('从存储获取 token 失败:', e.message); }
+        }
+        const requestUrl = '/napi/v1/creative/translate-text';
+        const body = { text: textArr, target_lan: targetLan };
+        const response = await loginPage.evaluate(async (url, bodyJson, authToken, devId, uToken) => {
+            try {
+                const headers = {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,ja;q=0.8,en;q=0.7',
+                    'Authorization': authToken || '',
+                    'Content-Type': 'application/json',
+                    'Origin': 'https://guangdada.net',
+                    'Referer': 'https://guangdada.net/modules/creative/display-ads',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+                };
+                if (devId) headers['x-device-id'] = devId;
+                if (uToken) headers['x-nbs-user-token'] = uToken;
+                headers['x-product-id'] = '2';
+                headers['x-timezone'] = '+0800';
+                const res = await fetch(url, { method: 'POST', headers, credentials: 'include', body: bodyJson });
+                const textRes = await res.text();
+                let data = null;
+                if (textRes && textRes.trim()) {
+                    try { data = JSON.parse(textRes); } catch (e) { return { ok: false, status: res.status, data: null }; }
+                }
+                return { ok: res.ok, status: res.status, data };
+            } catch (err) {
+                return { ok: false, status: 500, data: null };
+            }
+        }, requestUrl, JSON.stringify(body), authorizationToken, deviceId, userToken);
+        const apiData = response.data;
+        const success = response.ok && apiData && (apiData.id === 'SUCCESS' || apiData.code === 0);
+        const resultList = (apiData && Array.isArray(apiData.data?.result)) ? apiData.data.result : [];
+        return {
+            data: { result: resultList },
+            success: !!success,
+            code: response.status,
+            message: success ? 'success' : (apiData?.message || '翻译请求失败')
+        };
+    } catch (error) {
+        logger.error('广大大翻译请求失败:', error);
+        return { data: { result: [] }, success: false, code: 500, message: `请求失败: ${error.message}` };
+    }
+};
+
+/**
  * 广大大创意每日人气趋势（GET daily-popularity）
  * @param {{ creative_key: string, first_seen: number, last_seen: number, app_type: number, platform: string, category?: string }} params
  */

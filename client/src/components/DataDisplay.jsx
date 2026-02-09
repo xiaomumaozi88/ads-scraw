@@ -37,6 +37,8 @@ function DataDisplay({
   onBatchDownloadCancel,
   onEnterBatchMode,
   onBatchModeEnteredWithHint,
+  onExitBatchMode,
+  onBlockAdvertiser,
 }) {
   const startDownloadBtnRef = useRef(null);
   const [sizeModalOpen, setSizeModalOpen] = useState(false);
@@ -399,6 +401,7 @@ function DataDisplay({
                   item={item}
                   onOpenDetail={() => setGuangdadaDetailItem(item)}
                   onRequestVideoDownload={handleRequestVideoDownload}
+                  onBlockAdvertiser={onBlockAdvertiser}
                   {...cardBatchProps}
                 />
               );

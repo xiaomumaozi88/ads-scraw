@@ -230,6 +230,7 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
     guangdadaWebsiteTypeCodes,
     exclude_keyword,
     advertiser_key,
+    exclude_advertiser_key,
   } = searchParams;
 
   let seenBegin = paramSeenBegin;
@@ -305,6 +306,9 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
   }
   if (Array.isArray(advertiser_key) && advertiser_key.length > 0) {
     body.advertiser_key = advertiser_key.map((k) => String(k).trim()).filter(Boolean);
+  }
+  if (Array.isArray(exclude_advertiser_key) && exclude_advertiser_key.length > 0) {
+    body.exclude_advertiser_key = exclude_advertiser_key.map((k) => String(k).trim()).filter(Boolean);
   }
 
   if (Array.isArray(guangdadaChannels) && guangdadaChannels.length > 0) {

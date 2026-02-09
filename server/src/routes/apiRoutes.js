@@ -17,6 +17,7 @@ const router = Router();
 
 router.get('/health', healthController.getHealth);
 router.get('/proxy-media', proxyMediaController.getProxyMedia);
+router.get('/download-image', proxyMediaController.getDownloadImage);
 router.post('/health/clear-logs', healthController.postClearLogs);
 router.post('/health/reopen-browser', healthController.postReopenBrowser);
 
@@ -40,8 +41,10 @@ router.post('/guangdada/count', searchControllerGuangdada.count);
 router.post('/guangdada/multi-modal-search', searchControllerGuangdada.multiModalSearch);
 router.get('/guangdada/advertiser-association', searchControllerGuangdada.advertiserAssociation);
 router.post('/guangdada/advertiser-association', searchControllerGuangdada.advertiserAssociation);
+router.get('/guangdada/hidden-info', searchControllerGuangdada.hiddenInfo);
 router.get('/guangdada/creative-detail', searchControllerGuangdada.creativeDetail);
 router.post('/guangdada/creative-detail', searchControllerGuangdada.creativeDetail);
+router.post('/guangdada/translate', searchControllerGuangdada.translateText);
 router.get('/guangdada/daily-popularity', searchControllerGuangdada.dailyPopularity);
 router.post('/guangdada/daily-popularity', searchControllerGuangdada.dailyPopularity);
 router.post('/guangdada/related-advertisers', searchControllerGuangdada.relatedAdvertisers);

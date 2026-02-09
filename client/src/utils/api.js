@@ -4,6 +4,15 @@ const API_BASE = '/api';
 const PROXY_MEDIA_HOST_SUFFIXES = ['zingfront.com'];
 
 /**
+ * 返回通过后端代理下载图片的 URL，用于直接触发浏览器下载（避免跨域时只能新标签打开）。
+ * 仅用于白名单域名内的 app icon 等图片。
+ */
+export function getDownloadImageUrl(url, filename = 'app-icon.png') {
+  if (!url || typeof url !== 'string') return '';
+  return `${API_BASE}/download-image?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+}
+
+/**
  * 若 url 属于需代理的 CDN，返回代理地址；否则返回原 url。
  * 用于广大大等视频/图片在部署到 IP 或非白名单域名时的播放与展示。
  */
@@ -331,6 +340,51 @@ export async function getGuangdadaCreativeDetail(params) {
     throw err;
   }
   return result;
+}
+
+/** 广大大隐藏信息（hidden-info），用于「不看该广告主创意」获取 advertiser_id；需已登录 */
+export async function getGuangdadaHiddenInfo(params) {
+  const { ad_key, app_type = 1, created_at } = params || {};
+  const qs = new URLSearchParams();
+  if (ad_key) qs.set('ad_key', ad_key);
+  if (app_type != null) qs.set('app_type', String(app_type));
+  if (created_at != null) qs.set('created_at', String(created_at));
+  const response = await fetch(`${API_BASE}/guangdada/hidden-info?${qs.toString()}`, {
+    method: 'GET',
+    credentials: 'same-origin',
+  });
+  const result = await response.json();
+  if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
+    const err = new Error(result.message || '需要重新登录');
+    err.code = result.code;
+    err.requiresLogin = true;
+    throw err;
+  }
+  return result;
+}
+
+/** 广大大文案翻译（走后端代理，需已登录）text 为字符串，target_lan 如 zh-CN / en，返回译文字符串 */
+export async function translateTextGuangdada(text, target_lan = 'zh-CN') {
+  const response = await fetch(`${API_BASE}/guangdada/translate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      text: text != null ? String(text).trim() : '',
+      target_lan: target_lan && String(target_lan).trim() ? String(target_lan).trim() : 'zh-CN',
+    }),
+  });
+  const result = await response.json();
+  if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
+    const err = new Error(result.message || '需要重新登录');
+    err.code = result.code;
+    err.requiresLogin = true;
+    throw err;
+  }
+  if (!result.success) throw new Error(result.message || '翻译失败');
+  const list = result.data?.result;
+  if (Array.isArray(list) && list.length > 0) return list[0];
+  return '';
 }
 
 // 广大大使用相同素材的其他广告主（相似广告主）

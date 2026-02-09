@@ -25,6 +25,7 @@ import {
 import { GUANGDADA_COUNTRY_CODE_TO_CN } from '../data/guangdadaCountries';
 import { GUANGDADA_GAME_CATEGORIES_TREE, GUANGDADA_GAME_CODE_TO_LABEL } from '../data/guangdadaGameCategoriesTree';
 import { GUANGDADA_CORE_TRACK_CODE_TO_LABEL, GUANGDADA_CATEGORY_TAG_KEY_TO_LABEL } from '../data/guangdadaCoreTrack';
+import CopyTranslationModal from './CopyTranslationModal';
 import './GuangdadaDetailModal.css';
 
 /**
@@ -116,6 +117,9 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
   const [advertiserDrawerData, setAdvertiserDrawerData] = useState(null);
   const [loadingAdvertiserDrawer, setLoadingAdvertiserDrawer] = useState(false);
   const [advertiserDrawerError, setAdvertiserDrawerError] = useState(null);
+  const [translateModalOpen, setTranslateModalOpen] = useState(false);
+  const [translateModalText, setTranslateModalText] = useState('');
+  const [translateModalType, setTranslateModalType] = useState(''); // 'title' | 'description'
 
   const { thumbnailUrl, videoUrl, isVideo, htmlUrl } = useMemo(
     () => (item ? getMediaUrls(item) : { thumbnailUrl: '', videoUrl: '', isVideo: false, htmlUrl: '' }),
@@ -675,12 +679,10 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
                 <th>广告文案</th>
                 <th>落地页</th>
                 <th>投放天数</th>
-                <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {relatedAds.map((ad, idx) => {
-                const viewUrl = `https://guangdada.net/modules/creative/display-ads/detail?channel=${encodeURIComponent(ad.platform || 'admob')}&id=${encodeURIComponent(ad.ad_key || '')}&type=${ad.app_type ?? 1}&created_at=${ad.created_at ?? ''}&fb_merge=false&search_flag=${ad.search_flag ?? ''}`;
                 const daysStr = ad.days_count != null ? `${ad.days_count}天` : '--';
                 const dateRangeStr = ad.first_seen != null && ad.last_seen != null
                   ? `${formatMetricDate(ad.first_seen)}-${formatMetricDate(ad.last_seen)} (UTC+8)`
@@ -712,9 +714,6 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
                     <td>
                       <div className="guangdada-detail-table-days">{daysStr}</div>
                       {dateRangeStr && <div className="guangdada-detail-table-daterange">{dateRangeStr}</div>}
-                    </td>
-                    <td>
-                      <a href={viewUrl} target="_blank" rel="noopener noreferrer" className="guangdada-detail-table-view-btn">查看</a>
                     </td>
                   </tr>
                 );
@@ -878,7 +877,20 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
               )}
             </div>
             <div className="guangdada-detail-creative-info">
-              <div className="guangdada-detail-creative-title">{title || '—'}</div>
+              <div className="guangdada-detail-creative-title-row">
+                <div className="guangdada-detail-creative-title">{title || '—'}</div>
+                <button
+                  type="button"
+                  className="guangdada-detail-translate-btn"
+                  onClick={() => {
+                    setTranslateModalText(title || '');
+                    setTranslateModalType('title');
+                    setTranslateModalOpen(true);
+                  }}
+                >
+                  翻译
+                </button>
+              </div>
               <div className="guangdada-detail-creative-actions">
                 <Button
                   type="link"
@@ -897,10 +909,36 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
                 >
                   下载素材
                 </Button>
+                {(item?.store_url || detailData?.raw?.store_url) && (
+                  <AntdTooltip title={item?.store_url || detailData?.raw?.store_url || ''}>
+                    <a
+                      href={item?.store_url || detailData?.raw?.store_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="guangdada-detail-store-link-btn"
+                    >
+                      <span className="guangdada-detail-store-link-icon" aria-hidden />
+                      商店链接
+                    </a>
+                  </AntdTooltip>
+                )}
               </div>
             </div>
             {body && (
-              <div className="guangdada-detail-body-text">{body}</div>
+              <div className="guangdada-detail-body-row">
+                <div className="guangdada-detail-body-text">{body}</div>
+                <button
+                  type="button"
+                  className="guangdada-detail-translate-btn"
+                  onClick={() => {
+                    setTranslateModalText(body || '');
+                    setTranslateModalType('description');
+                    setTranslateModalOpen(true);
+                  }}
+                >
+                  翻译
+                </button>
+              </div>
             )}
             <div className="guangdada-detail-disclaimer">
               免责申明：素材来源于 Facebook/Google 等公开透明的数据库，仅用于数据挖掘和分析
@@ -917,6 +955,12 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
         </div>
       </div>
     </Modal>
+    <CopyTranslationModal
+      open={translateModalOpen}
+      onClose={() => setTranslateModalOpen(false)}
+      initialText={translateModalText}
+      textType={translateModalType}
+    />
     <Drawer
       title="广告主概览"
       placement="right"

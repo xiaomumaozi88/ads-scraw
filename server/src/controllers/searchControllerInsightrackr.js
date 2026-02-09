@@ -95,13 +95,6 @@ export const search = async (req, res) => {
                 message: '服务器返回数据格式异常'
             });
         }
-        
-        // 打印 Insightrackr 的完整返回结果
-        console.log('\n========== Insightrackr 返回结果 ==========');
-        console.log('完整响应:', JSON.stringify(data, null, 2));
-        console.log('==========================================\n');
-        logger.info('Insightrackr 返回结果:', JSON.stringify(data, null, 2));
-        
         res.json({...data});
     } catch (error) {
         console.error(error);
@@ -132,13 +125,6 @@ export const count = async (req, res) => {
                 message: '服务器返回数据格式异常'
             });
         }
-        
-        // 打印 Insightrackr Count 的完整返回结果
-        console.log('\n========== Insightrackr Count 返回结果 ==========');
-        console.log('完整响应:', JSON.stringify(data, null, 2));
-        console.log('==========================================\n');
-        logger.info('Insightrackr Count 返回结果:', JSON.stringify(data, null, 2));
-        
         res.json({...data});
     } catch (error) {
         console.error(error);

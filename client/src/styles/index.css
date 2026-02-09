@@ -949,6 +949,63 @@ body {
 }
 
 /* 广大大筛选项底部查询按钮 */
+/* 已屏蔽广告主：在 guangdada-filters-footer 上方横向展示头像 */
+.guangdada-blocked-advertisers-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.guangdada-blocked-advertisers-label {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+  min-width: 72px;
+}
+.guangdada-blocked-advertisers-avatars {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.guangdada-blocked-advertiser-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  border: 1px solid #e8e8e8;
+  padding: 0;
+  overflow: hidden;
+  background: #f5f5f5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.guangdada-blocked-advertiser-avatar:hover {
+  border-color: #1677ff;
+  background: #e6f4ff;
+}
+.guangdada-blocked-advertiser-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.guangdada-blocked-avatar-fallback {
+  display: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+}
+.guangdada-blocked-avatar-fallback.guangdada-blocked-avatar-fallback--show {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .guangdada-filters-footer {
   margin-top: 20px;
   padding-top: 16px;
@@ -3552,6 +3609,10 @@ body.insightrackr-fullscreen-active .data-card {
     transition: opacity 0.2s, background 0.2s, color 0.2s;
     opacity: 0;
 }
+/* 广大大卡片：勾选框左移，避免与头部省略号按钮重叠 */
+.guangdada-card .batch-card-checkbox {
+    right: 44px;
+}
 .creative-card:hover .batch-card-checkbox,
 .creative-card.creative-card--batch-mode .batch-card-checkbox {
     opacity: 1;
@@ -3821,11 +3882,9 @@ body.insightrackr-fullscreen-active .data-card {
 .guangdada-header-body {
     flex: 1;
     min-width: 0;
-    position: relative;
 }
 
 .guangdada-header-name-row {
-    margin-right: 28px;
     height: 18px;
     overflow: hidden;
 }
@@ -3847,8 +3906,8 @@ body.insightrackr-fullscreen-active .data-card {
 
 .guangdada-header-ellipsis {
     position: absolute;
-    top: -4px;
-    right: -4px;
+    top: 8px;
+    right: 8px;
     width: 28px;
     height: 28px;
     padding: 0;
@@ -3868,11 +3927,36 @@ body.insightrackr-fullscreen-active .data-card {
     color: #666;
 }
 
+/* 带 logo 的卡片头部也显示省略号，需相对定位 */
+.guangdada-card-header-with-ellipsis {
+  position: relative;
+  padding-right: 28px;
+}
+
+.guangdada-header-ellipsis-popover {
+  padding: 4px 0;
+  min-width: 140px;
+}
+.guangdada-header-ellipsis-action {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+}
+.guangdada-header-ellipsis-action:hover {
+  background: #f5f5f5;
+  color: #1677ff;
+}
+
 .guangdada-header-device-row {
   display: flex;
   align-items: center;
   margin-top: 1px;
-  padding-right: 32px;
 }
 
 .guangdada-header-ecom-advertiser-id {

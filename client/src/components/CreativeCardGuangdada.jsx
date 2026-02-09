@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { getProxiedMediaUrl } from '../utils/api';
+import { Popover } from 'antd';
+import { getProxiedMediaUrl, getDownloadImageUrl } from '../utils/api';
 
-function CreativeCardGuangdada({ item, batchMode = false, selected = false, onToggleSelect, onEnterBatchMode, onOpenDetail, onRequestVideoDownload }) {
+function CreativeCardGuangdada({ item, batchMode = false, selected = false, onToggleSelect, onEnterBatchMode, onOpenDetail, onRequestVideoDownload, onBlockAdvertiser }) {
   // 使用 useMemo 缓存计算结果，避免每次渲染都重新计算
   const { isVideo, thumbnailUrl, videoUrl, videoDuration, htmlUrl } = useMemo(() => {
     let isVideo = false;
@@ -240,6 +241,33 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
     onToggleSelect?.();
   };
 
+  /** 下载当前 app icon（card-logo 图片）：文件名 = 产品名称_时间.png，走后端代理触发直接下载 */
+  const handleDownloadAppIcon = (e) => {
+    e.stopPropagation();
+    const url = item.logo_url && String(item.logo_url).trim();
+    if (!url) return;
+    const now = new Date();
+    const timeStr =
+      now.getFullYear() +
+      String(now.getMonth() + 1).padStart(2, '0') +
+      String(now.getDate()).padStart(2, '0') +
+      '-' +
+      String(now.getHours()).padStart(2, '0') +
+      String(now.getMinutes()).padStart(2, '0') +
+      String(now.getSeconds()).padStart(2, '0');
+    const productName = (appName !== 'N/A' ? appName : item.advertiser_name) || 'app';
+    const safeName = String(productName).replace(/[/\\:*?"<>|\s]/g, '_').replace(/_+/g, '_').slice(0, 80) || 'app';
+    const filename = `${safeName}_${timeStr}.png`;
+    const downloadUrl = getDownloadImageUrl(url, filename);
+    if (!downloadUrl) return;
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   return (
     <div
       className={`creative-card guangdada-card${onOpenDetail ? ' creative-card--clickable' : ''}${batchMode ? ' creative-card--batch-mode' : ''}`}
@@ -258,7 +286,7 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
       </div>
       {/* 卡片头部：无 logo 时用新样式（应用类型图标+广告商+设备+省略号），有 logo 时用原样式（logo+应用名+开发者） */}
       {useNewHeader ? (
-        <div className="card-header guangdada-card-header">
+        <div className="card-header guangdada-card-header guangdada-card-header-with-ellipsis">
           <div className="guangdada-header-icon-wrap" title="应用信息">
             <div className="guangdada-header-avatar">
               <span className="guangdada-header-avatar-icon guangdada-header-avatar-icon--show" aria-hidden>
@@ -276,9 +304,6 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
               <div className="guangdada-header-advertiser" title={appName !== 'N/A' ? appName : (item.advertiser_name || '')}>
                 {appName !== 'N/A' ? appName : '—'}
               </div>
-              <button type="button" className="guangdada-header-ellipsis" aria-label="更多" onClick={(e) => e.stopPropagation()}>
-                <svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d="M176 511a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0z"/></svg>
-              </button>
             </div>
             <div className="guangdada-header-device-row">
               {item.app_type === 3 && (item.ecom_advertiser_id != null && item.ecom_advertiser_id !== '') ? (
@@ -304,9 +329,45 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
               )}
             </div>
           </div>
+          {(onBlockAdvertiser || item.logo_url) ? (
+            <Popover
+              trigger="click"
+              placement="bottomRight"
+              content={
+                <div className="guangdada-header-ellipsis-popover">
+                  {onBlockAdvertiser && (
+                    <button
+                      type="button"
+                      className="guangdada-header-ellipsis-action"
+                      onClick={() => onBlockAdvertiser(item)}
+                    >
+                      不看该广告主创意
+                    </button>
+                  )}
+                  {item.logo_url && (
+                    <button
+                      type="button"
+                      className="guangdada-header-ellipsis-action"
+                      onClick={handleDownloadAppIcon}
+                    >
+                      下载当前 app icon
+                    </button>
+                  )}
+                </div>
+              }
+            >
+              <button type="button" className="guangdada-header-ellipsis" aria-label="更多" onClick={(e) => e.stopPropagation()}>
+                <svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d="M176 511a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0z"/></svg>
+              </button>
+            </Popover>
+          ) : (
+            <button type="button" className="guangdada-header-ellipsis" aria-label="更多" onClick={(e) => e.stopPropagation()}>
+              <svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d="M176 511a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0z"/></svg>
+            </button>
+          )}
         </div>
       ) : (item.logo_url || appName !== 'N/A') ? (
-        <div className="card-header">
+        <div className="card-header guangdada-card-header-with-ellipsis">
           {item.logo_url && (
             <img
               src={item.logo_url}
@@ -318,9 +379,44 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
           )}
           <div className="card-header-info">
             <div className="card-app-name">{appName}</div>
-              <div className="card-developer">{developerDisplay}</div>
-           
+            <div className="card-developer">{developerDisplay}</div>
           </div>
+          {(onBlockAdvertiser || item.logo_url) ? (
+            <Popover
+              trigger="click"
+              placement="bottomRight"
+              content={
+                <div className="guangdada-header-ellipsis-popover">
+                  {onBlockAdvertiser && (
+                    <button
+                      type="button"
+                      className="guangdada-header-ellipsis-action"
+                      onClick={() => onBlockAdvertiser(item)}
+                    >
+                      不看该广告主创意
+                    </button>
+                  )}
+                  {item.logo_url && (
+                    <button
+                      type="button"
+                      className="guangdada-header-ellipsis-action"
+                      onClick={handleDownloadAppIcon}
+                    >
+                      下载当前 app icon
+                    </button>
+                  )}
+                </div>
+              }
+            >
+              <button type="button" className="guangdada-header-ellipsis" aria-label="更多" onClick={(e) => e.stopPropagation()}>
+                <svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d="M176 511a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0z"/></svg>
+              </button>
+            </Popover>
+          ) : (
+            <button type="button" className="guangdada-header-ellipsis" aria-label="更多" onClick={(e) => e.stopPropagation()}>
+              <svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d="M176 511a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0z"/></svg>
+            </button>
+          )}
         </div>
       ) : null}
       
