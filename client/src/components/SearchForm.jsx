@@ -494,12 +494,12 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
         putOverseaInland: null, // 海外/国内（未使用）
         tradeLevel1: [], // 行业一级分类（未使用）
         tradeLevel2: [], // 行业二级分类（未使用）
-        tradeLevel3: [], // 行业三级分类（从productType级联选择中提取，需要处理）
+        tradeLevel3: Array.isArray(formDataToUse.productType) ? formDataToUse.productType.map(String) : [], // 行业三级/四级：与「行业类型」级联选择器一致，传 level4 的 ccode 数组
         subjectType: [], // 主题类型（未使用）
         countryLevel2: formDataToUse.countryLevel2 || [], // 国家/地区（对应：国家/地区级联选择器）- 在 baseOption 中
         adfactionIds: [], // 广告行动号召ID（未使用）
         mediaIds: formDataToUse.mediaIds || [], // 流量渠道（对应：流量渠道选择器）- 在 baseOption 中
-        device: formDataToUse.device || [], // 操作系统（对应：操作系统选择器）- 在 baseOption 中
+        device: Array.isArray(formDataToUse.device) ? formDataToUse.device.map(String) : [], // 操作系统：iOS→["2"]，Android→["1"]，字符串数组
         topicType: [], // 主题类型（未使用）
         dayMode: "DY", // 日期模式（固定值："DY"）
         productModel: Array.isArray(formDataToUse.productModel) ? formDataToUse.productModel.map(String) : (formDataToUse.productModel ? [String(formDataToUse.productModel)] : []), // 产品模型多选 - 在 baseOption 中，数组格式
@@ -634,9 +634,9 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       searchParams.productIds = Array.isArray(formDataToUse.insightrackrProductIds) ? formDataToUse.insightrackrProductIds : [];
       // 注意：productType 应该在 productOption 中，不在顶层
       searchParams.productOption = {
-        productType: formDataToUse.productType && formDataToUse.productType.length > 0 
-          ? formDataToUse.productType 
-          : [], // 产品类型/行业类型（对应：行业类型级联选择器）- 在 productOption 中，且是数组格式
+        productType: Array.isArray(formDataToUse.productType) && formDataToUse.productType.length > 0
+          ? formDataToUse.productType.map(String)
+          : [], // 产品类型/行业类型（level4 ccode 数组，与 baseOption.tradeLevel3 一致）
         selling: formDataToUse.selling || [], // 搜索推广方式（对应：推广方式级联选择器）
         monetization: formDataToUse.monetization ? [formDataToUse.monetization] : [], // 变现类型（对应：变现类型选择器）
         payType: formDataToUse.payType ? [formDataToUse.payType] : [], // 下载类型（对应：下载类型选择器）

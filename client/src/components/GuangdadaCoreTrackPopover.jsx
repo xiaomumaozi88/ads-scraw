@@ -80,7 +80,7 @@ function GuangdadaCoreTrackPopover({ value = [], onChange, onConfirm, onCancel, 
                   {cat.title}
                   {cat.newBadge && (
                     <span className="ant-badge antd-sm-badge-wrap guangdada-core-track-new-badge" title="NEW">
-                      <sup className="ant-scroll-number ant-badge-count ant-badge-multiple-words">NEW</sup>
+                    
                     </span>
                   )}
                 </div>

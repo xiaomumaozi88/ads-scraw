@@ -219,8 +219,7 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
   const width = targetW;
   const height = targetH;
   const BLUR_PX = 50;
-  const TARGET_FPS = 30;
-  const frameInterval = 1000 / TARGET_FPS;
+  const DEFAULT_FPS = 30;
   const logPrefix = '[batchDownload 视频]';
 
   const mainPromise = new Promise((resolve, reject) => {
@@ -388,48 +387,75 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
             return rec;
           };
 
-          let lastVideoTime = -1;
           let lastProgressUpdate = 0;
 
-          let drawFrameLogged = false;
-          const drawFrame = (timestamp) => {
+          /** 绘制一帧到画布（供 captureStream 采集）；可选更新进度 */
+          const drawOneFrame = (updateProgress = true) => {
+            ctx.clearRect(0, 0, width, height);
+            applyBlurBg();
+            drawSharp();
+            if (updateProgress && onProgress && video.duration > 0) {
+              const progress = (video.currentTime / video.duration) * 100;
+              const now = performance.now();
+              if (now - lastProgressUpdate >= 80) {
+                onProgress(Math.min(progress, 99));
+                lastProgressUpdate = now;
+              }
+            }
+          };
+
+          /** 结束录制：画最后一帧、进度 100%、延迟后 stop */
+          let finishLogged = false;
+          const finishRecording = () => {
+            if (finishLogged) return;
+            finishLogged = true;
+            if (captureIntervalId != null) {
+              clearInterval(captureIntervalId);
+              captureIntervalId = null;
+            }
+            console.log(logPrefix, 'video 结束, 准备停止录制');
+            drawOneFrame(false);
+            if (onProgress) onProgress(100);
+            setTimeout(() => {
+              if (recorder && recorder.state === 'recording') recorder.stop();
+            }, 300);
+          };
+
+          /** 使用 requestVideoFrameCallback 按源视频逐帧绘制，避免掉帧（支持则优先） */
+          const useRequestVideoFrameCallback =
+            typeof video.requestVideoFrameCallback === 'function';
+
+          /** 输出帧率：与源视频一致，通过 captureStream(0).getSettings().frameRate 检测，不可用时用 DEFAULT_FPS */
+          let effectiveFps = DEFAULT_FPS;
+          let effectiveFrameInterval = 1000 / DEFAULT_FPS;
+
+          /** 按 effectiveFps 用 setInterval 驱动抽帧（与源视频帧率一致） */
+          let captureIntervalId = null;
+          const startFixedRateCapture = () => {
+            captureIntervalId = setInterval(() => {
+              if (video.ended) {
+                finishRecording();
+                return;
+              }
+              if (video.paused) return;
+              drawOneFrame(true);
+            }, effectiveFrameInterval);
+          };
+
+          /** 使用 requestVideoFrameCallback 时：每帧回调绘制一次，与源视频帧率一致 */
+          const scheduleVideoFrameCallback = () => {
             if (video.ended) {
-              if (!drawFrameLogged) {
-                console.log(logPrefix, 'video.ended, 准备停止录制');
-                drawFrameLogged = true;
-              }
-              ctx.clearRect(0, 0, width, height);
-              applyBlurBg();
-              drawSharp();
-              if (onProgress) onProgress(100);
-              setTimeout(() => {
-                if (recorder && recorder.state === 'recording') recorder.stop();
-              }, 300);
+              finishRecording();
               return;
             }
-
-            if (video.paused) {
-              requestAnimationFrame(drawFrame);
-              return;
-            }
-
-            const now = timestamp || performance.now();
-            const t = video.currentTime;
-            const elapsed = lastVideoTime >= 0 ? t - lastVideoTime : frameInterval / 1000;
-            if (elapsed >= 1 / TARGET_FPS || lastVideoTime < 0) {
-              ctx.clearRect(0, 0, width, height);
-              applyBlurBg();
-              drawSharp();
-              lastVideoTime = t;
-              if (onProgress && video.duration > 0) {
-                const progress = (t / video.duration) * 100;
-                if (now - lastProgressUpdate >= 80) {
-                  onProgress(Math.min(progress, 99));
-                  lastProgressUpdate = now;
-                }
+            video.requestVideoFrameCallback((now, metadata) => {
+              if (video.ended) {
+                finishRecording();
+                return;
               }
-            }
-            requestAnimationFrame(drawFrame);
+              drawOneFrame(true);
+              scheduleVideoFrameCallback();
+            });
           };
 
           const addAudioTracksToStream = (combinedStream) => {
@@ -457,14 +483,34 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
               if (audioContext && audioContext.state === 'suspended') {
                 audioContext.resume().catch(() => {});
               }
-              const canvasStream = canvas.captureStream(TARGET_FPS);
+              // 尝试从源视频轨道读取帧率，使所有尺寸的导出都与原视频帧率一致
+              try {
+                const srcStream = video.captureStream(0);
+                const srcTrack = srcStream?.getVideoTracks?.()?.[0];
+                const reported = srcTrack?.getSettings?.()?.frameRate;
+                if (typeof reported === 'number' && reported >= 1 && reported <= 120) {
+                  effectiveFps = Math.round(reported);
+                  effectiveFrameInterval = 1000 / effectiveFps;
+                  console.log(logPrefix, '检测到源视频帧率:', effectiveFps, 'fps');
+                }
+              } catch (e) {
+                console.warn(logPrefix, '无法读取源视频帧率，使用默认', DEFAULT_FPS, 'fps:', e?.message);
+              }
+
+              const canvasStream = canvas.captureStream(effectiveFps);
               const combinedStream = new MediaStream();
               canvasStream.getVideoTracks().forEach((t) => combinedStream.addTrack(t));
 
               const startRecorder = () => {
                 recorder = setupRecorder(combinedStream);
                 recorder.start(100);
-                requestAnimationFrame(drawFrame);
+                video.addEventListener('ended', finishRecording, { once: true });
+                console.log(logPrefix, '抽帧方式:', useRequestVideoFrameCallback ? 'requestVideoFrameCallback(与源视频同帧率)' : `setInterval(${effectiveFps}fps)`);
+                if (useRequestVideoFrameCallback) {
+                  scheduleVideoFrameCallback();
+                } else {
+                  startFixedRateCapture();
+                }
               };
 
               // 播放后等约 300ms 再加音频轨，避免录出来的 WebM 缺音轨或开头无声

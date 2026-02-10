@@ -10,39 +10,56 @@ function ProductCascader({ value = [], onChange }) {
   const [searchValue, setSearchValue] = useState('');
   const [autoExpandParent, setAutoExpandParent] = useState(true);
 
+  // 三级结构：level2(行业一级) -> level3(如「消除」) -> level4(如「经营消除、经典消除、策略消除」)，API 的 tradeLevel3 为 level4 的 ccode
   const { treeData, allProductCodes, categoryToProducts } = useMemo(() => {
-    const categories = [];
-    const productsByCategory = {};
-    const categoryToProductsMap = {};
+    const level2Items = [];
+    const level3ByParent = {};
+    const level4ByParent = {};
     const allProductCodesSet = new Set();
 
     type5Data.data.forEach(item => {
-      if (item.level === 2 && (item.parentElementCode === '' || item.parentElementCode === null)) {
-        categories.push(item);
-        productsByCategory[item.elementCode] = [];
+      if (item.level === 2 && (item.parentElementCode === '' || item.parentElementCode == null)) {
+        level2Items.push(item);
       } else if (item.level === 3 && item.parentElementCode) {
-        if (!productsByCategory[item.parentElementCode]) {
-          productsByCategory[item.parentElementCode] = [];
-        }
-        productsByCategory[item.parentElementCode].push(item);
+        if (!level3ByParent[item.parentElementCode]) level3ByParent[item.parentElementCode] = [];
+        level3ByParent[item.parentElementCode].push(item);
+      } else if (item.level === 4 && item.parentElementCode) {
+        if (!level4ByParent[item.parentElementCode]) level4ByParent[item.parentElementCode] = [];
+        level4ByParent[item.parentElementCode].push(item);
         allProductCodesSet.add(item.ccode);
       }
     });
 
-    categories.sort((a, b) => (b.orderNum || 0) - (a.orderNum || 0));
-    Object.keys(productsByCategory).forEach(key => {
-      productsByCategory[key].sort((a, b) => (a.orderNum || 0) - (b.orderNum || 0));
-      categoryToProductsMap[key] = (productsByCategory[key] || []).map(p => p.ccode);
+    level2Items.sort((a, b) => (b.orderNum || 0) - (a.orderNum || 0));
+    Object.keys(level3ByParent).forEach(k => { level3ByParent[k].sort((a, b) => (a.orderNum || 0) - (b.orderNum || 0)); });
+    Object.keys(level4ByParent).forEach(k => { level4ByParent[k].sort((a, b) => (a.orderNum || 0) - (b.orderNum || 0)); });
+
+    // 每个节点（level2/level3）下所有 leaf 的 ccode 集合，用于「全选该节点」时勾选子节点
+    const categoryToProductsMap = {};
+    level2Items.forEach(l2 => {
+      const leaves = [];
+      (level3ByParent[l2.elementCode] || []).forEach(l3 => {
+        (level4ByParent[l3.elementCode] || []).forEach(l4 => leaves.push(l4.ccode));
+      });
+      categoryToProductsMap[l2.elementCode] = leaves;
+    });
+    Object.keys(level3ByParent).forEach(parentCode => {
+      categoryToProductsMap[parentCode] = (level4ByParent[parentCode] || []).map(l4 => l4.ccode);
     });
 
-    const treeData = categories.map(category => ({
-      key: category.elementCode,
-      title: category.nameCn,
-      searchLabel: category.nameCn,
-      children: (productsByCategory[category.elementCode] || []).map(product => ({
-        key: product.ccode,
-        title: product.nameCn,
-        searchLabel: product.nameCn,
+    const treeData = level2Items.map(l2 => ({
+      key: l2.elementCode,
+      title: l2.nameCn,
+      searchLabel: l2.nameCn,
+      children: (level3ByParent[l2.elementCode] || []).map(l3 => ({
+        key: l3.elementCode,
+        title: l3.nameCn,
+        searchLabel: l3.nameCn,
+        children: (level4ByParent[l3.elementCode] || []).map(l4 => ({
+          key: l4.ccode,
+          title: l4.nameCn,
+          searchLabel: l4.nameCn,
+        })),
       })),
     }));
 
@@ -104,7 +121,7 @@ function ProductCascader({ value = [], onChange }) {
     if (!value || value.length === 0) return '搜索行业类型';
     if (value.length <= 3) {
       const names = value.map(cc => {
-        const p = type5Data.data.find(item => item.level === 3 && item.ccode === cc);
+        const p = type5Data.data.find(item => item.level === 4 && item.ccode === cc);
         return p ? p.nameCn : cc;
       });
       return names.join(', ');

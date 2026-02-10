@@ -1779,6 +1779,89 @@ body {
   min-width: 80px;
 }
 
+/* 核心赛道/玩法/主题/IP Popover */
+.guangdada-core-track-popover-overlay.ant-popover {
+  max-width: none;
+}
+.guangdada-core-track-popover-overlay .ant-popover-inner {
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+.guangdada-core-track-popover-overlay .ant-popover-inner-content {
+  padding: 0;
+}
+.guangdada-core-track-popover {
+  min-width: 520px;
+  display: flex;
+  flex-direction: column;
+}
+.guangdada-core-track-popover-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.guangdada-core-track-popover-search {
+  flex: 1;
+  min-width: 0;
+}
+.guangdada-core-track-popover-content {
+  max-height: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.guangdada-core-track-popover-scroll {
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+.guangdada-core-track-popover-section {
+  margin-bottom: 16px;
+}
+.guangdada-core-track-popover-section:last-child {
+  margin-bottom: 0;
+}
+.guangdada-core-track-popover-section-header {
+  margin-bottom: 8px;
+}
+.guangdada-core-track-popover-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+.guangdada-core-track-popover-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 20px;
+}
+.guangdada-core-track-popover-grid .ant-checkbox-wrapper {
+  margin-inline-end: 0;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.guangdada-core-track-popover-grid .ant-checkbox-wrapper .ant-checkbox {
+  flex-shrink: 0;
+}
+.guangdada-core-track-popover-grid .ant-checkbox-wrapper > span:last-child {
+  min-width: 0;
+  margin-left: 8px;
+}
+.guangdada-core-track-item-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.guangdada-core-track-popover-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 80px;
+  padding: 12px 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
 /* 渠道「更多」Popover */
 .guangdada-channel-popover-overlay.ant-popover {
   max-width: none;

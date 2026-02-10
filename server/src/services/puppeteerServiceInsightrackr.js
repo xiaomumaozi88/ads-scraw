@@ -1027,8 +1027,8 @@ const buildBaseSearchParams = () => {
             mediaIds: [],
             device: [],
             topicType: [],
-            dayMode: "DY",
             productModel: [],
+            dayMode: "DY",
             startTime: "2025-01-28",
             endTime: "2026-01-27",
             compareEndDate: "",
@@ -1038,7 +1038,6 @@ const buildBaseSearchParams = () => {
             sortField: "15",
             sortRule: "desc",
             gptSearch: false,
-            globalSearch: true,
             materialTopLimit: "",
             szfxList: []
         },
@@ -1047,7 +1046,11 @@ const buildBaseSearchParams = () => {
         webTools: [],
         demoadFormats: [],
         adMediaType: [],
-        materialRemovalRepeat: false
+        materialRemovalRepeat: false,
+        materialType: '',
+        materialTag: [],
+        creativeTeam: [],
+        szfxList: []
     };
 };
 
@@ -1074,6 +1077,29 @@ const deepMerge = (base, override) => {
     }
     
     return result;
+};
+
+// 按官方 API 请求体键顺序排列（与官方抓包一致）
+const OFFICIAL_BODY_KEY_ORDER = [
+    'keyWord', 'keyWordType', 'keyWordList', 'keyWordListType', 'isNew',
+    'creativeList', 'appealTypeList', 'interactionList', 'languages', 'productIds',
+    'productOption', 'baseOption',
+    'materialType', 'classIds', 'seelTargets', 'webTools', 'demoadFormats', 'adMediaType',
+    'materialTag', 'creativeTeam', 'szfxList',
+    'materialRemovalRepeat'
+];
+const buildOrderedRequestBody = (body) => {
+    const ordered = {};
+    for (const key of OFFICIAL_BODY_KEY_ORDER) {
+        if (Object.prototype.hasOwnProperty.call(body, key)) {
+            ordered[key] = body[key];
+        }
+    }
+    // 未在顺序表中的键也保留在末尾
+    for (const key of Object.keys(body)) {
+        if (!OFFICIAL_BODY_KEY_ORDER.includes(key)) ordered[key] = body[key];
+    }
+    return ordered;
 };
 
 // 请求数据接口
@@ -1153,6 +1179,23 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
             requestBody.baseOption.dayMode = 'DD';
             requestBody.baseOption.gptSearch = true;
         }
+    }
+    // 与官方一致：行业筛选只放在 baseOption.tradeLevel3，productOption.productType 传空数组
+    if (requestBody.productOption) requestBody.productOption.productType = [];
+    if (requestBody.baseOption && requestBody.baseOption.globalSearch !== undefined) {
+        delete requestBody.baseOption.globalSearch;
+    }
+    // baseOption 键顺序与官方一致（topicType -> productModel -> dayMode -> ...）
+    if (requestBody.baseOption) {
+        const baseOrder = ['permission', 'putOverseaInland', 'tradeLevel1', 'tradeLevel2', 'tradeLevel3', 'subjectType', 'countryLevel2', 'adfactionIds', 'mediaIds', 'device', 'topicType', 'productModel', 'dayMode', 'startTime', 'endTime', 'compareEndDate', 'compareStartDate', 'pageIndex', 'pageSize', 'sortField', 'sortRule', 'gptSearch', 'materialTopLimit', 'szfxList'];
+        const ordered = {};
+        for (const k of baseOrder) {
+            if (Object.prototype.hasOwnProperty.call(requestBody.baseOption, k)) ordered[k] = requestBody.baseOption[k];
+        }
+        for (const k of Object.keys(requestBody.baseOption)) {
+            if (!baseOrder.includes(k)) ordered[k] = requestBody.baseOption[k];
+        }
+        requestBody.baseOption = ordered;
     }
     
     try {
@@ -1269,16 +1312,18 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
             requestHeaders['Authorization'] = authorizationToken;
         }
         
+        // 按官方请求体键顺序排列后再发送，与官方行为一致
+        const bodyToSend = buildOrderedRequestBody(requestBody);
         // 打印完整请求信息
         console.log('\n========== Insightrackr 实际请求信息 ==========');
         console.log('URL:', fullUrl);
         console.log('Method: POST');
         console.log('Headers:', JSON.stringify(requestHeaders, null, 2));
-        console.log('Body:', JSON.stringify(requestBody, null, 2));
+        console.log('Body:', JSON.stringify(bodyToSend, null, 2));
         console.log('===============================================\n');
         logger.info('实际请求 URL:', fullUrl);
         logger.info('实际请求 Headers:', JSON.stringify(requestHeaders, null, 2));
-        logger.info('实际请求 Body:', JSON.stringify(requestBody, null, 2));
+        logger.info('实际请求 Body:', JSON.stringify(bodyToSend, null, 2));
         
         // 使用 Puppeteer 页面发送请求，手动添加 authorization header
         const response = await loginPage.evaluate(async (body, authToken, isInitRequest, headers, url) => {
@@ -1337,7 +1382,7 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
                     }
                 };
             }
-        }, requestBody, authorizationToken, isInit, requestHeaders, searchUrl);
+        }, bodyToSend, authorizationToken, isInit, requestHeaders, searchUrl);
         
         // 更新 cookies（从页面获取最新的）
         try {
@@ -1395,7 +1440,7 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
                     console.log('URL:', fullUrl);
                     console.log('Method: POST');
                     console.log('Headers:', JSON.stringify(requestHeaders, null, 2));
-                    console.log('Body:', JSON.stringify(requestBody, null, 2));
+                    console.log('Body:', JSON.stringify(bodyToSend, null, 2));
                     console.log('===============================================\n');
                     
                     const retryResponse = await loginPage.evaluate(async (body, authToken, isInitRequest, headers, url) => {
@@ -1454,7 +1499,7 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
                                 }
                             };
                         }
-                    }, requestBody, authorizationToken, isInit, requestHeaders, searchUrl);
+                    }, bodyToSend, authorizationToken, isInit, requestHeaders, searchUrl);
                     
                     return {
                         data: retryResponse.data,
@@ -1530,7 +1575,7 @@ export const fetchCountData = async (searchParams = {}) => {
         'creativeList', 'appealTypeList', 'interactionList', 'languages',
         'productIds', 'productOption', 'baseOption', 'classIds', 'seelTargets',
         'webTools', 'demoadFormats', 'adMediaType', 'materialRemovalRepeat',
-        'materialType', 'materialTag', 'creativeTeam', 'szfxList', 'collectTagId', 'collectTagBizType'
+        'materialType', 'materialTag', 'creativeTeam', 'szfxList'
     ];
     
     // 只保留 API 需要的字段
@@ -1563,6 +1608,21 @@ export const fetchCountData = async (searchParams = {}) => {
             requestBody.baseOption.gptSearch = true;
         }
     }
+    // 与官方一致：行业只放在 baseOption.tradeLevel3，productOption.productType 传空
+    if (requestBody.productOption) requestBody.productOption.productType = [];
+    if (requestBody.baseOption && requestBody.baseOption.globalSearch !== undefined) delete requestBody.baseOption.globalSearch;
+    if (requestBody.baseOption) {
+        const baseOrder = ['permission', 'putOverseaInland', 'tradeLevel1', 'tradeLevel2', 'tradeLevel3', 'subjectType', 'countryLevel2', 'adfactionIds', 'mediaIds', 'device', 'topicType', 'productModel', 'dayMode', 'startTime', 'endTime', 'compareEndDate', 'compareStartDate', 'pageIndex', 'pageSize', 'sortField', 'sortRule', 'gptSearch', 'materialTopLimit', 'szfxList'];
+        const ordered = {};
+        for (const k of baseOrder) {
+            if (Object.prototype.hasOwnProperty.call(requestBody.baseOption, k)) ordered[k] = requestBody.baseOption[k];
+        }
+        for (const k of Object.keys(requestBody.baseOption)) {
+            if (!baseOrder.includes(k)) ordered[k] = requestBody.baseOption[k];
+        }
+        requestBody.baseOption = ordered;
+    }
+    const countBodyToSend = buildOrderedRequestBody(requestBody);
     
     try {
         // 首先尝试获取 authorization token
@@ -1620,11 +1680,11 @@ export const fetchCountData = async (searchParams = {}) => {
         console.log('URL:', fullUrl);
         console.log('Method: POST');
         console.log('Headers:', JSON.stringify(requestHeaders, null, 2));
-        console.log('Body:', JSON.stringify(requestBody, null, 2));
+        console.log('Body:', JSON.stringify(countBodyToSend, null, 2));
         console.log('===============================================\n');
         logger.info('Count 实际请求 URL:', fullUrl);
         logger.info('Count 实际请求 Headers:', JSON.stringify(requestHeaders, null, 2));
-        logger.info('Count 实际请求 Body:', JSON.stringify(requestBody, null, 2));
+        logger.info('Count 实际请求 Body:', JSON.stringify(countBodyToSend, null, 2));
         
         // 使用 Puppeteer 页面发送请求
         const response = await loginPage.evaluate(async (body, authToken, headers, url) => {
@@ -1680,7 +1740,7 @@ export const fetchCountData = async (searchParams = {}) => {
                     }
                 };
             }
-        }, requestBody, authorizationToken, requestHeaders, countUrl);
+        }, countBodyToSend, authorizationToken, requestHeaders, countUrl);
         
         // 更新 cookies
         try {
