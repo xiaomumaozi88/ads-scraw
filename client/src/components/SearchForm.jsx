@@ -533,12 +533,12 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
         searchParams.baseOption.pageIndex = 1;
         searchParams.baseOption.pageSize = 4;
       } else {
-        // 图片/视频 Tab：与官方 imagevideo 请求完全一致，materialType 筛选才生效
+        // 图片/视频 Tab：与官方 imagevideo 请求一致，materialType 筛选才生效；排序使用表单所选（曝光预估=15、首次发现时间=3 等）
         searchParams.demoadFormats = [];
         searchParams.baseOption.dayMode = 'DD';
         searchParams.baseOption.gptSearch = true;
         searchParams.baseOption.globalSearch = false; // 官方请求无此字段，传 false 与官方行为一致
-        searchParams.baseOption.sortField = '3';     // 官方 imagevideo 默认 sortField "3"
+        // sortField/sortRule 已在上面从 formDataToUse 写入，不覆盖（用户选「曝光预估」则 sortField=15，选「首次发现时间」则 sortField=3）
         searchParams.baseOption.pageSize = 40;      // 官方 imagevideo 默认 pageSize 40
       }
       searchParams.insightrackrSearchTab = insightrackrSearchTab; // 服务端据此切换 preplay / imagevideo 接口

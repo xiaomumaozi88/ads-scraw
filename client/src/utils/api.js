@@ -33,6 +33,33 @@ export function formatRequestError(message) {
   return msg ? `${msg}，请重试。` : '请重试。';
 }
 
+/**
+ * 后端转码视频：POST /api/transcode-video，返回 MP4 Blob
+ * @param {string} videoUrl - 视频 URL
+ * @param {number} [targetW] - 目标宽，默认 800
+ * @param {number} [targetH] - 目标高，默认 800
+ * @param {AbortSignal} [signal] - 可选，用于超时或取消
+ * @returns {Promise<Blob>}
+ */
+export async function transcodeVideoBackend(videoUrl, targetW = 800, targetH = 800, signal = null) {
+  const res = await fetch(`${API_BASE}/transcode-video`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      videoUrl: String(videoUrl).trim(),
+      targetW: Number(targetW) || 800,
+      targetH: Number(targetH) || 800,
+    }),
+    credentials: 'same-origin',
+    signal,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `转码失败: ${res.status}`);
+  }
+  return res.blob();
+}
+
 export async function getStatus(platform) {
   // 使用相对路径，localhost 与 IP 访问都会走当前页面的 origin，由 Vite 代理到后端；登录状态在后端共享
   const response = await fetch(`${API_BASE}/${platform}/status`, {

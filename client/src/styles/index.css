@@ -4361,19 +4361,21 @@ body.insightrackr-fullscreen-active .data-card {
     white-space: nowrap;
 }
 
-/* Insightrackr 平台专用 - 视频播放按钮居中 */
+/* Insightrackr 平台专用 - 视频播放按钮与时长居中（与广大大一致：播放按钮+时长一起） */
 .creative-card .play-icon-center {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 60px;
+    min-width: 60px;
     height: 60px;
+    padding: 0 14px;
     background: rgba(255, 255, 255, 0.9);
-    border-radius: 50%;
+    border-radius: 999px;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 6px;
     color: #333;
     cursor: pointer;
     z-index: 5;
@@ -4390,6 +4392,12 @@ body.insightrackr-fullscreen-active .data-card {
     font-size: 24px;
     line-height: 1;
     margin-left: 3px; /* 稍微向右偏移，让播放图标看起来更居中 */
+}
+
+.creative-card .play-icon-center .video-duration {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
 }
 
 /* 视频时长 - 右上角，hover 卡片时显示 */

@@ -186,7 +186,82 @@ echo ">>> 部署完成，访问 http://<服务器IP>:3000"
 
 ---
 
-## 五、简要架构（生产）
+## 五、本地构建 Docker 镜像再上传到服务器（推荐：服务器无法访问 jsDelivr 时）
+
+当服务器构建时从 cdn.jsDelivr 下载 ffmpeg-core 超时（ETIMEDOUT）时，可在**本地**构建镜像并导出，再上传到服务器加载运行。  
+本地为 Mac（arm64）时，脚本会使用 `--platform linux/amd64` 构建，以便在 x86 服务器上运行。
+
+### 快速参考（三步复制执行）
+
+在**项目根目录**依次执行（密钥/用户/IP 按自己环境替换）：
+
+```bash
+# 1. 本地构建并导出（约 3～5 分钟，生成 ads-scraw-docker.tar，约 700MB）
+./scripts/build-docker-and-export.sh
+
+# 2. 上传到服务器（约 1～2 分钟）
+scp -i ~/.ssh/id_ed25519_nginx ads-scraw-docker.tar ecs-user@120.27.200.123:/home/ecs-user/
+
+# 3. 在服务器上加载并启动（需 sudo 若当前用户不在 docker 组）
+ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123 "cd /home/ecs-user && sudo docker load -i ads-scraw-docker.tar && sudo docker stop ads-scraw 2>/dev/null || true && sudo docker rm ads-scraw 2>/dev/null || true && sudo docker run -d --name ads-scraw -p 3000:3000 -e NODE_ENV=production --restart unless-stopped --shm-size=1g ads-scraw:latest"
+```
+
+完成后访问：`http://120.27.200.123:3000`。
+
+---
+
+### 1. 本地：构建并导出镜像
+
+在项目根目录执行：
+
+```bash
+chmod +x scripts/build-docker-and-export.sh
+./scripts/build-docker-and-export.sh
+```
+
+会在当前目录生成 `ads-scraw-docker.tar`（约 700MB～1GB）。也可指定输出路径：
+
+```bash
+./scripts/build-docker-and-export.sh /tmp/ads-scraw.tar
+```
+
+### 2. 上传到服务器
+
+将生成的 tar 文件传到服务器（替换为你的密钥、用户、IP 和路径）：
+
+```bash
+scp -i ~/.ssh/你的密钥 ads-scraw-docker.tar 用户@服务器IP:/home/xxx/
+```
+
+### 3. 服务器上：加载镜像并运行
+
+SSH 登录服务器后（若普通用户无 Docker 权限，命令前加 `sudo`）：
+
+```bash
+cd /home/xxx   # 或你上传到的目录
+
+# 加载镜像
+sudo docker load -i ads-scraw-docker.tar
+
+# 停止并删除旧容器（若存在）
+sudo docker stop ads-scraw 2>/dev/null || true
+sudo docker rm ads-scraw 2>/dev/null || true
+
+# 运行新容器
+sudo docker run -d \
+  --name ads-scraw \
+  -p 3000:3000 \
+  -e NODE_ENV=production \
+  --restart unless-stopped \
+  --shm-size=1g \
+  ads-scraw:latest
+```
+
+访问 `http://<服务器IP>:3000`。
+
+---
+
+## 六、简要架构（生产）
 
 - 单进程：Express 同时提供 **API**（`/api/*`）和 **前端静态资源**（`dist/`）。
 - 未命中静态文件且非 API 的 GET 请求会回退到 `dist/index.html`，由前端路由处理。

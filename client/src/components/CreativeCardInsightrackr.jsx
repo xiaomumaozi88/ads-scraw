@@ -193,7 +193,7 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
           : (item.adReach >= 10000
             ? `${(item.adReach / 10000).toFixed(0)}万`
             : item.adReach.toString());
-        return `受众人数数量 ${reachValue}`;
+        return `受众人群数量 ${reachValue}`;
       
       case '17': // 素材热度
         if (!item.heatValue && item.heatValue !== 0) return null;
@@ -225,14 +225,15 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
           : item.impression)))
     : '';
 
-  // 视频时长：videoTimeSpan 单位秒，格式为 MM:SS，例如 12 -> 00:12
-  const videoDurationFormatted = useMemo(() => {
+  // 视频时长：与广大大一致，≥60s 为 "1m12s"，否则 "59s"，和播放按钮一起显示
+  const videoDurationLabel = useMemo(() => {
     if (!isVideo) return null;
     const sec = item.videoTimeSpan;
     if (sec === undefined || sec === null) return null;
-    const s = Math.floor(Number(sec) % 60);
-    const m = Math.floor(Number(sec) / 60);
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    const s = Math.floor(Number(sec));
+    if (Number.isNaN(s) || s < 0) return null;
+    if (s >= 60) return `${Math.floor(s / 60)}m${s % 60}s`;
+    return `${s}s`;
   }, [isVideo, item.videoTimeSpan]);
 
   // 提取标题/描述
@@ -387,10 +388,6 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
             {getMetricsLabel}
           </div>
         )}
-        {/* 视频时长 - hover 时显示在右上角 */}
-        {isVideo && videoDurationFormatted && (
-          <div className="video-duration-badge">{videoDurationFormatted}</div>
-        )}
         {/* 试玩广告：在新窗口打开 */}
         {isPlayable && playHtmlUrl && (
           <div className="card-thumbnail-open-playable" onClick={(e) => { e.stopPropagation(); window.open(playHtmlUrl, '_blank', 'noopener'); }}>
@@ -398,7 +395,7 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
             <span className="card-download-text">打开试玩</span>
           </div>
         )}
-        {/* 视频播放按钮 - 居中显示，可点击 */}
+        {/* 播放按钮和时长 - 居中显示（与广大大一致） */}
         {isVideo && (
           <div 
             className="play-icon-center"
@@ -410,6 +407,7 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
             }}
           >
             <span className="play-symbol">▶</span>
+            {videoDurationLabel && <span className="video-duration">{videoDurationLabel}</span>}
           </div>
         )}
         {/* 下载按钮 - 位于 thumbnail 底部，hover 卡片时显示（试玩广告不显示，改用「打开试玩」） */}

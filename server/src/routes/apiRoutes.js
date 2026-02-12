@@ -12,11 +12,13 @@ import * as statusControllerGuangdada from '../controllers/statusControllerGuang
 import * as clearLoginControllerGuangdada from '../controllers/clearLoginControllerGuangdada.js';
 import * as searchControllerGuangdada from '../controllers/searchControllerGuangdada.js';
 import * as proxyMediaController from '../controllers/proxyMediaController.js';
+import * as transcodeVideoController from '../controllers/transcodeVideoController.js';
 
 const router = Router();
 
 router.get('/health', healthController.getHealth);
 router.get('/proxy-media', proxyMediaController.getProxyMedia);
+router.post('/transcode-video', transcodeVideoController.transcodeVideo);
 router.get('/download-image', proxyMediaController.getDownloadImage);
 router.post('/health/clear-logs', healthController.postClearLogs);
 router.post('/health/reopen-browser', healthController.postReopenBrowser);

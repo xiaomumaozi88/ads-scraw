@@ -2,9 +2,12 @@
 FROM node:18-buster AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
-# 跳过 Puppeteer 下载 Chrome（国内易 ECONNRESET），运行时用 apt 安装的 Chrome
-RUN PUPPETEER_SKIP_DOWNLOAD=1 npm ci
+COPY scripts ./scripts
+# 跳过 Puppeteer 与 postinstall（国内构建时从 jsDelivr 下载 ffmpeg-core 易 ETIMEDOUT）
+RUN PUPPETEER_SKIP_DOWNLOAD=1 npm ci --ignore-scripts
 COPY . .
+# 尝试下载 ffmpeg-core 到 client/public/，失败不中断构建（前端运行时会回退 CDN）
+RUN node scripts/download-ffmpeg-core.js || true
 RUN npm run build
 
 # 阶段二：运行环境（含 Chrome，供 Puppeteer 使用）
@@ -22,12 +25,13 @@ RUN echo "deb http://mirrors.aliyun.com/debian-archive/debian/ buster main" > /e
 
 RUN wget -qO - https://dl.google.com/linux/linux_signing_key.pub | tee /etc/apt/trusted.gpg.d/google.asc \
   && sh -c 'echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google.list' \
-  && apt-get update && apt-get install -y google-chrome-stable \
+  && apt-get update && apt-get install -y google-chrome-stable ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN PUPPETEER_SKIP_DOWNLOAD=1 npm ci --omit=dev
+# 运行时阶段不需要 postinstall（ffmpeg-core 已在 builder 阶段下载并打入 dist）
+RUN PUPPETEER_SKIP_DOWNLOAD=1 npm ci --omit=dev --ignore-scripts
 COPY server ./server
 COPY --from=builder /app/dist ./dist
 

@@ -207,15 +207,46 @@ export async function processImageToBlob(imageUrl, targetW, targetH, onProgress 
 }
 
 /**
- * 视频 → 固定尺寸 Blob（前景等比 contain 居中 + 背景等比 cover 铺满后模糊，无留白）
- * 逻辑：画布=目标尺寸；背景=原视频按原比例放大铺满画布后高斯模糊；前景=原视频等比 contain 居中
- * @param {string} videoUrl - 视频 URL
- * @param {number} targetW - 目标宽
- * @param {number} targetH - 目标高
- * @param {Function} [onProgress] - 进度回调 (0-100)
- * @returns {Promise<Blob>}
+ * 视频 → 固定尺寸 Blob（优先后端转码，失败则 ffmpeg.wasm，再失败则 canvas+MediaRecorder）
  */
-export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null) {
+export async function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null) {
+  // 1) 优先后端转码（更快、不占浏览器资源）
+  try {
+    if (typeof onProgress === 'function') onProgress(10);
+    const { transcodeVideoBackend } = await import('./api.js');
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 300000);
+    const blob = await transcodeVideoBackend(videoUrl, targetW, targetH, controller.signal);
+    clearTimeout(t);
+    if (typeof onProgress === 'function') onProgress(100);
+    return blob;
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      console.warn('[batchDownload 视频] 后端转码超时，改用前端 ffmpeg');
+    } else {
+      console.warn('[batchDownload 视频] 后端转码不可用，改用前端 ffmpeg:', e?.message);
+    }
+  }
+
+  // 2) 前端 ffmpeg.wasm
+  try {
+    const { processVideoToBlobWithFFmpeg } = await import('./videoFFmpeg.js');
+    return await withTimeout(
+      processVideoToBlobWithFFmpeg(videoUrl, targetW, targetH, onProgress),
+      300000,
+      '视频处理超时（约 5 分钟）'
+    );
+  } catch (e) {
+    console.warn('[batchDownload 视频] ffmpeg 处理失败，回退到 canvas:', e?.message);
+    return processVideoToBlobCanvas(videoUrl, targetW, targetH, onProgress);
+  }
+}
+
+/**
+ * 视频 → 固定尺寸 Blob（canvas 绘制 + MediaRecorder，回退方案）
+ * 逻辑：画布=目标尺寸；背景=原视频 cover 后高斯模糊；前景=原视频 contain 居中
+ */
+function processVideoToBlobCanvas(videoUrl, targetW, targetH, onProgress = null) {
   const width = targetW;
   const height = targetH;
   const BLUR_PX = 50;
@@ -223,11 +254,9 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
   const logPrefix = '[batchDownload 视频]';
 
   const mainPromise = new Promise((resolve, reject) => {
-    console.log(logPrefix, '开始 fetch 视频:', videoUrl?.slice?.(0, 80));
     fetchWithTimeout(videoUrl, { mode: 'cors', referrerPolicy: 'no-referrer' }, 45000)
       .then((res) => res.blob())
       .then((videoBlob) => {
-        console.log(logPrefix, 'fetch 完成, blob 大小:', videoBlob?.size, 'bytes');
         const video = document.createElement('video');
         video.src = URL.createObjectURL(videoBlob);
         // 不设置 muted / volume=0，否则浏览器可能不解码音频，录不到声音；静音由 Web Audio GainNode 控制
@@ -258,8 +287,6 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
         video.onloadedmetadata = () => {
           const vw = video.videoWidth;
           const vh = video.videoHeight;
-          const dur = video.duration;
-          console.log(logPrefix, 'onloadedmetadata:', vw, 'x', vh, 'duration=', dur);
           if (!vw || !vh) {
             console.error(logPrefix, '无法获取视频尺寸 vw/vh 为 0');
             cleanup();
@@ -329,7 +356,6 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
               gainNode.connect(audioContext.destination);
               // 一路：原声进录制（不经过 GainNode）
               audioSource.connect(audioDestination);
-              console.log(logPrefix, 'Web Audio 已连接：静音输出 + 录制分支');
             } catch (e) {
               console.warn(logPrefix, 'Web Audio 初始化失败，将仅录画面:', e?.message);
             }
@@ -353,7 +379,6 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
               : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
                 ? 'video/webm;codecs=vp8,opus'
                 : mimeVideoOnly);
-          if (mimeMp4) console.log(logPrefix, '使用原生 MP4 录制，无需转码');
           let recorder = null;
           let chunks = [];
           let mime = mimeVideoOnly;
@@ -370,7 +395,6 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
             rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
             rec.onstop = () => {
               const blob = new Blob(chunks, { type: mime });
-              console.log(logPrefix, '录制结束, 输出 blob 大小:', blob.size, '含音频:', hasAudio);
               cleanup();
               if (blob.size < 1000) {
                 console.error(logPrefix, '生成的视频过小:', blob.size);
@@ -413,7 +437,6 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
               clearInterval(captureIntervalId);
               captureIntervalId = null;
             }
-            console.log(logPrefix, 'video 结束, 准备停止录制');
             drawOneFrame(false);
             if (onProgress) onProgress(100);
             setTimeout(() => {
@@ -475,7 +498,6 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
               clearTimeout(readyWarnTimer);
               readyWarnTimer = null;
             }
-            console.log(logPrefix, '开始播放与录制, duration=', video.duration);
             if (onProgress) onProgress(0);
             video.currentTime = 0;
 
@@ -491,7 +513,6 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
                 if (typeof reported === 'number' && reported >= 1 && reported <= 120) {
                   effectiveFps = Math.round(reported);
                   effectiveFrameInterval = 1000 / effectiveFps;
-                  console.log(logPrefix, '检测到源视频帧率:', effectiveFps, 'fps');
                 }
               } catch (e) {
                 console.warn(logPrefix, '无法读取源视频帧率，使用默认', DEFAULT_FPS, 'fps:', e?.message);
@@ -505,7 +526,6 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
                 recorder = setupRecorder(combinedStream);
                 recorder.start(100);
                 video.addEventListener('ended', finishRecording, { once: true });
-                console.log(logPrefix, '抽帧方式:', useRequestVideoFrameCallback ? 'requestVideoFrameCallback(与源视频同帧率)' : `setInterval(${effectiveFps}fps)`);
                 if (useRequestVideoFrameCallback) {
                   scheduleVideoFrameCallback();
                 } else {
@@ -543,7 +563,6 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
           setTimeout(() => startPlayAndRecord(), 1200);
         };
 
-        console.log(logPrefix, '调用 video.load()，等待 canplay / canplaythrough 或 1.2s 后自动启动…');
         video.load();
       }
       )
@@ -552,7 +571,7 @@ export function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null
         reject(new Error('视频下载失败: ' + (e?.message || '')));
       });
   });
-  return withTimeout(mainPromise, 120000, '视频处理超时（约 2 分钟）');
+  return withTimeout(mainPromise, 300000, '视频处理超时（约 5 分钟）');
 }
 
 /** 预设输出尺寸（原尺寸为第一项且为默认） */

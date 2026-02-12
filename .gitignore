@@ -9,3 +9,6 @@ tmp/
 *.old
 docs/
 cat-catch/
+
+# 本地构建的 Docker 镜像导出（体积大，勿提交）
+ads-scraw-docker.tar
