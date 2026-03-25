@@ -28,8 +28,14 @@ export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
         '--password-store=basic',
         '--use-mock-keychain',
         '--no-zygote',
+        // 降低空闲时 CPU 占用（生产环境无界面）
+        '--disable-gpu',
+        '--disable-background-networking',
+        '--disable-sync',
+        '--disable-translate',
+        '--disable-session-crashed-bubble',
+        '--noerrdialogs',
         // '--single-process',
-        // '--disable-gpu',
     ],
 } : {
     defaultViewport: {
@@ -98,6 +104,13 @@ export const puppeteerOptionsInsightrackr = process.env.NODE_ENV !== 'developmen
         '--password-store=basic',
         '--use-mock-keychain',
         '--no-zygote',
+        // 降低空闲时 CPU 占用（生产环境无界面）
+        '--disable-gpu',
+        '--disable-background-networking',
+        '--disable-sync',
+        '--disable-translate',
+        '--disable-session-crashed-bubble',
+        '--noerrdialogs',
     ],
 } : {
     defaultViewport: {
@@ -197,3 +210,9 @@ export const puppeteerOptionsA3 = process.env.NODE_ENV !== 'development' ? {
         // '--disable-gpu',
     ],
 };
+
+/** 国内版 BBA（iframe-cn / bbaapi）代理目标与鉴权；不写入前端 */
+export const bbaApiBase = process.env.BBA_API_BASE || 'https://bba.ttads.net';
+export const bbaApiAuthorization = process.env.BBA_API_AUTHORIZATION || '';
+/** 可选：官网 ad-info 常带 Cookie（如 tfstk=...），缺省时部分账号会返回 40001 */
+export const bbaApiCookie = process.env.BBA_API_COOKIE || '';

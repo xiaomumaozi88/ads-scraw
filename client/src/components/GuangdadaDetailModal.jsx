@@ -866,7 +866,7 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
                 />
               ) : thumbnailUrl ? (
                 <img
-                  src={thumbnailUrl}
+                  src={getProxiedMediaUrl(thumbnailUrl)}
                   alt="创意素材"
                   className="guangdada-detail-media"
                   referrerPolicy="no-referrer"

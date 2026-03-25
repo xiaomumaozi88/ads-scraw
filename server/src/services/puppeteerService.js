@@ -1,6 +1,7 @@
 import puppeteerBase, {TimeoutError} from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { spawn } from 'child_process';
 import {puppeteerOptions} from '../config.js';
 import {rm} from 'fs/promises';
 import {dirname, join} from 'path';
@@ -21,14 +22,17 @@ const folderToDelete = join(__dirname, '../../tmp/guangdada_spider_usr_dir');
 
 let browser;
 let loginPage; // 登录页面
+let socatSpawnedForPort = null; // 已为某端口启动过 socat（Chrome 只监听 127.0.0.1，需 socat 转发以便外网/隧道访问）
 
 // 存储登录信息
 let loginInfo = {
     cookies: null,
     email: null,
-    authorization: null, // JWT token
+    authorization: null, // JWT token（napi 等常用，多与 jwt.nbs 一致）
+    /** 国内版 BBA（iframe-cn / bbaapi）须用 localStorage `jwt` 里的 cn，与 nbs 权限载荷不同 */
+    authorizationCn: null,
     deviceId: null,
-    userToken: null
+    userToken: null,
 };
 
 // 状态管理
@@ -52,6 +56,54 @@ const selectors = {
 // 广大大网站登录地址
 const loginPageUrl = 'https://guangdada.net/modules/auth/login';
 const checkLoginUrl = 'https://guangdada.net/modules/auth/login';
+
+/** 国际版创意列表（napi Referer 基准） */
+const DISPLAY_ADS_URL_GLOBAL = 'https://guangdada.net/modules/creative/display-ads';
+
+/**
+ * 国际版 napi 请求依赖国际版路径；若当前停在国内版 /modules/cn/... 则切回国际版 display-ads
+ */
+async function ensureGuangdadaGlobalDisplayAdsForInternationalApis(page) {
+    if (!page || page.isClosed()) return;
+    try {
+        const cur = page.url();
+        if (cur.includes('/modules/cn/creative/')) {
+            logger.info('[广大大] 当前在国内版创意页，切回国际版 display-ads 以便 napi 请求');
+            await page.goto(DISPLAY_ADS_URL_GLOBAL, { waitUntil: 'networkidle2', timeout: 120000 });
+        }
+    } catch (e) {
+        logger.warn('[广大大] 切回国际版 display-ads 失败:', e.message);
+    }
+}
+
+/**
+ * 从 guangdada.net 的 localStorage/sessionStorage 中 `jwt`（或 `JWT`）JSON 解析 `cn` 字段，
+ * 供 bba.ttads.net iframe-cn / bbaapi 使用（与 napi 用的 nbs 不是同一枚 JWT）。
+ */
+async function syncAuthorizationCnFromJwtStorage(page) {
+    if (!page || page.isClosed()) return;
+    try {
+        const cn = await page.evaluate(() => {
+            for (const jwtKey of ['jwt', 'JWT']) {
+                const raw = localStorage.getItem(jwtKey) || sessionStorage.getItem(jwtKey);
+                if (!raw || typeof raw !== 'string') continue;
+                try {
+                    const o = JSON.parse(raw);
+                    if (o && typeof o.cn === 'string' && o.cn.trim()) return o.cn.trim();
+                } catch (_) {
+                    /* ignore */
+                }
+            }
+            return null;
+        });
+        if (cn) {
+            loginInfo.authorizationCn = cn;
+            logger.info('✅ 已从 jwt 存储同步国内版(BBA) cn 令牌');
+        }
+    } catch (e) {
+        logger.warn('从 jwt 同步 cn 令牌失败:', e.message);
+    }
+}
 
 // 配置页面的反检测措施
 async function setupAntiDetection(page) {
@@ -124,8 +176,27 @@ async function setupAntiDetection(page) {
 export const initializeBrowser = async () => {
     console.log('准备启动广大大浏览器');
     try {
-        logger.info('尝试启动浏览器，配置:', JSON.stringify(puppeteerOptions, null, 2));
-        browser = await puppeteer.launch(puppeteerOptions);
+        const launchOpts = { ...puppeteerOptions };
+        const debugPort = process.env.CHROME_REMOTE_DEBUGGING_PORT;
+        if (debugPort) {
+            const externalPort = parseInt(debugPort, 10);
+            const internalPort = externalPort + 1; // Chrome 只绑定 127.0.0.1，用 socat 在 0.0.0.0:externalPort 转发到 127.0.0.1:internalPort
+            launchOpts.args = [...(launchOpts.args || []), `--remote-debugging-port=${internalPort}`];
+            if (!socatSpawnedForPort) {
+                try {
+                    const socat = spawn('socat', [`TCP-LISTEN:${externalPort},fork,bind=0.0.0.0`, `TCP:127.0.0.1:${internalPort}`], { stdio: 'ignore', detached: true });
+                    socat.unref();
+                    socat.on('error', (e) => logger.error('socat 错误:', e.message));
+                    socatSpawnedForPort = externalPort;
+                    logger.info('已启动 socat 转发 0.0.0.0:' + externalPort + ' -> 127.0.0.1:' + internalPort + '，Chrome 远程调试可从外网/隧道访问');
+                } catch (e) {
+                    logger.warn('启动 socat 失败，远程调试可能无法从外网访问:', e.message);
+                }
+            }
+            logger.info('已启用 Chrome 远程调试端口(内部):', internalPort, '外部端口:', externalPort);
+        }
+        logger.info('尝试启动浏览器，配置:', JSON.stringify(launchOpts, null, 2));
+        browser = await puppeteer.launch(launchOpts);
         await browser.defaultBrowserContext().overridePermissions('https://guangdada.net/', ['clipboard-read', 'clipboard-write']);
         console.log('广大大浏览器已启动');
         logger.info('浏览器启动成功');
@@ -427,6 +498,33 @@ export const getStatus = async () => {
     };
 };
 
+/**
+ * 当前广大大登录会话中的 JWT（与 guangdada.net /napi/ 等请求 Authorization 一致，通常对应 localStorage jwt.nbs）。
+ * 国内版 BBA 请用 {@link getStoredGuangdadaBbaAuthorization}（jwt.cn）。
+ */
+export function getStoredGuangdadaAuthorization() {
+    if (status.current !== LoginStatus.ONLINE) return null;
+    const t = loginInfo.authorization && String(loginInfo.authorization).trim();
+    return t || null;
+}
+
+/**
+ * 国内版 BBA 上游鉴权：优先 jwt.cn；缺失时退回 loginInfo.authorization（旧行为，可能与官网不一致）
+ */
+export function getStoredGuangdadaBbaAuthorization() {
+    if (status.current !== LoginStatus.ONLINE) return null;
+    const cn = loginInfo.authorizationCn && String(loginInfo.authorizationCn).trim();
+    if (cn) return cn;
+    return getStoredGuangdadaAuthorization();
+}
+
+/** 在发起 /guangdada-cn/ad-info 前从登录页刷新 jwt.cn（jwt 可能晚于首屏写入 localStorage） */
+export async function refreshGuangdadaBbaAuthFromLoginPage() {
+    if (status.current !== LoginStatus.ONLINE) return;
+    if (!loginPage || loginPage.isClosed()) return;
+    await syncAuthorizationCnFromJwtStorage(loginPage);
+}
+
 /** 健康检查：浏览器是否存在、页面数、登录状态与账号，供 /health 排查用 */
 export const getHealthInfo = async () => {
     if (!browser) {
@@ -454,6 +552,27 @@ export const getHealthInfo = async () => {
         };
     }
 };
+
+/** 从请求头中提取 authorization（广大大可能用不同 header 名或大小写） */
+function getAuthFromRequestHeaders(headers) {
+    if (!headers || typeof headers !== 'object') return null;
+    const names = ['authorization', 'Authorization', 'x-authorization', 'x-auth-token', 'x-nbs-token'];
+    for (const name of names) {
+        const v = headers[name];
+        if (v && typeof v === 'string' && v.trim()) return v.trim();
+    }
+    for (const [k, v] of Object.entries(headers)) {
+        if (/authorization|auth-token|x-.*token/i.test(k) && v && typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return null;
+}
+
+/** 判断字符串是否像 JWT（至少两段、较长） */
+function looksLikeJwt(s) {
+    if (typeof s !== 'string' || !s.trim()) return false;
+    const t = s.trim();
+    return t.length >= 50 && (t.split('.').length >= 2 || /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]/.test(t));
+}
 
 /** 关闭同一浏览器下除 keepPage 外的所有页面，节省资源 */
 const closeOtherPages = async (keepPage) => {
@@ -495,17 +614,17 @@ export const getBrowserPageUrl = async () => {
         page = loginPage;
         const currentUrl = page.url();
         if (!currentUrl.includes('display-ads')) {
-            await page.goto('https://guangdada.net/modules/creative/display-ads', { 
-                timeout: 120 * 1000, 
-                waitUntil: 'networkidle2' 
+            await page.goto(DISPLAY_ADS_URL_GLOBAL, {
+                timeout: 120 * 1000,
+                waitUntil: 'networkidle2',
             });
         }
     } else {
         page = await browser.newPage();
         await setupAntiDetection(page);
-        await page.goto('https://guangdada.net/modules/creative/display-ads', { 
-            timeout: 120 * 1000, 
-            waitUntil: 'networkidle2' 
+        await page.goto(DISPLAY_ADS_URL_GLOBAL, {
+            timeout: 120 * 1000,
+            waitUntil: 'networkidle2',
         });
     }
 
@@ -546,18 +665,18 @@ export const executeBrowserAction = async (action) => {
         // 确保当前在 display-ads 页面
         const currentUrl = page.url();
         if (!currentUrl.includes('display-ads')) {
-            await page.goto('https://guangdada.net/modules/creative/display-ads', { 
-                timeout: 120 * 1000, 
-                waitUntil: 'networkidle2' 
+            await page.goto(DISPLAY_ADS_URL_GLOBAL, {
+                timeout: 120 * 1000,
+                waitUntil: 'networkidle2',
             });
         }
     } else {
         // 如果登录页面已关闭，创建新页面
         page = await browser.newPage();
         await setupAntiDetection(page);
-        await page.goto('https://guangdada.net/modules/creative/display-ads', { 
-            timeout: 120 * 1000, 
-            waitUntil: 'networkidle2' 
+        await page.goto(DISPLAY_ADS_URL_GLOBAL, {
+            timeout: 120 * 1000,
+            waitUntil: 'networkidle2',
         });
     }
 
@@ -892,33 +1011,35 @@ export const login = async (email, password) => {
             // 方法2: 通过监听网络请求获取 token
             if (!loginInfo.authorization) {
                 try {
-                    logger.info('尝试通过监听网络请求获取 authorization token');
-                    const token = await new Promise((resolve) => {
+                    logger.info('尝试通过监听网络请求获取 authorization token（登录阶段，已挂载监听后 goto display-ads）');
+                    const result = await new Promise((resolve) => {
                         let resolved = false;
+                        const debug = { napiRequestTotal: 0, napiRequestWithAuth: 0, sampleNoAuthUrls: [] };
                         const timeout = setTimeout(() => {
                             if (!resolved) {
                                 resolved = true;
-                                resolve(null);
+                                page.off('request', requestHandler);
+                                resolve({ _timeout: true, _debug: debug });
                             }
                         }, 10000);
                         
                         const requestHandler = (request) => {
                             if (!resolved) {
                                 const url = request.url();
+                                if (!url.includes('/napi/')) return;
+                                debug.napiRequestTotal += 1;
                                 const headers = request.headers();
-                                const authHeader = headers['authorization'] || headers['Authorization'];
-                                
-                                // 查找 API 请求
-                                if (url.includes('/napi/') && authHeader) {
+                                const authHeader = getAuthFromRequestHeaders(headers);
+                                if (authHeader) {
+                                    debug.napiRequestWithAuth += 1;
                                     resolved = true;
                                     clearTimeout(timeout);
                                     page.off('request', requestHandler);
-                                    
-                                    // 同时获取其他 headers
                                     loginInfo.deviceId = headers['x-device-id'] || null;
                                     loginInfo.userToken = headers['x-nbs-user-token'] || null;
-                                    
                                     resolve(authHeader);
+                                } else {
+                                    if (debug.sampleNoAuthUrls.length < 5) debug.sampleNoAuthUrls.push(url.replace(/^https?:\/\/[^/]+/, ''));
                                 }
                             }
                         };
@@ -929,17 +1050,24 @@ export const login = async (email, password) => {
                         page.goto('https://guangdada.net/modules/creative/display-ads', {
                             waitUntil: 'networkidle2',
                             timeout: 30000
+                        }).then(() => {
+                            if (!resolved) logger.info('登录阶段: 导航 display-ads 已完成，等待 /napi/ 请求带 Authorization…');
                         }).catch(() => {});
                     });
                     
-                    if (token) {
-                        loginInfo.authorization = token;
+                    if (typeof result === 'string') {
+                        loginInfo.authorization = result;
                         logger.info('✅ 从网络请求中获取到 authorization token');
+                    } else if (result && result._timeout && result._debug) {
+                        const d = result._debug;
+                        logger.warn('登录阶段未能从网络获取 token。详情: /napi/ 请求数=' + d.napiRequestTotal + '，带 Authorization 数=' + d.napiRequestWithAuth + (d.sampleNoAuthUrls.length ? '；无 Auth 示例: ' + d.sampleNoAuthUrls.slice(0, 3).join(', ') : ''));
                     }
                 } catch (e) {
                     logger.warn('从网络请求获取 token 失败:', e.message);
                 }
             }
+
+            await syncAuthorizationCnFromJwtStorage(page);
             
             // 保存登录页面，不要关闭它
             if (loginPage && loginPage !== page) {
@@ -947,7 +1075,12 @@ export const login = async (email, password) => {
             }
             loginPage = page;
             logger.info('登录成功，当前URL:', currentUrl);
-            await closeOtherPages(page);
+            // 若尚未拿到 token，暂不关闭其他页面，避免 Execution context was destroyed，便于后续从存储/网络拿到 token
+            if (loginInfo.authorization) {
+                await closeOtherPages(page);
+            } else {
+                logger.info('登录成功但尚未拿到 authorization token，暂不关闭其他页面，保留数据页以便后续获取 token');
+            }
             return {
                 data: {
                     url: currentUrl,
@@ -1002,13 +1135,19 @@ export const login = async (email, password) => {
                 } catch (e) {
                     logger.warn('从存储获取 token 失败:', e.message);
                 }
+
+                await syncAuthorizationCnFromJwtStorage(page);
                 
                 if (loginPage && loginPage !== page) {
                     await loginPage.close().catch(() => {});
                 }
                 loginPage = page;
                 logger.info('登录成功（延迟跳转），当前URL:', finalUrl);
-                await closeOtherPages(page);
+                if (loginInfo.authorization) {
+                    await closeOtherPages(page);
+                } else {
+                    logger.info('登录成功（延迟跳转）但尚未拿到 token，暂不关闭其他页面');
+                }
         return {
             data: {
                         url: finalUrl,
@@ -1102,6 +1241,7 @@ export const fetchMultiModalSearch = async (params = {}) => {
     if (!loginPage || loginPage.isClosed()) {
         return { success: false, data: { multimodal_md5: null }, code: 'NO_LOGIN_PAGE', message: '登录页面已关闭，请重新登录' };
     }
+    await ensureGuangdadaGlobalDisplayAdsForInternationalApis(loginPage);
     try {
         let authorizationToken = loginInfo.authorization;
         let deviceId = loginInfo.deviceId;
@@ -1199,6 +1339,8 @@ export const fetchSearchData = async (searchParams = {}) => {
             message: '登录页面已关闭，请重新登录'
         };
     }
+
+    await ensureGuangdadaGlobalDisplayAdsForInternationalApis(loginPage);
     
     try {
         // 首先尝试获取 authorization token
@@ -1236,51 +1378,130 @@ export const fetchSearchData = async (searchParams = {}) => {
             }
         }
         
+        // 仍无 token 时先尝试从 storage 兜底读取（不依赖固定 key，与 curl 中 Authorization 对应）
+        if (!authorizationToken) {
+            try {
+                const storageDump = await loginPage.evaluate(() => {
+                    const out = {};
+                    const tryKeys = (s) => {
+                        try {
+                            for (let i = 0; i < s.length; i++) {
+                                const k = s.key(i);
+                                const v = s.getItem(k);
+                                if (k && v && /auth|token|bearer|user|jwt|nbs/i.test(k)) out[k] = v;
+                            }
+                        } catch (_) {}
+                    };
+                    tryKeys(localStorage);
+                    tryKeys(sessionStorage);
+                    return out;
+                });
+                for (const v of Object.values(storageDump)) {
+                    if (looksLikeJwt(v)) {
+                        authorizationToken = v.trim();
+                        loginInfo.authorization = authorizationToken;
+                        logger.info('✅ 从页面存储中获取到 authorization token（兜底）');
+                        break;
+                    }
+                }
+                const userTokenVal = storageDump['user-token'];
+                if (userTokenVal && typeof userTokenVal === 'string') {
+                    userToken = userTokenVal;
+                    loginInfo.userToken = userToken;
+                }
+            } catch (e) {
+                logger.warn('从存储兜底获取 token 失败:', e.message);
+            }
+        }
+        
         // 如果还是没有 token，通过导航到数据页面并监听网络请求获取
         if (!authorizationToken) {
             try {
-                logger.info('尝试通过导航到数据页面获取 authorization token');
+                logger.info('尝试通过导航到数据页面获取 authorization token（已挂载 request/response 监听，随后执行 goto）');
                 const tokenInfo = await new Promise((resolve) => {
                     let resolved = false;
+                    const debug = { napiRequestTotal: 0, napiRequestWithAuth: 0, sampleUrls: [], sampleNoAuthUrls: [] };
                     const timeout = setTimeout(() => {
                         if (!resolved) {
                             resolved = true;
-                            resolve(null);
+                            loginPage.off('request', requestHandler);
+                            loginPage.off('response', responseHandler);
+                            resolve({ _timeout: true, _debug: debug });
                         }
-                    }, 10000);
+                    }, 25000);
                     
                     const requestHandler = (request) => {
                         if (!resolved) {
                             const url = request.url();
+                            if (!url.includes('/napi/')) return;
+                            debug.napiRequestTotal += 1;
                             const headers = request.headers();
-                            const authHeader = headers['authorization'] || headers['Authorization'];
-                            
-                            // 只关注 creative/list API 的请求
-                            if (url.includes('/napi/v1/creative/list') && authHeader) {
+                            const authHeader = getAuthFromRequestHeaders(headers);
+                            if (authHeader) {
+                                debug.napiRequestWithAuth += 1;
                                 resolved = true;
                                 clearTimeout(timeout);
                                 loginPage.off('request', requestHandler);
+                                loginPage.off('response', responseHandler);
                                 resolve({
                                     authorization: authHeader,
                                     deviceId: headers['x-device-id'] || null,
                                     userToken: headers['x-nbs-user-token'] || null
                                 });
+                            } else {
+                                if (debug.sampleNoAuthUrls.length < 5) debug.sampleNoAuthUrls.push(url.replace(/^https?:\/\/[^/]+/, ''));
                             }
+                            if (debug.sampleUrls.length < 5) debug.sampleUrls.push(url.replace(/^https?:\/\/[^/]+/, ''));
                         }
+                    };
+                    const responseHandler = async (response) => {
+                        if (resolved) return;
+                        const url = response.url();
+                        if (!url.includes('/napi/') || response.status() !== 200) return;
+                        try {
+                            const headers = response.headers();
+                            const authFromHeader = getAuthFromRequestHeaders(headers) || headers['x-auth-token'] || headers['x-nbs-token'];
+                            if (authFromHeader) {
+                                resolved = true;
+                                clearTimeout(timeout);
+                                loginPage.off('request', requestHandler);
+                                loginPage.off('response', responseHandler);
+                                resolve({
+                                    authorization: authFromHeader,
+                                    deviceId: null,
+                                    userToken: null
+                                });
+                                return;
+                            }
+                            const body = await response.json().catch(() => null);
+                            if (body && typeof body === 'object') {
+                                const t = body.token || body.authorization || body.accessToken || body.access_token || (body.data && (body.data.token || body.data.authorization));
+                                if (t && typeof t === 'string' && t.trim()) {
+                                    resolved = true;
+                                    clearTimeout(timeout);
+                                    loginPage.off('request', requestHandler);
+                                    loginPage.off('response', responseHandler);
+                                    resolve({ authorization: t.trim(), deviceId: null, userToken: null });
+                                }
+                            }
+                        } catch (_) {}
                     };
                     
                     loginPage.on('request', requestHandler);
+                    loginPage.on('response', responseHandler);
                     
-                    // 导航到数据页面，这会触发实际的 API 请求
+                    // 导航到数据页面，触发 count/list 等 API 请求以捕获 token（不关闭当前页，仅 reload）
                     loginPage.goto('https://guangdada.net/modules/creative/display-ads', {
                         waitUntil: 'networkidle2',
                         timeout: 30000
-                    }).catch(() => {
-                        // 即使导航失败，也继续等待请求
+                    }).then(() => {
+                        if (!resolved) logger.info('导航 display-ads 已完成(networkidle2)，等待 /napi/ 请求带 Authorization…');
+                    }).catch((e) => {
+                        if (!resolved) logger.warn('导航 display-ads 失败或超时:', e.message);
                     });
                 });
                 
-                if (tokenInfo) {
+                if (tokenInfo && tokenInfo.authorization) {
                     authorizationToken = tokenInfo.authorization;
                     deviceId = tokenInfo.deviceId;
                     userToken = tokenInfo.userToken;
@@ -1288,8 +1509,40 @@ export const fetchSearchData = async (searchParams = {}) => {
                     if (deviceId) loginInfo.deviceId = deviceId;
                     if (userToken) loginInfo.userToken = userToken;
                     logger.info('✅ 从网络请求中获取到 authorization token');
+                } else if (tokenInfo && tokenInfo._timeout && tokenInfo._debug) {
+                    const d = tokenInfo._debug;
+                    logger.warn('⚠️ 未能从网络请求中获取到 authorization token。详情: 在 25s 内共观察到 /napi/ 请求数=' + d.napiRequestTotal + '，其中带 Authorization 的请求数=' + d.napiRequestWithAuth + (d.sampleUrls.length ? '；示例 URL: ' + d.sampleUrls.slice(0, 3).join(', ') : '') + (d.sampleNoAuthUrls.length ? '；无 Authorization 的示例: ' + d.sampleNoAuthUrls.slice(0, 3).join(', ') : ''));
                 } else {
-                    logger.warn('⚠️ 未能从网络请求中获取到 authorization token');
+                    // 兜底：导航后从页面 storage 读取所有可能为 token 的键（不依赖固定 key 名）
+                    try {
+                        await new Promise(r => setTimeout(r, 2000));
+                        const storageDump = await loginPage.evaluate(() => {
+                            const out = {};
+                            const tryKeys = (s) => {
+                                try {
+                                    for (let i = 0; i < s.length; i++) {
+                                        const k = s.key(i);
+                                        const v = s.getItem(k);
+                                        if (k && v && /auth|token|bearer|user|jwt|nbs/i.test(k)) out[k] = v;
+                                    }
+                                } catch (_) {}
+                            };
+                            tryKeys(localStorage);
+                            tryKeys(sessionStorage);
+                            return out;
+                        });
+                        for (const v of Object.values(storageDump)) {
+                            if (looksLikeJwt(v)) {
+                                authorizationToken = v.trim();
+                                loginInfo.authorization = authorizationToken;
+                                logger.info('✅ 从页面存储中获取到 authorization token（兜底）');
+                                break;
+                            }
+                        }
+                        if (!authorizationToken) logger.warn('⚠️ 未能从网络请求中获取到 authorization token');
+                    } catch (e) {
+                        logger.warn('从网络请求获取 token 失败:', e.message);
+                    }
                 }
             } catch (e) {
                 logger.warn('从网络请求获取 token 失败:', e.message);
@@ -1493,6 +1746,7 @@ export const fetchCountData = async (searchParams = {}) => {
             message: '登录页面已关闭，请重新登录'
         };
     }
+    await ensureGuangdadaGlobalDisplayAdsForInternationalApis(loginPage);
     try {
         let authorizationToken = loginInfo.authorization;
         let deviceId = loginInfo.deviceId;
@@ -1526,39 +1780,112 @@ export const fetchCountData = async (searchParams = {}) => {
         }
         if (!authorizationToken) {
             try {
-                logger.info('尝试通过导航到数据页面获取 authorization token');
+                const storageDump = await loginPage.evaluate(() => {
+                    const out = {};
+                    const tryKeys = (s) => {
+                        try {
+                            for (let i = 0; i < s.length; i++) {
+                                const k = s.key(i);
+                                const v = s.getItem(k);
+                                if (k && v && /auth|token|bearer|user|jwt|nbs/i.test(k)) out[k] = v;
+                            }
+                        } catch (_) {}
+                    };
+                    tryKeys(localStorage);
+                    tryKeys(sessionStorage);
+                    return out;
+                });
+                for (const v of Object.values(storageDump)) {
+                    if (looksLikeJwt(v)) {
+                        authorizationToken = v.trim();
+                        loginInfo.authorization = authorizationToken;
+                        logger.info('✅ 从页面存储中获取到 authorization token（兜底）');
+                        break;
+                    }
+                }
+                const userTokenVal = storageDump['user-token'];
+                if (userTokenVal && typeof userTokenVal === 'string') {
+                    userToken = userTokenVal;
+                    loginInfo.userToken = userToken;
+                }
+            } catch (e) {
+                logger.warn('从存储兜底获取 token 失败:', e.message);
+            }
+        }
+        if (!authorizationToken) {
+            try {
+                logger.info('尝试通过导航到数据页面获取 authorization token（count 流程，已挂载监听）');
                 const tokenInfo = await new Promise((resolve) => {
                     let resolved = false;
+                    const debug = { napiRequestTotal: 0, napiRequestWithAuth: 0, sampleUrls: [], sampleNoAuthUrls: [] };
                     const timeout = setTimeout(() => {
                         if (!resolved) {
                             resolved = true;
-                            resolve(null);
+                            loginPage.off('request', requestHandler);
+                            loginPage.off('response', responseHandler);
+                            resolve({ _timeout: true, _debug: debug });
                         }
-                    }, 10000);
+                    }, 25000);
                     const requestHandler = (request) => {
                         if (!resolved) {
                             const url = request.url();
+                            if (!url.includes('/napi/')) return;
+                            debug.napiRequestTotal += 1;
                             const headers = request.headers();
-                            const authHeader = headers['authorization'] || headers['Authorization'];
-                            if (url.includes('/napi/v1/creative/list') && authHeader) {
+                            const authHeader = getAuthFromRequestHeaders(headers);
+                            if (authHeader) {
+                                debug.napiRequestWithAuth += 1;
                                 resolved = true;
                                 clearTimeout(timeout);
                                 loginPage.off('request', requestHandler);
+                                loginPage.off('response', responseHandler);
                                 resolve({
                                     authorization: authHeader,
                                     deviceId: headers['x-device-id'] || null,
                                     userToken: headers['x-nbs-user-token'] || null
                                 });
+                            } else {
+                                if (debug.sampleNoAuthUrls.length < 5) debug.sampleNoAuthUrls.push(url.replace(/^https?:\/\/[^/]+/, ''));
                             }
+                            if (debug.sampleUrls.length < 5) debug.sampleUrls.push(url.replace(/^https?:\/\/[^/]+/, ''));
                         }
                     };
+                    const responseHandler = async (response) => {
+                        if (resolved) return;
+                        const url = response.url();
+                        if (!url.includes('/napi/') || response.status() !== 200) return;
+                        try {
+                            const headers = response.headers();
+                            const authFromHeader = getAuthFromRequestHeaders(headers) || headers['x-auth-token'] || headers['x-nbs-token'];
+                            if (authFromHeader) {
+                                resolved = true;
+                                clearTimeout(timeout);
+                                loginPage.off('request', requestHandler);
+                                loginPage.off('response', responseHandler);
+                                resolve({ authorization: authFromHeader, deviceId: null, userToken: null });
+                                return;
+                            }
+                            const body = await response.json().catch(() => null);
+                            if (body && typeof body === 'object') {
+                                const t = body.token || body.authorization || body.accessToken || body.access_token || (body.data && (body.data.token || body.data.authorization));
+                                if (t && typeof t === 'string' && t.trim()) {
+                                    resolved = true;
+                                    clearTimeout(timeout);
+                                    loginPage.off('request', requestHandler);
+                                    loginPage.off('response', responseHandler);
+                                    resolve({ authorization: t.trim(), deviceId: null, userToken: null });
+                                }
+                            }
+                        } catch (_) {}
+                    };
                     loginPage.on('request', requestHandler);
+                    loginPage.on('response', responseHandler);
                     loginPage.goto('https://guangdada.net/modules/creative/display-ads', {
                         waitUntil: 'networkidle2',
                         timeout: 30000
                     }).catch(() => {});
                 });
-                if (tokenInfo) {
+                if (tokenInfo && tokenInfo.authorization) {
                     authorizationToken = tokenInfo.authorization;
                     deviceId = tokenInfo.deviceId;
                     userToken = tokenInfo.userToken;
@@ -1566,8 +1893,39 @@ export const fetchCountData = async (searchParams = {}) => {
                     if (deviceId) loginInfo.deviceId = deviceId;
                     if (userToken) loginInfo.userToken = userToken;
                     logger.info('✅ 从网络请求中获取到 authorization token');
+                } else if (tokenInfo && tokenInfo._timeout && tokenInfo._debug) {
+                    const d = tokenInfo._debug;
+                    logger.warn('⚠️ 未能从网络请求中获取到 authorization token(count)。详情: /napi/ 请求数=' + d.napiRequestTotal + '，带 Authorization 数=' + d.napiRequestWithAuth + (d.sampleNoAuthUrls.length ? '；无 Auth 示例: ' + d.sampleNoAuthUrls.slice(0, 3).join(', ') : ''));
                 } else {
-                    logger.warn('⚠️ 未能从网络请求中获取到 authorization token');
+                    try {
+                        await new Promise(r => setTimeout(r, 2000));
+                        const storageDump = await loginPage.evaluate(() => {
+                            const out = {};
+                            const tryKeys = (s) => {
+                                try {
+                                    for (let i = 0; i < s.length; i++) {
+                                        const k = s.key(i);
+                                        const v = s.getItem(k);
+                                        if (k && v && /auth|token|bearer|user|jwt|nbs/i.test(k)) out[k] = v;
+                                    }
+                                } catch (_) {}
+                            };
+                            tryKeys(localStorage);
+                            tryKeys(sessionStorage);
+                            return out;
+                        });
+                        for (const v of Object.values(storageDump)) {
+                            if (looksLikeJwt(v)) {
+                                authorizationToken = v.trim();
+                                loginInfo.authorization = authorizationToken;
+                                logger.info('✅ 从页面存储中获取到 authorization token（兜底）');
+                                break;
+                            }
+                        }
+                        if (!authorizationToken) logger.warn('⚠️ 未能从网络请求中获取到 authorization token');
+                    } catch (e) {
+                        logger.warn('从网络请求获取 token 失败:', e.message);
+                    }
                 }
             } catch (e) {
                 logger.warn('从网络请求获取 token 失败:', e.message);
@@ -2599,8 +2957,9 @@ export const clearLogin = async () => {
             cookies: null,
             email: null,
             authorization: null,
+            authorizationCn: null,
             deviceId: null,
-            userToken: null
+            userToken: null,
         };
         // 递归删除文件夹其内容
         await rm(folderToDelete, {recursive: true, force: true}).catch(() => {});

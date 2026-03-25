@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 
 // 将日期格式化为 DD.MM.YY（如 26.01.01）
 function formatDateDDMMYY(dateStr) {
@@ -67,6 +67,22 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
   // 使用 state 来跟踪图片加载错误和视频播放状态
   const [imageError, setImageError] = useState(false);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
+  /** hover 播放按钮时的预览视频，移出时暂停并清空 src 以释放内存 */
+  const videoHoverRef = useRef(null);
+  /** 从悬停播放按钮到视频开始播放之间的加载状态，用于显示加载动画 */
+  const [isHoverVideoLoading, setIsHoverVideoLoading] = useState(false);
+
+  // 卸载时释放 hover 视频，避免内存泄漏
+  useEffect(() => {
+    return () => {
+      const v = videoHoverRef.current;
+      if (v) {
+        v.pause();
+        v.removeAttribute('src');
+        v.load();
+      }
+    };
+  }, []);
 
   // 应用信息：优先使用 distribute/app 返回的 appList，否则回退到 item.appList
   const appSource = appList.length > 0 ? appList : (item.appList || []);
@@ -395,14 +411,58 @@ function CreativeCardInsightrackr({ item, sortField = '11', sortRule = 'desc', m
             <span className="card-download-text">打开试玩</span>
           </div>
         )}
-        {/* 播放按钮和时长 - 居中显示（与广大大一致） */}
+        {/* hover 播放按钮时在缩略图上叠加播放视频，移出时停止并清空 src 控制内存 */}
+        {isVideo && videoUrl && (
+          <video
+            ref={videoHoverRef}
+            className="card-thumbnail-hover-video"
+            muted
+            playsInline
+            loop
+            aria-hidden
+          />
+        )}
+        {/* 悬停到视频开始播放前显示加载动画，避免黑屏 */}
+        {isVideo && isHoverVideoLoading && (
+          <div className="card-thumbnail-hover-loading" aria-hidden>
+            <span className="card-thumbnail-hover-spinner" />
+          </div>
+        )}
         {isVideo && (
-          <div 
+          <div
             className="play-icon-center"
             onClick={(e) => {
               e.stopPropagation();
               if (videoUrl) {
                 setShowVideoPlayer(true);
+              }
+            }}
+            onMouseEnter={() => {
+              const v = videoHoverRef.current;
+              if (!v || !videoUrl) return;
+              const onPlaying = () => setIsHoverVideoLoading(false);
+              const onError = () => setIsHoverVideoLoading(false);
+              v.addEventListener('playing', onPlaying, { once: true });
+              v.addEventListener('error', onError, { once: true });
+              v.onmouseleaveCleanup = () => {
+                v.removeEventListener('playing', onPlaying);
+                v.removeEventListener('error', onError);
+              };
+              setIsHoverVideoLoading(true);
+              v.src = videoUrl;
+              v.play().catch(() => setIsHoverVideoLoading(false));
+            }}
+            onMouseLeave={() => {
+              setIsHoverVideoLoading(false);
+              const v = videoHoverRef.current;
+              if (v) {
+                if (v.onmouseleaveCleanup) {
+                  v.onmouseleaveCleanup();
+                  v.onmouseleaveCleanup = null;
+                }
+                v.pause();
+                v.removeAttribute('src');
+                v.load();
               }
             }}
           >

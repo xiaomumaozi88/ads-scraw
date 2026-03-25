@@ -1,9 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatRequestError } from '../utils/api';
+import { formatRequestError, clearLogin } from '../utils/api';
 import './HealthPage.css';
 
 const API_BASE = '/api';
+
+/** 将 ISO 或时间戳转为北京时间展示 */
+function formatBeijingTime(isoOrTimestamp) {
+  if (isoOrTimestamp == null || isoOrTimestamp === '') return '-';
+  try {
+    const d = new Date(isoOrTimestamp);
+    if (Number.isNaN(d.getTime())) return String(isoOrTimestamp);
+    return d.toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'medium', hour12: false, timeZone: 'Asia/Shanghai' });
+  } catch {
+    return String(isoOrTimestamp);
+  }
+}
 
 function HealthPage() {
   const navigate = useNavigate();
@@ -12,6 +24,7 @@ function HealthPage() {
   const [error, setError] = useState(null);
   const [reopenLoading, setReopenLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [clearLoginLoading, setClearLoginLoading] = useState(null);
 
   const fetchHealth = React.useCallback(() => {
     setLoading(true);
@@ -55,6 +68,15 @@ function HealthPage() {
       .finally(() => setReopenLoading(false));
   };
 
+  const handleClearLogin = (platform) => {
+    setActionError(null);
+    setClearLoginLoading(platform);
+    clearLogin(platform)
+      .then(() => fetchHealth())
+      .catch((err) => setActionError(formatRequestError(err.message || '退出登录失败')))
+      .finally(() => setClearLoginLoading(null));
+  };
+
   return (
     <div className="health-page">
       <div className="health-header">
@@ -89,6 +111,109 @@ function HealthPage() {
             </div>
           </section>
 
+          {data.remoteDebug && (data.remoteDebug.guangdada?.enabled || data.remoteDebug.insightrackr?.enabled) && (
+            <section className="health-summary health-remote-debug">
+              <h2>远程调试（人机验证 / 远程操作页面）</h2>
+              <p className="health-remote-debug-desc">
+                服务器以无头模式运行，无法直接看到浏览器界面。开启远程调试后，可在本机通过 Chrome DevTools 连接服务器上的页面，查看界面、执行操作或完成人机验证。
+              </p>
+              <div className="health-remote-debug-cards">
+                {data.remoteDebug.guangdada?.enabled && (
+                  <div className="health-remote-debug-card">
+                    <h3>广大大</h3>
+                    <p className="health-remote-debug-port">端口：<strong>{data.remoteDebug.guangdada.port}</strong></p>
+                    <p className="health-remote-debug-url">
+                      调试地址：<code>{data.remoteDebug.guangdada.url}</code>
+                    </p>
+                    <p className="health-remote-debug-hint">{data.remoteDebug.guangdada.hint}</p>
+                    <div className="health-remote-debug-steps">
+                      <strong>操作步骤：</strong>
+                      <ol>
+                        <li>在本机执行 SSH 隧道（将 <code>用户@服务器IP</code> 换成实际信息）：<br />
+                          <code>ssh -L {data.remoteDebug.guangdada.port}:localhost:{data.remoteDebug.guangdada.port} 用户@服务器IP</code>
+                        </li>
+                        <li>在本机 Chrome 地址栏打开 <code>{data.remoteDebug.guangdada.url}</code></li>
+                        <li>在列表中点开要操作的页面（如广大大登录页），会打开 DevTools</li>
+                        <li>在 DevTools 的 Console 中可执行 JS 模拟点击，例如完成人机验证：<br />
+                          <code>document.querySelector('验证码按钮选择器')?.click()</code>
+                        </li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
+                {data.remoteDebug.insightrackr?.enabled && (
+                  <div className="health-remote-debug-card">
+                    <h3>Insightrackr</h3>
+                    <p className="health-remote-debug-port">端口：<strong>{data.remoteDebug.insightrackr.port}</strong></p>
+                    <p className="health-remote-debug-url">
+                      调试地址：<code>{data.remoteDebug.insightrackr.url}</code>
+                    </p>
+                    <p className="health-remote-debug-hint">{data.remoteDebug.insightrackr.hint}</p>
+                    <div className="health-remote-debug-steps">
+                      <strong>操作步骤：</strong>
+                      <ol>
+                        <li>在本机执行 SSH 隧道：<br />
+                          <code>ssh -L {data.remoteDebug.insightrackr.port}:localhost:{data.remoteDebug.insightrackr.port} 用户@服务器IP</code>
+                        </li>
+                        <li>在本机 Chrome 打开 <code>{data.remoteDebug.insightrackr.url}</code></li>
+                        <li>点开对应页面后，在 DevTools Console 中执行 JS 完成人机验证或其它操作</li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <p className="health-remote-debug-warn">调试端口仅用于排查，不建议长期对公网开放；使用完毕可去掉环境变量并重启服务。</p>
+            </section>
+          )}
+
+          {data.performance && (
+            <section className="health-summary health-performance">
+              <h2>性能与系统</h2>
+              {data.performance.error ? (
+                <p className="health-error-text">{data.performance.error}</p>
+              ) : (
+                <ul>
+                  <li>内存 - 堆已用：<strong>{data.performance.memory?.heapUsedMb ?? '-'} MB</strong></li>
+                  <li>内存 - 堆总量：<strong>{data.performance.memory?.heapTotalMb ?? '-'} MB</strong></li>
+                  <li>内存 - 常驻集 (RSS)：<strong>{data.performance.memory?.rssMb ?? '-'} MB</strong></li>
+                  <li>内存 - 外部：<strong>{data.performance.memory?.externalMb ?? '-'} MB</strong></li>
+                  <li>进程累计 CPU（用户）：<strong>{data.performance.cpuUsageSeconds?.user ?? '-'} 秒</strong></li>
+                  <li>进程累计 CPU（系统）：<strong>{data.performance.cpuUsageSeconds?.system ?? '-'} 秒</strong></li>
+                  <li>进程运行时长：<strong>{data.performance.processUptimeSeconds != null ? `${Math.floor(data.performance.processUptimeSeconds / 60)} 分 ${Math.round(data.performance.processUptimeSeconds % 60)} 秒` : '-'}</strong></li>
+                  {data.performance.cpus != null && <li>CPU 核心数：<strong>{data.performance.cpus}</strong></li>}
+                  {data.performance.loadAvg && (
+                    <>
+                      <li>系统负载 (1 分钟)：<strong>{data.performance.loadAvg['1min']?.toFixed(2) ?? '-'}</strong></li>
+                      <li>系统负载 (5 分钟)：<strong>{data.performance.loadAvg['5min']?.toFixed(2) ?? '-'}</strong></li>
+                      <li>系统负载 (15 分钟)：<strong>{data.performance.loadAvg['15min']?.toFixed(2) ?? '-'}</strong></li>
+                    </>
+                  )}
+                </ul>
+              )}
+              <p className="health-performance-hint">负载 &gt; CPU 核心数表示系统偏忙；内存/CPU 持续升高可结合转码队列排查。</p>
+            </section>
+          )}
+
+          {data.transcode && (
+            <section className="health-summary health-transcode">
+              <h2>视频转码队列（排查卡住时查看）</h2>
+              {data.transcode.error ? (
+                <p className="health-error-text">{data.transcode.error}</p>
+              ) : (
+                <ul>
+                  <li>最大并发数：<strong>{data.transcode.maxConcurrent ?? '-'}</strong></li>
+                  <li>当前处理中：<strong>{data.transcode.running ?? '-'}</strong></li>
+                  <li>排队等待：<strong>{data.transcode.waiting ?? '-'}</strong></li>
+                  <li>当前任务开始时间：<strong>{data.transcode.currentJobStartedAtFormatted ?? '无'}</strong></li>
+                  <li>当前任务已运行时长：<strong>{data.transcode.currentJobDurationText ?? '-'}</strong></li>
+                  <li>下载超时：<strong>{data.transcode.downloadTimeoutMs != null ? `${data.transcode.downloadTimeoutMs / 1000} 秒` : '-'}</strong></li>
+                  <li>转码超时：<strong>{data.transcode.transcodeTimeoutMs != null ? `${data.transcode.transcodeTimeoutMs / 60000} 分钟` : '-'}</strong></li>
+                </ul>
+              )}
+              <p className="health-transcode-hint">若平台卡住且此处显示「当前处理中 1」且「已运行时长」很长，多为视频转码占满 CPU；可等待当前任务结束或重启服务。</p>
+            </section>
+          )}
+
           <section className="health-platforms">
             <h2>各平台</h2>
             {['insightrackr', 'guangdada'].map((key) => {
@@ -113,6 +238,16 @@ function HealthPage() {
                       </>
                     )}
                   </dl>
+                  <div className="health-card-actions">
+                    <button
+                      type="button"
+                      className="health-btn health-btn-secondary"
+                      onClick={() => handleClearLogin(key)}
+                      disabled={clearLoginLoading === key || !p.isLoggedIn}
+                    >
+                      {clearLoginLoading === key ? '退出中...' : '退出登录'}
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -127,7 +262,7 @@ function HealthPage() {
                   <ul className="health-log-list health-log-list--error">
                     {data.recentErrors.slice(-20).reverse().map((entry, i) => (
                       <li key={`err-${i}`} className="health-log-entry">
-                        <span className="health-log-time">{entry.time}</span>
+                        <span className="health-log-time">{formatBeijingTime(entry.time)}</span>
                         <span className="health-log-level">{entry.level}</span>
                         <span className="health-log-msg">{entry.message}</span>
                       </li>
@@ -141,7 +276,7 @@ function HealthPage() {
                   <ul className="health-log-list">
                     {data.recentLogs.slice(-30).reverse().map((entry, i) => (
                       <li key={`log-${i}`} className={`health-log-entry health-log-entry--${(entry.level || '').toLowerCase()}`}>
-                        <span className="health-log-time">{entry.time}</span>
+                        <span className="health-log-time">{formatBeijingTime(entry.time)}</span>
                         <span className="health-log-level">{entry.level}</span>
                         <span className="health-log-msg">{entry.message}</span>
                       </li>

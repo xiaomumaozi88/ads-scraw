@@ -6,6 +6,8 @@ dist
 .vite
 .cache
 tmp/
+# 广大大/BBA 调试日志（含 JWT、Cookie）
+logs/guangdada-outbound-debug.txt
 *.old
 docs/
 cat-catch/

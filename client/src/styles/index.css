@@ -121,6 +121,61 @@ body {
     border-bottom-color: #1677ff;
 }
 
+/* 广大大国内版：ad-info 原始 JSON 预览（列表卡片接入前） */
+.domestic-ad-info-preview {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: #fafafa;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+}
+.domestic-ad-info-preview__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 12px;
+    margin-bottom: 8px;
+}
+.domestic-ad-info-preview__title {
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+.domestic-ad-info-preview__meta {
+    font-size: 12px;
+    color: #8c8c8c;
+}
+.domestic-ad-info-preview__json {
+    margin: 0;
+    padding: 10px 12px;
+    max-height: 360px;
+    overflow: auto;
+    font-size: 12px;
+    line-height: 1.45;
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.domestic-ad-info-preview__hint {
+    margin: 10px 0 0;
+    font-size: 12px;
+    color: #8c8c8c;
+}
+.data-placeholder-sub {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #8c8c8c;
+    line-height: 1.5;
+}
+.data-placeholder-sub code {
+    font-size: 12px;
+    padding: 1px 6px;
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
 /* searchFormContainer 不需要滚动，高度由内容撑开 */
 #searchFormContainer {
     overflow: visible !important;
@@ -1004,6 +1059,39 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* 筛选项区域：标题 + Tag 行（表单筛选 + 已选广告主 + 已屏蔽广告主） */
+.guangdada-filter-tags-section {
+  margin-top: 12px;
+  margin-bottom: 8px;
+}
+.guangdada-filter-tags-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+}
+.guangdada-filter-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.guangdada-filter-tag {
+  margin-inline-end: 0;
+}
+.guangdada-filter-tag-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: cover;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.guangdada-filter-tag--blocked .guangdada-filter-tag-avatar {
+  opacity: 0.75;
 }
 
 .guangdada-filters-footer {
@@ -3301,7 +3389,6 @@ body.insightrackr-fullscreen-active .data-card {
 
 /* 数据区域外壳：时间筛选 + 排序去重常驻，其下为 loading/空/列表 */
 .data-area {
-  margin-top: 20px;
   display: flex;
   flex-direction: column;
 }
@@ -3839,13 +3926,12 @@ body.insightrackr-fullscreen-active .data-card {
     font-size: 13px;
     color: #333;
 }
-.download-list-item__status {
+.download-list-item__error {
     flex-shrink: 0;
     font-size: 12px;
-    color: #666;
+    color: #ff4d4f;
+    margin-left: 8px;
 }
-.download-list-item--done .download-list-item__status { color: #52c41a; }
-.download-list-item--error .download-list-item__status { color: #ff4d4f; }
 .download-list-item__progress-wrap {
     width: 100%;
     height: 4px;
@@ -3862,10 +3948,10 @@ body.insightrackr-fullscreen-active .data-card {
 }
 
 /* 下载列表侧边 Drawer */
-.download-list-drawer-size-block {
+.download-list-drawer-queue-block {
     font-size: 12px;
-    color: #666;
-    padding: 8px 0 12px;
+    color: #1890ff;
+    padding: 6px 0 10px;
     margin-bottom: 8px;
     border-bottom: 1px solid #eee;
 }
@@ -4131,6 +4217,37 @@ body.insightrackr-fullscreen-active .data-card {
 .card-thumbnail img[src=""],
 .card-thumbnail img:not([src]) {
     opacity: 0;
+}
+
+/* hover 播放按钮时叠加在缩略图上的预览视频：不抢焦点，在播放按钮下层；无 src 时透明，用预览图占位 */
+.card-thumbnail-hover-video {
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+}
+.card-thumbnail-hover-video[src] {
+    opacity: 1;
+}
+
+/* 悬停播放按钮后、视频开始播放前的加载层：半透明底 + 旋转动画 */
+.card-thumbnail-hover-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
+.card-thumbnail-hover-spinner {
+    display: block;
+    width: 36px;
+    height: 36px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
 }
 
 .card-thumbnail-iframe {

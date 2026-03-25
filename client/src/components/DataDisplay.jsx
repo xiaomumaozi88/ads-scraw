@@ -3,6 +3,8 @@ import { Button, Modal, Checkbox, Tooltip, message, InputNumber } from 'antd';
 import CreativeCardInsightrackr from './CreativeCardInsightrackr';
 import CreativeCardGuangdada from './CreativeCardGuangdada';
 import GuangdadaDetailModal from './GuangdadaDetailModal';
+import GuangdadaDomesticResults from './GuangdadaDomesticResults';
+import './GuangdadaDomesticResults.css';
 import InsightrackrDetailModal from './InsightrackrDetailModal';
 import SortSelector from './SortSelector';
 import Pagination from './Pagination';
@@ -20,9 +22,16 @@ import {
   getCompetitorName,
   buildDownloadBaseName,
 } from '../utils/batchDownloadProcessor';
+import {
+  getDomesticAdInfoListItems,
+  getDomesticAdInfoRootMeta,
+  DOMESTIC_AD_INFO_PAGE_SIZE,
+} from '../utils/guangdadaDomesticAdInfo';
 
 function DataDisplay({
   data,
+  /** 广大大国内版 BBA 列表响应：与 data 二选一，用于复用尺寸选择弹窗与下载队列 */
+  domesticAdInfoResult = null,
   platform,
   onSortChange,
   currentSearchParams,
@@ -40,6 +49,7 @@ function DataDisplay({
   onExitBatchMode,
   onBlockAdvertiser,
 }) {
+  const isDomesticGuangdadaView = platform === 'guangdada' && domesticAdInfoResult != null;
   const startDownloadBtnRef = useRef(null);
   /** 批量下载时各任务进度缓存，避免并发 setState 互相覆盖导致「共用一个进度」 */
   const batchProgressRef = useRef({});
@@ -101,7 +111,7 @@ function DataDisplay({
     </Tooltip>
   );
 
-  if (!data) {
+  if (!isDomesticGuangdadaView && !data) {
     return (
       <div className="data-container data-container--empty">
         <div className="data-placeholder">
@@ -112,8 +122,8 @@ function DataDisplay({
     );
   }
 
-  // 检查是否有错误信息
-  if (data.code && data.code !== 200 && data.message) {
+  // 检查是否有错误信息（国内版常用 status 20000）
+  if (!isDomesticGuangdadaView && data.code != null && data.code !== 200 && data.message) {
     return (
       <div className="data-container data-container--empty">
         <div className="data-placeholder">
@@ -126,39 +136,39 @@ function DataDisplay({
 
   // 提取列表数据
   let dataList = [];
-  
-  // 优先检查 creative_list 字段（广大大平台）
-  // 注意：即使 platform 是 undefined，也要检查 creative_list
-  if (data.data && data.data.creative_list && Array.isArray(data.data.creative_list)) {
-    dataList = data.data.creative_list;
 
-  } else if (data.data && data.data.data && data.data.data.creative_list && Array.isArray(data.data.data.creative_list)) {
-    dataList = data.data.data.creative_list;
-  
-  } else if (data.creative_list && Array.isArray(data.creative_list)) {
-    dataList = data.creative_list;
-  
-  } else if (data.list && Array.isArray(data.list)) {
-    // Insightrackr 平台：data.list
-    dataList = data.list;
-  } else if (Array.isArray(data)) {
-    dataList = data;
-  } else if (data.data) {
-    if (Array.isArray(data.data)) {
-      dataList = data.data;
-    } else if (data.data.list && Array.isArray(data.data.list)) {
-      dataList = data.data.list;
-    } else if (data.data.data && Array.isArray(data.data.data)) {
-      dataList = data.data.data;
-    } else if (data.data.items && Array.isArray(data.data.items)) {
-      dataList = data.data.items;
+  if (isDomesticGuangdadaView) {
+    dataList = getDomesticAdInfoListItems(domesticAdInfoResult);
+  } else {
+    // 优先检查 creative_list 字段（广大大平台）
+    // 注意：即使 platform 是 undefined，也要检查 creative_list
+    if (data.data && data.data.creative_list && Array.isArray(data.data.creative_list)) {
+      dataList = data.data.creative_list;
+    } else if (data.data && data.data.data && data.data.data.creative_list && Array.isArray(data.data.data.creative_list)) {
+      dataList = data.data.data.creative_list;
+    } else if (data.creative_list && Array.isArray(data.creative_list)) {
+      dataList = data.creative_list;
+    } else if (data.list && Array.isArray(data.list)) {
+      // Insightrackr 平台：data.list
+      dataList = data.list;
+    } else if (Array.isArray(data)) {
+      dataList = data;
+    } else if (data.data) {
+      if (Array.isArray(data.data)) {
+        dataList = data.data;
+      } else if (data.data.list && Array.isArray(data.data.list)) {
+        dataList = data.data.list;
+      } else if (data.data.data && Array.isArray(data.data.data)) {
+        dataList = data.data.data;
+      } else if (data.data.items && Array.isArray(data.data.items)) {
+        dataList = data.data.items;
+      }
+    } else if (data.items && Array.isArray(data.items)) {
+      dataList = data.items;
     }
-  } else if (data.items && Array.isArray(data.items)) {
-    dataList = data.items;
   }
-  
 
-  if (dataList.length === 0) {
+  if (dataList.length === 0 && !isDomesticGuangdadaView) {
     return (
       <div className="data-container data-container--empty">
         <div className="data-placeholder">
@@ -191,17 +201,22 @@ function DataDisplay({
   
   // 分页信息：Insightrackr 用 countData.totalSize；广大大用 count 接口的 result_total，无 count 时回退 data.data.total_count
   const countInfo = countData?.data || countData;
-  const totalSize = platform === 'guangdada'
-    ? (countInfo?.result_total ?? data?.data?.total_count ?? data?.total_count ?? 0)
-    : (countInfo?.totalSize ?? 0);
+  const domesticMeta = isDomesticGuangdadaView ? getDomesticAdInfoRootMeta(domesticAdInfoResult) : null;
+  const totalSize = isDomesticGuangdadaView
+    ? (domesticMeta?.total != null ? domesticMeta.total : 0)
+    : platform === 'guangdada'
+      ? (countInfo?.result_total ?? data?.data?.total_count ?? data?.total_count ?? 0)
+      : (countInfo?.totalSize ?? 0);
   const newNum = countInfo?.newNum ?? 0;
   const latestDate = countInfo?.latestDate ?? '';
   const currentPage = platform === 'guangdada'
     ? (currentSearchParams?.page ?? 1)
     : (currentSearchParams?.baseOption?.pageIndex || 1);
-  const pageSize = platform === 'guangdada'
-    ? (currentSearchParams?.pageSize ?? 60)
-    : (currentSearchParams?.baseOption?.pageSize || 60);
+  const pageSize = isDomesticGuangdadaView
+    ? (currentSearchParams?.pageSize ?? DOMESTIC_AD_INFO_PAGE_SIZE)
+    : platform === 'guangdada'
+      ? (currentSearchParams?.pageSize ?? 60)
+      : (currentSearchParams?.baseOption?.pageSize || 60);
 
   const pageItemIds = dataList.map((item) => getBatchItemId(item, platform));
   const handleSelectAllPage = () => {
@@ -349,46 +364,68 @@ function DataDisplay({
   return (
     <div className="data-container">
       <div className="data-content">
-        {!batchDownloadMode ? (
-          <div className="batch-download-toolbar">
-            <Button type="primary" ghost onClick={onEnterBatchMode}>
-              批量下载
-            </Button>
-          </div>
+        {dataList.length > 0 &&
+          (!batchDownloadMode ? (
+            <div className="batch-download-toolbar">
+              <Button type="primary" ghost onClick={onEnterBatchMode}>
+                批量下载
+              </Button>
+            </div>
+          ) : (
+            <div className="batch-download-toolbar batch-download-toolbar--active">
+              <Button type="primary" ghost onClick={handleSelectAllPage}>
+                全选本页
+              </Button>
+              <Button type="primary" onClick={handleConfirmDownload} disabled={selectedIds.size === 0}>
+                确认下载 ({selectedIds.size})
+              </Button>
+              <Button onClick={onBatchDownloadCancel}>取消</Button>
+            </div>
+          ))}
+        {isDomesticGuangdadaView ? (
+          dataList.length === 0 ? (
+            <div className="gdd-results gdd-results--empty">
+              <p>本次查询未返回列表数据（或结构异常）。</p>
+              <p className="gdd-results__hint">
+                请确认接口 <code>status</code> 为成功且 <code>data.data</code> 为数组。
+              </p>
+            </div>
+          ) : (
+            <GuangdadaDomesticResults
+              result={domesticAdInfoResult}
+              onRequestDownload={handleRequestVideoDownload}
+              batchDownloadMode={batchDownloadMode}
+              selectedIds={selectedIds}
+              onToggleSelect={onToggleSelect}
+              onEnterBatchMode={onEnterBatchMode}
+            />
+          )
         ) : (
-          <div className="batch-download-toolbar batch-download-toolbar--active">
-            <Button type="primary" ghost onClick={handleSelectAllPage}>
-              全选本页
-            </Button>
-            <Button type="primary" onClick={handleConfirmDownload} disabled={selectedIds.size === 0}>
-              确认下载 ({selectedIds.size})
-            </Button>
-            <Button onClick={onBatchDownloadCancel}>取消</Button>
-          </div>
-        )}
-        <div className={`results-container${platform === 'insightrackr' && currentSearchParams?.insightrackrSearchTab === 'playable' ? ' results-container--playable' : ''}`}>
-          {dataList.map((item, index) => {
-            const key = item.ad_key || item.id || item.search_flag || index;
-            const creativeId = item.id || item.search_flag || item.ad_key || item.bizId || item.materialId;
-            const itemId = getBatchItemId(item, platform);
-            const cardBatchProps = {
-              batchMode: batchDownloadMode,
-              selected: selectedIds.has(itemId),
-              onToggleSelect: () => onToggleSelect && onToggleSelect(itemId),
-              onEnterBatchMode: batchDownloadMode ? undefined : onEnterBatchMode,
-            };
-            if (platform === 'guangdada') {
-              return (
-                <CreativeCardGuangdada
-                  key={key}
-                  item={item}
-                  onOpenDetail={() => setGuangdadaDetailItem(item)}
-                  onRequestVideoDownload={handleRequestVideoDownload}
-                  onBlockAdvertiser={onBlockAdvertiser}
-                  {...cardBatchProps}
-                />
-              );
-            } else {
+          <div
+            className={`results-container${platform === 'insightrackr' && currentSearchParams?.insightrackrSearchTab === 'playable' ? ' results-container--playable' : ''}`}
+          >
+            {dataList.map((item, index) => {
+              const key = item.ad_key || item.id || item.search_flag || index;
+              const creativeId = item.id || item.search_flag || item.ad_key || item.bizId || item.materialId;
+              const itemId = getBatchItemId(item, platform);
+              const cardBatchProps = {
+                batchMode: batchDownloadMode,
+                selected: selectedIds.has(itemId),
+                onToggleSelect: () => onToggleSelect && onToggleSelect(itemId),
+                onEnterBatchMode: batchDownloadMode ? undefined : onEnterBatchMode,
+              };
+              if (platform === 'guangdada') {
+                return (
+                  <CreativeCardGuangdada
+                    key={key}
+                    item={item}
+                    onOpenDetail={() => setGuangdadaDetailItem(item)}
+                    onRequestVideoDownload={handleRequestVideoDownload}
+                    onBlockAdvertiser={onBlockAdvertiser}
+                    {...cardBatchProps}
+                  />
+                );
+              }
               return (
                 <CreativeCardInsightrackr
                   key={key}
@@ -398,16 +435,20 @@ function DataDisplay({
                   mediaChannels={creativeId ? (mediaDistribute[creativeId] || []) : []}
                   appList={creativeId ? (appDistribute[creativeId] || []) : []}
                   isPlayable={platform === 'insightrackr' && currentSearchParams?.insightrackrSearchTab === 'playable'}
-                  onOpenDetail={platform === 'insightrackr' && currentSearchParams?.insightrackrSearchTab === 'playable' ? undefined : () => setInsightrackrDetailItem(item)}
+                  onOpenDetail={
+                    platform === 'insightrackr' && currentSearchParams?.insightrackrSearchTab === 'playable'
+                      ? undefined
+                      : () => setInsightrackrDetailItem(item)
+                  }
                   onRequestVideoDownload={handleRequestVideoDownload}
                   {...cardBatchProps}
                 />
               );
-            }
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </div>
-      {platform === 'guangdada' && (
+      {platform === 'guangdada' && !isDomesticGuangdadaView && (
         <GuangdadaDetailModal
           item={guangdadaDetailItem}
           open={!!guangdadaDetailItem}

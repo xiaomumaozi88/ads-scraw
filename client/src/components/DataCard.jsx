@@ -1,10 +1,23 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { message as antdMessage } from 'antd';
 import dayjs from 'dayjs';
 import { getTodayBeijingDayjs, getTodayBeijingStr } from '../utils/beijingDate';
-import { searchData, getCount, getDistributeMedia, getDistributeApp, clearLogin, formatRequestError, guangdadaMultiModalSearch, getGuangdadaHiddenInfo } from '../utils/api';
+import {
+  searchData,
+  getCount,
+  getDistributeMedia,
+  getDistributeApp,
+  clearLogin,
+  formatRequestError,
+  guangdadaMultiModalSearch,
+  getGuangdadaHiddenInfo,
+  searchGuangdadaCnAdInfo,
+} from '../utils/api';
 import { dateRangeToSeenParams } from '../utils/guangdadaApiBody';
+import { DOMESTIC_AD_INFO_PAGE_SIZE } from '../utils/guangdadaDomesticAdInfo';
 import SearchForm from './SearchForm';
+import GuangdadaDomesticSearchForm from './GuangdadaDomesticSearchForm';
+import GuangdadaDomesticShortcutBar from './GuangdadaDomesticShortcutBar';
 import DataDisplay from './DataDisplay';
 import TimeFilter from './TimeFilter';
 import SortDedupBar from './SortDedupBar';
@@ -22,7 +35,7 @@ function formatGuangdadaCount(num) {
   return `${n}`;
 }
 
-function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnteredWithHint, refreshPlatformStatus }) {
+function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, insightrackrStatusConfirmed = false, onBatchModeEnteredWithHint, refreshPlatformStatus }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [countData, setCountData] = useState(null);
@@ -42,6 +55,34 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
   });
   /** 广大大：已屏蔽的广告主（不看该广告主创意），用于 exclude_advertiser_key */
   const [blockedAdvertisers, setBlockedAdvertisers] = useState([]);
+  /** 广大大：未查询前点击 time-filter（7天/30天等）时暂存的日期范围，用于与 SearchForm 同步，查询后由 currentSearchParams 接管 */
+  const [guangdadaPendingDateRange, setGuangdadaPendingDateRange] = useState(null);
+  /** 进入页面且已登录时请求 SearchForm 用默认参数发起一次查询（仅请求一次） */
+  const [requestDefaultSearch, setRequestDefaultSearch] = useState(false);
+  /** 广大大：国际版（现有）| 国内版（独立搜索栏，接口待接） */
+  const [guangdadaEdition, setGuangdadaEdition] = useState('global');
+  /** 国内版 BBA ad-info 最近一次响应（列表 UI 待接） */
+  const [domesticAdInfoResult, setDomesticAdInfoResult] = useState(null);
+  /** 国内版：上次完整请求参数（用于快捷栏改推荐/排序时复用） */
+  const domesticLastPayloadRef = useRef(null);
+  /** 国内版：快捷「推荐」对应 search_content，空字符串表示「全部」用主搜索框 keyword */
+  const [domesticRecommendedKey, setDomesticRecommendedKey] = useState('');
+  /** 国内版：sort，默认与官网一致 1=最后看见 */
+  const [domesticSort, setDomesticSort] = useState(1);
+  /** 国内版列表当前页（与 BBA ad-info 的 page 参数一致） */
+  const [domesticListPage, setDomesticListPage] = useState(1);
+  /** 国内版：最近一次请求完成时间（用于统计区「更新时间」兜底） */
+  const [domesticFetchedAt, setDomesticFetchedAt] = useState(null);
+  /** 国内版：切换到国内版且已登录时递增，触发搜索表单与手动「搜索」一致的一次提交 */
+  const [domesticAutoSearchKey, setDomesticAutoSearchKey] = useState(0);
+  const domesticAutoSearchPrevRef = useRef({ domestic: false, logged: false });
+  /** 国内版搜索表单 ref：推荐/排序在无上次请求时也可 submit */
+  const domesticFormRef = useRef(null);
+  /** 与 state 同步，供 handleDomesticFormSearch 在同步 submit 前读到最新 sort / 推荐 */
+  const domesticSortRef = useRef(domesticSort);
+  const domesticRecommendedKeyRef = useRef(domesticRecommendedKey);
+  domesticSortRef.current = domesticSort;
+  domesticRecommendedKeyRef.current = domesticRecommendedKey;
 
   const toggleSelect = useCallback((id) => {
     setSelectedIds((prev) => {
@@ -63,6 +104,7 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
   }, []);
 
   const handleSearch = async (searchParams) => {
+    if (platform === 'guangdada') setGuangdadaPendingDateRange(null);
     let paramsToUse = searchParams;
     if (platform === 'guangdada' && blockedAdvertisers.length > 0 && searchParams.exclude_advertiser_key === undefined) {
       paramsToUse = { ...searchParams, exclude_advertiser_key: blockedAdvertisers.map((b) => b.advertiser_id) };
@@ -227,11 +269,111 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
 
   const todayBeijing = getTodayBeijingDayjs();
   const effectiveParams = platform === 'insightrackr' ? insightrackrResultByTab[insightrackrSearchTab]?.params : currentSearchParams;
+
+  // 进入广大大/Insightrackr 页面且已登录时，用默认参数自动发起一次查询；Insightrackr 必须等 status 返回「已登录」后再请求
+  React.useEffect(() => {
+    if (platform !== 'guangdada' && platform !== 'insightrackr') return;
+    if (platform === 'guangdada' && guangdadaEdition === 'domestic') return;
+    if (platform === 'insightrackr' && !insightrackrStatusConfirmed) return;
+    if (platform === 'guangdada' && !isLoggedIn) return;
+    if (platform === 'insightrackr' && !isLoggedIn) return;
+    if (effectiveParams != null) return;
+    setRequestDefaultSearch(true);
+  }, [platform, isLoggedIn, insightrackrStatusConfirmed, effectiveParams, guangdadaEdition]);
+
+  React.useEffect(() => {
+    if (platform !== 'guangdada' || guangdadaEdition !== 'domestic') {
+      setDomesticAdInfoResult(null);
+      domesticLastPayloadRef.current = null;
+      setDomesticRecommendedKey('');
+      setDomesticFetchedAt(null);
+      setDomesticListPage(1);
+    }
+  }, [platform, guangdadaEdition]);
+
+  React.useEffect(() => {
+    const isDomestic = platform === 'guangdada' && guangdadaEdition === 'domestic';
+    const shouldAutoSearch = isDomestic && isLoggedIn;
+    const prev = domesticAutoSearchPrevRef.current;
+    if (shouldAutoSearch && (!prev.domestic || !prev.logged)) {
+      setDomesticAutoSearchKey((k) => k + 1);
+    }
+    domesticAutoSearchPrevRef.current = { domestic: isDomestic, logged: !!isLoggedIn };
+  }, [platform, guangdadaEdition, isLoggedIn]);
+
+  const runDomesticSearch = useCallback(
+    async (payload) => {
+      domesticLastPayloadRef.current = payload;
+      const dr = payload?.dateRange;
+      const timeStr = dr ? `${dr.startTime} ~ ${dr.endTime}` : '';
+      const sc =
+        payload.recommendedSearch != null && String(payload.recommendedSearch).trim() !== ''
+          ? payload.recommendedSearch
+          : payload.keyword || '(空)';
+      addLog(
+        `[国内版] ad-info sort=${payload.sort ?? 1} position=${payload.position} accurate_search=${payload.exactSearch ? 1 : 0} search_content=${sc} exclude_keyword=${payload.excludeKeyword || '(空)'} 行业=${payload.industry} 时间=${timeStr}`,
+        'info'
+      );
+      setLoading(true);
+      try {
+        const data = await searchGuangdadaCnAdInfo(payload);
+        setDomesticAdInfoResult(data);
+        setDomesticFetchedAt(new Date());
+        if (data && typeof data.status === 'number' && data.status === 20000) {
+          addLog('[国内版] ad-info 请求成功', 'success');
+        } else {
+          addLog(
+            `[国内版] ad-info 已返回，业务 status=${data?.status ?? '?'} ${data?.message != null ? String(data.message) : ''}`,
+            'warn'
+          );
+        }
+      } catch (err) {
+        if (err?.requiresLogin) {
+          addLog(`[国内版] ad-info: ${err.message || '请先登录'}`, 'info');
+          if (onRequireLogin) onRequireLogin();
+          else antdMessage.info(err.message || '请先登录');
+        } else {
+          addLog(`[国内版] ad-info 请求失败: ${err.message}`, 'error');
+          antdMessage.error(formatRequestError(err.message));
+        }
+        setDomesticAdInfoResult(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [addLog, onRequireLogin]
+  );
+
+  const handleDomesticFormSearch = useCallback(
+    (formPayload) => {
+      setDomesticListPage(1);
+      const next = { ...formPayload, sort: domesticSortRef.current, page: 1 };
+      const rec = domesticRecommendedKeyRef.current;
+      if (rec) next.recommendedSearch = rec;
+      else delete next.recommendedSearch;
+      runDomesticSearch(next);
+    },
+    [runDomesticSearch]
+  );
+
+  const handleDomesticRecommendedSelect = useCallback((tagLabel) => {
+    const key = tagLabel === '全部' ? '' : tagLabel;
+    domesticRecommendedKeyRef.current = key;
+    setDomesticRecommendedKey(key);
+    domesticFormRef.current?.submitSearch();
+  }, []);
+
+  const handleDomesticSortChange = useCallback((sortVal) => {
+    domesticSortRef.current = sortVal;
+    setDomesticSort(sortVal);
+    domesticFormRef.current?.submitSearch();
+  }, []);
   const effectiveData = platform === 'insightrackr' ? insightrackrResultByTab[insightrackrSearchTab]?.data : data;
   const effectiveCountData = platform === 'insightrackr' ? insightrackrResultByTab[insightrackrSearchTab]?.countData : countData;
   const effectiveMediaDistribute = platform === 'insightrackr' ? (insightrackrResultByTab[insightrackrSearchTab]?.mediaDistribute || {}) : mediaDistribute;
   const effectiveAppDistribute = platform === 'insightrackr' ? (insightrackrResultByTab[insightrackrSearchTab]?.appDistribute || {}) : appDistribute;
 
+  const defaultDateRange = { startTime: todayBeijing.subtract(1, 'year').format('YYYY-MM-DD'), endTime: todayBeijing.format('YYYY-MM-DD') };
   const dateRangeValue = effectiveParams
     ? (platform === 'guangdada'
         ? {
@@ -243,7 +385,9 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
               : todayBeijing.format('YYYY-MM-DD'))
           }
         : { startTime: effectiveParams.baseOption?.startTime, endTime: effectiveParams.baseOption?.endTime })
-    : { startTime: todayBeijing.subtract(1, 'year').format('YYYY-MM-DD'), endTime: todayBeijing.format('YYYY-MM-DD') };
+    : (platform === 'guangdada' && guangdadaPendingDateRange)
+      ? guangdadaPendingDateRange
+      : defaultDateRange;
 
   const handleDateChange = (dateRange) => {
     if (!dateRange?.startTime || !dateRange?.endTime) return;
@@ -265,6 +409,9 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
               }
             };
       handleSearch(updatedParams);
+    } else if (platform === 'guangdada') {
+      // 首次进入页面尚未查询时，点击 7天/30天 等只更新待选日期，与 SearchForm 的日期选择器同步，用户点「查询」时会使用该范围
+      setGuangdadaPendingDateRange({ startTime: dateRange.startTime, endTime: dateRange.endTime });
     }
   };
 
@@ -317,6 +464,9 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
     });
   }, [effectiveParams]);
 
+  const showGlobalData = platform !== 'guangdada' || guangdadaEdition === 'global';
+  const showDomesticPanel = platform === 'guangdada' && guangdadaEdition === 'domestic';
+
   return (
     <div className="card data-card">
       {platform === 'insightrackr' && (
@@ -337,21 +487,62 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
           </button>
         </div>
       )}
-      <SearchForm
-        platform={platform}
-        onSearch={handleSearch}
-        loading={loading}
-        guangdadaSortField={platform === 'guangdada' ? effectiveParams?.sort_field : undefined}
-        guangdadaDedupType={platform === 'guangdada' ? effectiveParams?.duplicate_removal : undefined}
-        guangdadaDateRange={platform === 'guangdada' ? dateRangeValue : undefined}
-        insightrackrSearchTab={platform === 'insightrackr' ? insightrackrSearchTab : undefined}
-        insightrackrInitialFormData={platform === 'insightrackr' ? insightrackrFormByTab[insightrackrSearchTab] : undefined}
-        onInsightrackrFormDataChange={platform === 'insightrackr' ? (formData) => setInsightrackrFormByTab((prev) => ({ ...prev, [insightrackrSearchTab]: formData })) : undefined}
-        guangdadaBlockedAdvertisers={platform === 'guangdada' ? blockedAdvertisers : []}
-        onGuangdadaUnblockAdvertiser={platform === 'guangdada' ? handleUnblockAdvertiser : undefined}
-      />
+      {platform === 'guangdada' && (
+        <div className="insightrackr-search-tabs guangdada-edition-tabs">
+          <button
+            type="button"
+            className={`insightrackr-search-tab ${guangdadaEdition === 'global' ? 'active' : ''}`}
+            onClick={() => setGuangdadaEdition('global')}
+          >
+            国际版
+          </button>
+          <button
+            type="button"
+            className={`insightrackr-search-tab ${guangdadaEdition === 'domestic' ? 'active' : ''}`}
+            onClick={() => setGuangdadaEdition('domestic')}
+          >
+            国内版
+          </button>
+        </div>
+      )}
+      {platform === 'guangdada' && guangdadaEdition === 'domestic' ? (
+        <>
+          <GuangdadaDomesticSearchForm
+            ref={domesticFormRef}
+            loading={loading}
+            onSearch={handleDomesticFormSearch}
+            autoSearchKey={domesticAutoSearchKey}
+          />
+          <GuangdadaDomesticShortcutBar
+            recommendedKey={domesticRecommendedKey}
+            onRecommendedSelect={handleDomesticRecommendedSelect}
+            sort={domesticSort}
+            onSortChange={handleDomesticSortChange}
+            result={domesticAdInfoResult}
+            fetchedAt={domesticFetchedAt}
+            loading={loading}
+            formatCount={formatGuangdadaCount}
+          />
+        </>
+      ) : (
+        <SearchForm
+          platform={platform}
+          onSearch={handleSearch}
+          loading={loading}
+          guangdadaSortField={platform === 'guangdada' ? effectiveParams?.sort_field : undefined}
+          guangdadaDedupType={platform === 'guangdada' ? effectiveParams?.duplicate_removal : undefined}
+          guangdadaDateRange={platform === 'guangdada' ? dateRangeValue : undefined}
+          insightrackrSearchTab={platform === 'insightrackr' ? insightrackrSearchTab : undefined}
+          insightrackrInitialFormData={platform === 'insightrackr' ? insightrackrFormByTab[insightrackrSearchTab] : undefined}
+          onInsightrackrFormDataChange={platform === 'insightrackr' ? (formData) => setInsightrackrFormByTab((prev) => ({ ...prev, [insightrackrSearchTab]: formData })) : undefined}
+          guangdadaBlockedAdvertisers={platform === 'guangdada' ? blockedAdvertisers : []}
+          onGuangdadaUnblockAdvertiser={platform === 'guangdada' ? handleUnblockAdvertiser : undefined}
+          requestDefaultSearch={requestDefaultSearch}
+          onDefaultSearchTriggered={() => setRequestDefaultSearch(false)}
+        />
+      )}
       <div className="data-area">
-        {platform === 'guangdada' && (
+        {platform === 'guangdada' && guangdadaEdition === 'global' && (
           <>
             <div className="time-filter-row">
               <TimeFilter value={dateRangeValue} onChange={handleDateChange} />
@@ -389,14 +580,50 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
             </div>
           </div>
         )}
-        {!loading && !effectiveData && (
+        {showDomesticPanel && !loading && domesticAdInfoResult && (
+          <DataDisplay
+            domesticAdInfoResult={domesticAdInfoResult}
+            data={null}
+            platform="guangdada"
+            onSortChange={handleSearch}
+            currentSearchParams={{ page: domesticListPage, pageSize: DOMESTIC_AD_INFO_PAGE_SIZE }}
+            countData={null}
+            mediaDistribute={{}}
+            appDistribute={{}}
+            batchDownloadMode={batchDownloadMode}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onSelectAllPage={selectAllPage}
+            onBatchDownloadCancel={exitBatchMode}
+            onEnterBatchMode={() => setBatchDownloadMode(true)}
+            onBatchModeEnteredWithHint={onBatchModeEnteredWithHint}
+            onExitBatchMode={exitBatchMode}
+            onPageChange={(page) => {
+              window.scrollTo(0, 0);
+              const scrollEl = document.querySelector('.data-card');
+              if (scrollEl) scrollEl.scrollTop = 0;
+              const base = domesticLastPayloadRef.current;
+              if (!base) return;
+              setDomesticListPage(page);
+              runDomesticSearch({ ...base, page });
+            }}
+          />
+        )}
+        {showDomesticPanel && !loading && !domesticAdInfoResult && (
           <div className="data-container data-container--empty">
             <div className="data-placeholder">
               <p>{isLoggedIn ? '暂无数据' : '登录后查看数据'}</p>
             </div>
           </div>
         )}
-        {!loading && effectiveData && (
+        {showGlobalData && !loading && !effectiveData && (
+          <div className="data-container data-container--empty">
+            <div className="data-placeholder">
+              <p>{isLoggedIn ? '暂无数据' : '登录后查看数据'}</p>
+            </div>
+          </div>
+        )}
+        {showGlobalData && !loading && effectiveData && (
           <DataDisplay
             data={effectiveData}
             platform={platform}
@@ -415,6 +642,9 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, onBatchModeEnt
             onExitBatchMode={exitBatchMode}
             onBlockAdvertiser={platform === 'guangdada' ? handleBlockAdvertiser : undefined}
             onPageChange={(page) => {
+              window.scrollTo(0, 0);
+              const scrollEl = document.querySelector('.data-card');
+              if (scrollEl) scrollEl.scrollTop = 0;
               if (effectiveParams) {
                 const updatedParams = platform === 'guangdada'
                   ? { ...effectiveParams, page }

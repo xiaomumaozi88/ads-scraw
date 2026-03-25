@@ -145,8 +145,14 @@ export const initializeBrowser = async () => {
     }
     
     try {
-        logger.info('尝试启动浏览器，配置:', JSON.stringify(puppeteerOptionsInsightrackr, null, 2));
-        browser = await puppeteer.launch(puppeteerOptionsInsightrackr);
+        const launchOpts = { ...puppeteerOptionsInsightrackr };
+        const debugPort = process.env.CHROME_REMOTE_DEBUGGING_PORT_INSIGHTRACKR;
+        if (debugPort) {
+            launchOpts.args = [...(launchOpts.args || []), `--remote-debugging-port=${debugPort}`];
+            logger.info('已启用 Chrome 远程调试端口（Insightrackr）:', debugPort);
+        }
+        logger.info('尝试启动浏览器，配置:', JSON.stringify(launchOpts, null, 2));
+        browser = await puppeteer.launch(launchOpts);
         
         // 验证浏览器连接是否正常
         try {

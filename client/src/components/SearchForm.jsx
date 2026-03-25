@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DatePicker, Cascader, Checkbox, Dropdown, Popover, Select, Tooltip, Button, Input } from 'antd';
+import { DatePicker, Cascader, Checkbox, Dropdown, Popover, Select, Tag, Tooltip, Button, Input } from 'antd';
 import dayjs from 'dayjs';
 import { getTodayBeijingDayjs } from '../utils/beijingDate';
 import CountryCascader from './CountryCascader';
@@ -43,8 +43,391 @@ import SortSelector from './SortSelector';
 import { buildGuangdadaApiBody } from '../utils/guangdadaApiBody';
 import { getGuangdadaAdvertiserAssociation } from '../utils/api';
 import InsightrackrGlobalSearch from './InsightrackrGlobalSearch';
+import { GUANGDADA_COUNTRY_CODE_TO_CN } from '../data/guangdadaCountries';
+import { CHANNEL_VALUE_MAP } from '../data/guangdadaChannels';
+import { GUANGDADA_COPY_LANG_OPTIONS } from '../data/guangdadaCopyLangs';
+import { GUANGDADA_IMAGE_ANALYSIS_CATEGORIES } from '../data/guangdadaImageAnalysis';
+import { GUANGDADA_VIDEO_ANALYSIS_CATEGORIES } from '../data/guangdadaVideoAnalysis';
+import { GUANGDADA_CORE_TRACK_CATEGORIES } from '../data/guangdadaCoreTrack';
+import {
+  GUANGDADA_VIDEO_DURATION_OPTIONS,
+  GUANGDADA_SIZE_OPTIONS,
+  GUANGDADA_QUALITY_OPTIONS,
+} from '../data/guangdadaMaterialAttr';
 
 const { RangePicker } = DatePicker;
+
+const VIDEO_DURATION_VALUE_TO_LABEL = Object.fromEntries(
+  (GUANGDADA_VIDEO_DURATION_OPTIONS || []).filter((o) => !o.isCustom).map((o) => [o.value || '', o.label])
+);
+const SIZE_VALUE_TO_LABEL = Object.fromEntries((GUANGDADA_SIZE_OPTIONS || []).map((o) => [o.value, o.label]));
+const QUALITY_VALUE_TO_LABEL = Object.fromEntries((GUANGDADA_QUALITY_OPTIONS || []).map((o) => [o.value, o.label]));
+
+const COPY_LANG_VALUE_TO_LABEL = Object.fromEntries(GUANGDADA_COPY_LANG_OPTIONS.map((o) => [o.value, o.label]));
+const GUANGDADA_CREATIVE_FORM_LABELS = { '1': '广告原帖', '2': '动态广告', '3': '试玩广告' };
+const GUANGDADA_CTA_LABELS = { conversion: '转化', traffic: '流量获取', leads: '潜在客户', engagement: '互动', app_download: '应用下载', app_preorder: '应用预约', other: '其它' };
+const GUANGDADA_MONETIZATION_LABELS = { iap: '内购', non_iap: '非内购' };
+const GUANGDADA_RETARGETING_LABELS = { first: '初次投放', repeat: '重复投放' };
+const GUANGDADA_ADVERTISER_SYSTEM_LABELS = { ios_android: 'iOS & Android', ios: 'iOS', android: 'Android', fb_mini_game: 'FB小游戏', pwa: 'PWA', pc: 'PC', pc_steam: 'PC-Steam', playstation: 'PlayStation游戏', xbox: 'Xbox游戏', ea: 'EA游戏' };
+
+function flattenCategoriesToMap(categories) {
+  const m = {};
+  (categories || []).forEach((cat) => {
+    (cat.items || []).forEach((item) => { m[item.value] = item.label; });
+  });
+  return m;
+}
+function flattenTreeToMap(tree) {
+  const m = {};
+  (tree || []).forEach((cat) => {
+    (cat.children || []).forEach((ch) => { m[ch.value] = ch.label; });
+  });
+  return m;
+}
+function flattenGameToolTreeToMap(tree) {
+  const m = {};
+  (tree || []).forEach((cat) => {
+    (cat.children || []).forEach((ch) => { m[ch.value] = ch.label; });
+  });
+  return m;
+}
+function getCascaderLabel(options, valuePath) {
+  if (!Array.isArray(valuePath) || valuePath.length === 0) return '';
+  const parts = [];
+  let current = options || [];
+  for (const v of valuePath) {
+    const item = current.find((o) => o.value === v);
+    if (!item) return valuePath.join(' / ');
+    parts.push(item.label);
+    current = item.children || [];
+  }
+  return parts.join(' / ');
+}
+
+/**
+ * 按父级分组：返回已选中的大类名称列表，以及 hover 全文（每行一个大类名，下一行该大类的全部子项）
+ * @returns {{ parentNames: string[], fullText: string }}
+ */
+function getTreeCategoryByParent(tree, selectedCodes, valueToLabel) {
+  if (!selectedCodes?.length || !tree?.length) return { parentNames: [], fullText: '' };
+  const parentNames = [];
+  const lines = [];
+  for (const parent of tree) {
+    const children = parent.children || [];
+    const selected = selectedCodes.filter((c) => children.some((ch) => ch.value === c));
+    if (selected.length === 0) continue;
+    parentNames.push(parent.name);
+    const labels = selected.map((c) => (valueToLabel && valueToLabel[c]) ?? c);
+    lines.push(parent.name);
+    lines.push(labels.join('、'));
+  }
+  return { parentNames, fullText: lines.join('\n') };
+}
+
+/** 素材规格：将 creativeAttr 转为 Tag 展示的 summary 与 hover 全文 */
+function getCreativeAttrDisplayText(attr) {
+  if (!attr) return { summaryText: '', fullText: '' };
+  const parts = [];
+  const summaryParts = [];
+  // 视频时长
+  const vd = attr.videoDuration;
+  if (vd && vd !== '-') {
+    const vdLabel = VIDEO_DURATION_VALUE_TO_LABEL[vd] ?? vd;
+    parts.push(`视频时长：${vdLabel}`);
+    summaryParts.push(vdLabel);
+  } else if (vd === '-' && (attr.videoDurationMin != null || attr.videoDurationMax != null)) {
+    const min = attr.videoDurationMin ?? '';
+    const max = attr.videoDurationMax ?? '';
+    const range = `${min}~${max}秒`;
+    parts.push(`视频时长：自定义 ${range}`);
+    summaryParts.push(`自定义${range}`);
+  }
+  // 尺寸
+  const sizeArr = attr.size || [];
+  if (sizeArr.length > 0) {
+    const labels = sizeArr.map((v) => SIZE_VALUE_TO_LABEL[v] ?? v);
+    parts.push(`尺寸：${labels.join('、')}`);
+    summaryParts.push(labels.length === 1 ? labels[0] : `${labels[0]}等${labels.length}项`);
+  }
+  // 画质
+  const qualityArr = attr.quality || [];
+  if (qualityArr.length > 0) {
+    const labels = qualityArr.map((v) => QUALITY_VALUE_TO_LABEL[v] ?? v);
+    parts.push(`画质：${labels.join('、')}`);
+    summaryParts.push(labels.join('、'));
+  }
+  // 分辨率
+  const resArr = attr.resolution || [];
+  if (resArr.length > 0) {
+    parts.push(`分辨率：${resArr.join('、')}`);
+    summaryParts.push(resArr.length === 1 ? resArr[0] : `${resArr[0]}等${resArr.length}项`);
+  }
+  const fullText = parts.join('\n');
+  const summaryText = summaryParts.join('，');
+  return { summaryText, fullText };
+}
+
+const IMAGE_ANALYSIS_VALUE_TO_LABEL = flattenCategoriesToMap(GUANGDADA_IMAGE_ANALYSIS_CATEGORIES);
+const VIDEO_ANALYSIS_VALUE_TO_LABEL = flattenCategoriesToMap(GUANGDADA_VIDEO_ANALYSIS_CATEGORIES);
+const CORE_TRACK_VALUE_TO_LABEL = flattenCategoriesToMap(GUANGDADA_CORE_TRACK_CATEGORIES);
+const GAME_CATEGORY_VALUE_TO_LABEL = flattenGameToolTreeToMap(GUANGDADA_GAME_CATEGORIES_TREE);
+const TOOL_CATEGORY_VALUE_TO_LABEL = flattenGameToolTreeToMap(GUANGDADA_TOOL_CATEGORIES_TREE);
+const WEBSITE_TYPE_VALUE_TO_LABEL = flattenTreeToMap(GUANGDADA_WEBSITE_TYPE_TREE);
+
+// 预约广告 / 落地页类型 / 链接类型：级联选项，getGuangdadaFilterTags 需在模块级访问
+const GUANGDADA_PREORDER_CASCADER_OPTIONS = [
+  { value: '1', label: '预约广告', children: [{ value: '1-1', label: '全部' }] },
+  { value: '2', label: '非预约广告' },
+];
+const GUANGDADA_LANDING_PAGE_CASCADER_OPTIONS = [
+  { value: '1', label: '游戏APP' },
+  { value: '2', label: '游戏网站(W2A)', children: [{ value: '2-1', label: '应用商店' }, { value: '2-2', label: 'APK' }] },
+  { value: '3', label: '游戏社交账号' },
+  { value: '-1', label: '其他' },
+];
+const GUANGDADA_LINK_TYPE_CASCADER_OPTIONS = [
+  { value: '1', label: '重定向链接' },
+  { value: '2', label: 'DSP分发平台', children: [{ value: '2-1', label: '有DSP平台分发' }, { value: '2-2', label: '无DSP平台分发' }] },
+];
+
+/**
+ * 从广大大表单数据生成「查询」按钮上方展示的筛选 Tag 列表；每项可删除，hover 展示全部选项
+ * @returns {Array<{ fieldKey: string, label: string, summaryText: string, fullText: string, defaultValue: any }>}
+ */
+function getGuangdadaFilterTags(formData) {
+  const tags = [];
+  const country = formData.guangdadaCountry || [];
+  if (country.length > 0) {
+    const labels = country.map((c) => GUANGDADA_COUNTRY_CODE_TO_CN[c] ?? c);
+    const summary = labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`;
+    tags.push({
+      fieldKey: 'guangdadaCountry',
+      label: '国家/地区',
+      summaryText: summary,
+      fullText: labels.join('、'),
+      defaultValue: [],
+    });
+  }
+  const channels = formData.guangdadaChannels || [];
+  if (channels.length > 0) {
+    const labels = channels.map((c) => CHANNEL_VALUE_MAP[c]?.label ?? c);
+    const summary = labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`;
+    tags.push({
+      fieldKey: 'guangdadaChannels',
+      label: '渠道',
+      summaryText: summary,
+      fullText: labels.join('、'),
+      defaultValue: [],
+    });
+  }
+  const copyLangs = formData.guangdadaCopyLangs || [];
+  if (copyLangs.length > 0) {
+    const labels = copyLangs.map((v) => COPY_LANG_VALUE_TO_LABEL[v] ?? v);
+    const summary = labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`;
+    tags.push({
+      fieldKey: 'guangdadaCopyLangs',
+      label: '文案语言',
+      summaryText: summary,
+      fullText: labels.join('、'),
+      defaultValue: [],
+    });
+  }
+  const creativeForm = formData.guangdadaCreativeForm || '';
+  if (creativeForm) {
+    const label = GUANGDADA_CREATIVE_FORM_LABELS[creativeForm] ?? creativeForm;
+    tags.push({
+      fieldKey: 'guangdadaCreativeForm',
+      label: '创意形式',
+      summaryText: label,
+      fullText: label,
+      defaultValue: '',
+    });
+  }
+  const placement = Array.isArray(formData.guangdadaPlacement) ? formData.guangdadaPlacement : [];
+  if (placement.length > 0) {
+    const ch = formData.guangdadaChannels || [];
+    const admobMap = Object.fromEntries((GUANGDADA_PLACEMENT_ADMOB || []).map((o) => [o.value, o.label]));
+    const ytMap = Object.fromEntries((GUANGDADA_PLACEMENT_YOUTUBE || []).map((o) => [o.value, o.label]));
+    const placementLabels = placement.map((v) => (ch.includes('admob') ? admobMap[v] : ch.includes('youtube') ? ytMap[v] : null) ?? v);
+    const summary = placementLabels.length === 1 ? placementLabels[0] : (placementLabels[0] ? `${placementLabels[0]}等 ${placement.length} 项` : `${placement.length} 项`);
+    tags.push({ fieldKey: 'guangdadaPlacement', label: '广告版位', summaryText: summary, fullText: placementLabels.join('、'), defaultValue: [] });
+  }
+  // 排除关键词
+  const excludeKeyword = formData.guangdadaExcludeKeyword || [];
+  if (excludeKeyword.length > 0) {
+    const summary = excludeKeyword.length === 1 ? excludeKeyword[0] : `${excludeKeyword[0]}等 ${excludeKeyword.length} 项`;
+    tags.push({ fieldKey: 'guangdadaExcludeKeyword', label: '排除关键词', summaryText: summary, fullText: excludeKeyword.join('、'), defaultValue: [] });
+  }
+  // 精确搜索
+  if (formData.guangdadaExactSearch === false) {
+    tags.push({ fieldKey: 'guangdadaExactSearch', label: '精确搜索', summaryText: '否', fullText: '否', defaultValue: true });
+  }
+  // 只看新增
+  if (formData.guangdadaNewAds === true) {
+    tags.push({ fieldKey: 'guangdadaNewAds', label: '只看新增', summaryText: '是', fullText: '是', defaultValue: false });
+  }
+  // 媒体类型
+  const mediaType = formData.guangdadaMediaType || '';
+  if (mediaType) {
+    tags.push({ fieldKey: 'guangdadaMediaType', label: '媒体类型', summaryText: mediaType, fullText: mediaType, defaultValue: '' });
+  }
+  // Top创意
+  const topCreative = formData.guangdadaTopCreative || '';
+  if (topCreative) {
+    tags.push({ fieldKey: 'guangdadaTopCreative', label: 'Top创意', summaryText: topCreative, fullText: topCreative, defaultValue: '' });
+  }
+  // 短剧 / AI App
+  if (formData.guangdadaIsTheater === true) {
+    tags.push({ fieldKey: 'guangdadaIsTheater', label: '短剧', summaryText: '是', fullText: '是', defaultValue: false });
+  }
+  if (formData.guangdadaIsAiApp === true) {
+    tags.push({ fieldKey: 'guangdadaIsAiApp', label: 'AI App', summaryText: '是', fullText: '是', defaultValue: false });
+  }
+  // 游戏分类：Tag 展示大类名（策略、益智），hover 先显示大类再换行显示该大类下全部子项
+  const gameCodes = formData.guangdadaGameCategoryCodes || [];
+  if (gameCodes.length > 0) {
+    const { parentNames, fullText } = getTreeCategoryByParent(GUANGDADA_GAME_CATEGORIES_TREE, gameCodes, GAME_CATEGORY_VALUE_TO_LABEL);
+    const summary = parentNames.length === 0
+      ? (() => { const labels = gameCodes.map((v) => GAME_CATEGORY_VALUE_TO_LABEL[v] ?? v); return labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`; })()
+      : (parentNames.length === 1 ? parentNames[0] : `${parentNames.join('、')}`);
+    const hoverText = fullText || gameCodes.map((v) => GAME_CATEGORY_VALUE_TO_LABEL[v] ?? v).join('、');
+    tags.push({ fieldKey: 'guangdadaGameCategoryCodes', label: '游戏分类', summaryText: summary, fullText: hoverText, defaultValue: [] });
+  }
+  // 工具分类
+  const toolCodes = formData.guangdadaToolCategoryCodes || [];
+  if (toolCodes.length > 0) {
+    const labels = toolCodes.map((v) => TOOL_CATEGORY_VALUE_TO_LABEL[v] ?? v);
+    const summary = labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`;
+    tags.push({ fieldKey: 'guangdadaToolCategoryCodes', label: '工具分类', summaryText: summary, fullText: labels.join('、'), defaultValue: [] });
+  }
+  // 网站类型（电商/品牌）
+  const websiteCodes = formData.guangdadaWebsiteTypeCodes || [];
+  if (websiteCodes.length > 0) {
+    const labels = websiteCodes.map((v) => WEBSITE_TYPE_VALUE_TO_LABEL[v] ?? v);
+    const summary = labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`;
+    tags.push({ fieldKey: 'guangdadaWebsiteTypeCodes', label: '网站类型', summaryText: summary, fullText: labels.join('、'), defaultValue: [] });
+  }
+  // 仅在该国家地区投放
+  if (formData.guangdadaOnlyInSelectedRegion === true) {
+    tags.push({ fieldKey: 'guangdadaOnlyInSelectedRegion', label: '仅在该国家地区投放', summaryText: '是', fullText: '是', defaultValue: false });
+  }
+  // 素材规格（creativeAttr）：展示所选视频时长、尺寸、画质、分辨率
+  const attr = formData.guangdadaCreativeAttr || {};
+  const hasAttr = (attr.size && attr.size.length > 0) || (attr.quality && attr.quality.length > 0) || (attr.resolution && attr.resolution.length > 0) || (attr.videoDuration && attr.videoDuration !== '' && attr.videoDuration !== '-') || (attr.videoDuration === '-' && (attr.videoDurationMin != null || attr.videoDurationMax != null));
+  if (hasAttr) {
+    const { summaryText: attrSummary, fullText: attrFull } = getCreativeAttrDisplayText(attr);
+    tags.push({ fieldKey: 'guangdadaCreativeAttr', label: '素材规格', summaryText: attrSummary, fullText: attrFull, defaultValue: { ...GUANGDADA_CREATIVE_ATTR_DEFAULT, size: [], quality: [], resolution: [], resolutionCustom: [] } });
+  }
+  // 图片智能分析
+  const imageAnalysis = formData.guangdadaImageAnalysis || [];
+  if (imageAnalysis.length > 0) {
+    const labels = imageAnalysis.map((v) => IMAGE_ANALYSIS_VALUE_TO_LABEL[v] ?? v);
+    const summary = labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`;
+    tags.push({ fieldKey: 'guangdadaImageAnalysis', label: '图片智能分析', summaryText: summary, fullText: labels.join('、'), defaultValue: [] });
+  }
+  // 视频智能分析
+  const videoAnalysis = formData.guangdadaVideoAnalysis || [];
+  if (videoAnalysis.length > 0) {
+    const labels = videoAnalysis.map((v) => VIDEO_ANALYSIS_VALUE_TO_LABEL[v] ?? v);
+    const summary = labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`;
+    tags.push({ fieldKey: 'guangdadaVideoAnalysis', label: '视频智能分析', summaryText: summary, fullText: labels.join('、'), defaultValue: [] });
+  }
+  // 创意规格（文案）
+  const creativeSpec = formData.guangdadaCreativeSpec || '';
+  if (creativeSpec.trim()) {
+    tags.push({ fieldKey: 'guangdadaCreativeSpec', label: '创意规格', summaryText: creativeSpec.trim(), fullText: creativeSpec.trim(), defaultValue: '' });
+  }
+  // 广告主体系
+  const advertiserSystem = formData.guangdadaAdvertiserSystem || '';
+  if (advertiserSystem) {
+    const label = GUANGDADA_ADVERTISER_SYSTEM_LABELS[advertiserSystem] ?? advertiserSystem;
+    tags.push({ fieldKey: 'guangdadaAdvertiserSystem', label: '广告主体系', summaryText: label, fullText: label, defaultValue: '' });
+  }
+  // 核心赛道/玩法/主题/IP
+  const coreTrack = formData.guangdadaCoreTrack || [];
+  if (coreTrack.length > 0) {
+    const labels = coreTrack.map((v) => CORE_TRACK_VALUE_TO_LABEL[v] ?? v);
+    const summary = labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`;
+    tags.push({ fieldKey: 'guangdadaCoreTrack', label: '核心赛道/玩法/主题/IP', summaryText: summary, fullText: labels.join('、'), defaultValue: [] });
+  }
+  // 预约广告
+  const preorderAd = formData.guangdadaPreorderAd || [];
+  if (preorderAd.length > 0) {
+    const label = getCascaderLabel(GUANGDADA_PREORDER_CASCADER_OPTIONS, preorderAd);
+    tags.push({ fieldKey: 'guangdadaPreorderAd', label: '预约广告', summaryText: label, fullText: label, defaultValue: [] });
+  }
+  // 内购/非内购
+  const monetizationType = formData.guangdadaMonetizationType || '';
+  if (monetizationType) {
+    const label = GUANGDADA_MONETIZATION_LABELS[monetizationType] ?? monetizationType;
+    tags.push({ fieldKey: 'guangdadaMonetizationType', label: '内购/非内购', summaryText: label, fullText: label, defaultValue: '' });
+  }
+  // FB受众画像
+  const fbAudience = formData.guangdadaFbAudience || { gender: [], age: [] };
+  const fbAudienceCount = (fbAudience.gender?.length || 0) + (fbAudience.age?.length || 0);
+  if (fbAudienceCount > 0) {
+    tags.push({ fieldKey: 'guangdadaFbAudience', label: 'FB受众画像', summaryText: `已选 ${fbAudienceCount} 项`, fullText: `已选 ${fbAudienceCount} 项`, defaultValue: { gender: [], age: [] } });
+  }
+  // 营销目标(CTA)
+  const cta = formData.guangdadaCta || '';
+  if (cta) {
+    const label = GUANGDADA_CTA_LABELS[cta] ?? cta;
+    tags.push({ fieldKey: 'guangdadaCta', label: '营销目标(CTA)', summaryText: label, fullText: label, defaultValue: '' });
+  }
+  // FB广告花费
+  const fbSpend = formData.guangdadaFbSpend || {};
+  if (getFbSpendDisplayText(fbSpend)) {
+    tags.push({ fieldKey: 'guangdadaFbSpend', label: 'FB广告花费', summaryText: getFbSpendDisplayText(fbSpend), fullText: getFbSpendDisplayText(fbSpend), defaultValue: { value: '', min: undefined, max: undefined } });
+  }
+  // 社媒互动
+  if (hasSocialEngagementSet(formData.guangdadaSocialEngagement)) {
+    tags.push({ fieldKey: 'guangdadaSocialEngagement', label: '社媒互动', summaryText: '已设置', fullText: '已设置', defaultValue: { like: { value: '', min: undefined, max: undefined }, comment: { value: '', min: undefined, max: undefined }, share: { value: '', min: undefined, max: undefined } } });
+  }
+  // CPI信息
+  const cpiCount = getCpiSelectedCount(formData.guangdadaCpi);
+  if (cpiCount > 0) {
+    tags.push({ fieldKey: 'guangdadaCpi', label: 'CPI信息', summaryText: `已选 ${cpiCount} 项`, fullText: `已选 ${cpiCount} 项`, defaultValue: { cpiRange: [], currency: [] } });
+  }
+  // 落地页类型
+  const landingPageType = formData.guangdadaLandingPageType || [];
+  if (landingPageType.length > 0) {
+    const label = getCascaderLabel(GUANGDADA_LANDING_PAGE_CASCADER_OPTIONS, landingPageType);
+    tags.push({ fieldKey: 'guangdadaLandingPageType', label: '落地页类型', summaryText: label, fullText: label, defaultValue: [] });
+  }
+  // 链接类型
+  const linkType = formData.guangdadaLinkType || [];
+  if (linkType.length > 0) {
+    const label = getCascaderLabel(GUANGDADA_LINK_TYPE_CASCADER_OPTIONS, linkType);
+    tags.push({ fieldKey: 'guangdadaLinkType', label: '链接类型', summaryText: label, fullText: label, defaultValue: [] });
+  }
+  // 重投广告
+  const retargeting = formData.guangdadaRetargeting || '';
+  if (retargeting) {
+    const label = GUANGDADA_RETARGETING_LABELS[retargeting] ?? retargeting;
+    tags.push({ fieldKey: 'guangdadaRetargeting', label: '重投广告', summaryText: label, fullText: label, defaultValue: '' });
+  }
+  // 包含页面信息
+  if (formData.guangdadaIncludePageInfo === true) {
+    tags.push({ fieldKey: 'guangdadaIncludePageInfo', label: '包含页面信息', summaryText: '是', fullText: '是', defaultValue: false });
+  }
+  // 违规广告
+  if (formData.guangdadaViolationAd === true) {
+    tags.push({ fieldKey: 'guangdadaViolationAd', label: '违规广告', summaryText: '是', fullText: '是', defaultValue: false });
+  }
+  // 尾卡
+  if (formData.guangdadaEndCard === true) {
+    tags.push({ fieldKey: 'guangdadaEndCard', label: '尾卡', summaryText: '是', fullText: '是', defaultValue: false });
+  }
+  // COD
+  if (formData.guangdadaCodFlag != null && Number(formData.guangdadaCodFlag) !== 0) {
+    tags.push({ fieldKey: 'guangdadaCodFlag', label: 'COD', summaryText: `已选(${formData.guangdadaCodFlag})`, fullText: String(formData.guangdadaCodFlag), defaultValue: 0 });
+  }
+  // 套利
+  if (formData.guangdadaSearchArbitrageFlag != null && Number(formData.guangdadaSearchArbitrageFlag) !== 0) {
+    tags.push({ fieldKey: 'guangdadaSearchArbitrageFlag', label: '套利', summaryText: `已选(${formData.guangdadaSearchArbitrageFlag})`, fullText: String(formData.guangdadaSearchArbitrageFlag), defaultValue: 0 });
+  }
+  return tags;
+}
 
 function getDefaultInsightrackrFormState() {
   return {
@@ -123,7 +506,7 @@ function getDefaultInsightrackrFormState() {
   };
 }
 
-function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdadaDedupType, guangdadaDateRange, insightrackrSearchTab = 'imagevideo', insightrackrInitialFormData, onInsightrackrFormDataChange, guangdadaBlockedAdvertisers = [], onGuangdadaUnblockAdvertiser }) {
+function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdadaDedupType, guangdadaDateRange, insightrackrSearchTab = 'imagevideo', insightrackrInitialFormData, onInsightrackrFormDataChange, guangdadaBlockedAdvertisers = [], onGuangdadaUnblockAdvertiser, requestDefaultSearch = false, onDefaultSearchTriggered }) {
   const [formData, setFormData] = useState(() =>
     platform === 'insightrackr' && insightrackrInitialFormData != null
       ? insightrackrInitialFormData
@@ -401,11 +784,6 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
     { value: 'ea', label: 'EA游戏' },
   ];
 
-  // 预约广告：级联选择（从产品 HTML 提取，一级：预约广告(可展开)、非预约广告；二级暂无具体选项，占位“全部”）
-  const GUANGDADA_PREORDER_CASCADER_OPTIONS = [
-    { value: '1', label: '预约广告', children: [{ value: '1-1', label: '全部' }] },
-    { value: '2', label: '非预约广告' },
-  ];
   // 高级筛选下拉选项（占位，后续可从产品 HTML 提取替换）
   // 内购/非内购：仅两项（从产品 HTML 提取）
   const GUANGDADA_MONETIZATION_OPTIONS = [
@@ -422,23 +800,11 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
     { value: 'app_preorder', label: '应用预约' },
     { value: 'other', label: '其它' },
   ];
-  // 落地页类型：级联选择（从产品 HTML 提取，一级：游戏APP/游戏网站(W2A)/游戏社交账号/其他；二级仅 游戏网站(W2A)：应用商店、APK）
-  const GUANGDADA_LANDING_PAGE_CASCADER_OPTIONS = [
-    { value: '1', label: '游戏APP' },
-    { value: '2', label: '游戏网站(W2A)', children: [{ value: '2-1', label: '应用商店' }, { value: '2-2', label: 'APK' }] },
-    { value: '3', label: '游戏社交账号' },
-    { value: '-1', label: '其他' },
-  ];
   // 创意形式：从产品 HTML 提取的 3 项
   const GUANGDADA_CREATIVE_FORM_OPTIONS = [
     { value: '1', label: '广告原帖' },
     { value: '2', label: '动态广告' },
     { value: '3', label: '试玩广告' },
-  ];
-  // 链接类型：级联选择（从产品 HTML 提取，一级：重定向链接、DSP分发平台；二级仅 DSP分发平台：有DSP平台分发、无DSP平台分发）
-  const GUANGDADA_LINK_TYPE_CASCADER_OPTIONS = [
-    { value: '1', label: '重定向链接' },
-    { value: '2', label: 'DSP分发平台', children: [{ value: '2-1', label: '有DSP平台分发' }, { value: '2-2', label: '无DSP平台分发' }] },
   ];
   // 重投广告：从产品 HTML 提取的 2 项
   const GUANGDADA_RETARGETING_OPTIONS = [
@@ -776,6 +1142,15 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
     return searchParams;
   };
 
+  // 进入页面且已登录时，用当前（默认）表单参数发起一次查询，仅执行一次
+  const defaultSearchTriggeredRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!requestDefaultSearch || !platform || defaultSearchTriggeredRef.current) return;
+    defaultSearchTriggeredRef.current = true;
+    onSearch(buildSearchParams(formData));
+    onDefaultSearchTriggered?.();
+  }, [requestDefaultSearch, platform]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     onSearch(buildSearchParams(formData));
@@ -958,23 +1333,6 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                 )}
               </div>
             </div>
-            {(formData.guangdadaSearchCategory === '广告信息' || formData.guangdadaSearchCategory === '素材内容') && selectedAdvertisers.length > 0 && (
-              <div className="guangdada-selected-advertiser">
-                <span className="guangdada-selected-advertiser-label">已选</span>
-                <div className="guangdada-selected-advertiser-list">
-                  {selectedAdvertisers.map((adv) => (
-                    <div key={adv.domain || adv.cross_app_id || adv.advertiser_name} className="guangdada-selected-advertiser-item">
-                      {adv.logo_url ? (
-                        <img src={adv.logo_url} alt="" className="guangdada-selected-advertiser-avatar" referrerPolicy="no-referrer" title={adv.advertiser_name} />
-                      ) : (
-                        <div className="guangdada-selected-advertiser-avatar guangdada-selected-advertiser-avatar--placeholder" title={adv.advertiser_name} />
-                      )}
-                      <button type="button" className="guangdada-selected-advertiser-remove" onClick={() => removeSelectedAdvertiser(adv)} aria-label="取消选择">×</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
             {formData.guangdadaSearchCategory === '广告信息' && (
               <div className="guangdada-search-options">
                 <Popover
@@ -2415,28 +2773,65 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                   </div>
                 </div>
               )}
-              {/* 已屏蔽广告主：横向展示头像，点击可取消屏蔽 */}
-              {guangdadaBlockedAdvertisers.length > 0 && (
-                <div className="guangdada-blocked-advertisers-row">
-                  <span className="guangdada-blocked-advertisers-label">已屏蔽广告主</span>
-                  <div className="guangdada-blocked-advertisers-avatars">
-                    {guangdadaBlockedAdvertisers.map((b) => (
-                      <button
-                        key={b.advertiser_id}
-                        type="button"
-                        className="guangdada-blocked-advertiser-avatar"
-                        onClick={() => onGuangdadaUnblockAdvertiser?.(b.advertiser_id)}
-                        title={b.advertiser_name || b.advertiser_id}
-                      >
-                        {b.logo_url ? (
-                          <img src={b.logo_url} alt="" referrerPolicy="no-referrer" onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling?.classList?.add('guangdada-blocked-avatar-fallback--show'); }} />
-                        ) : null}
-                        <span className="guangdada-blocked-avatar-fallback" aria-hidden>{b.advertiser_name ? String(b.advertiser_name).slice(0, 1) : (b.advertiser_id ? String(b.advertiser_id).slice(0, 1) : '?')}</span>
-                      </button>
-                    ))}
+              {/* 筛选项：表单筛选 Tag + 已选广告主 + 已屏蔽广告主，统一在「查询」按钮上方 */}
+              {(() => {
+                const filterTags = getGuangdadaFilterTags(formData);
+                const hasSelectedAdv = (formData.guangdadaSearchCategory === '广告信息' || formData.guangdadaSearchCategory === '素材内容') && selectedAdvertisers.length > 0;
+                const hasBlockedAdv = guangdadaBlockedAdvertisers.length > 0;
+                if (filterTags.length === 0 && !hasSelectedAdv && !hasBlockedAdv) return null;
+                return (
+                  <div className="guangdada-filter-tags-section">
+                    <span className="guangdada-filter-tags-title">筛选项</span>
+                    <div className="guangdada-filter-tags-row">
+                      {filterTags.map((t) => (
+                        <Tooltip
+                          key={t.fieldKey}
+                          title={<span style={{ whiteSpace: 'pre-line' }}>{t.fullText}</span>}
+                          placement="top"
+                          overlayInnerStyle={{ maxHeight: 350, overflowY: 'auto', maxWidth: 560 }}
+                        >
+                          <Tag
+                            closable
+                            onClose={(e) => {
+                              e.preventDefault();
+                              handleChange(t.fieldKey, t.defaultValue);
+                            }}
+                            className="guangdada-filter-tag"
+                          >
+                            {t.label}：{t.summaryText}
+                          </Tag>
+                        </Tooltip>
+                      ))}
+                      {hasSelectedAdv && selectedAdvertisers.map((adv, idx) => (
+                        <Tag
+                          key={`selected-adv-${idx}-${adv.domain || adv.cross_app_id || adv.advertiser_name || ''}`}
+                          closable
+                          onClose={(e) => { e.preventDefault(); removeSelectedAdvertiser(adv); }}
+                          className="guangdada-filter-tag guangdada-filter-tag--advertiser"
+                        >
+                          {adv.logo_url ? (
+                            <img src={adv.logo_url} alt="" className="guangdada-filter-tag-avatar" referrerPolicy="no-referrer" />
+                          ) : null}
+                          已选广告主：{adv.advertiser_name || adv.domain || adv.cross_app_id || '—'}
+                        </Tag>
+                      ))}
+                      {hasBlockedAdv && guangdadaBlockedAdvertisers.map((b) => (
+                        <Tag
+                          key={b.advertiser_id}
+                          closable
+                          onClose={(e) => { e.preventDefault(); onGuangdadaUnblockAdvertiser?.(b.advertiser_id); }}
+                          className="guangdada-filter-tag guangdada-filter-tag--blocked"
+                        >
+                          {b.logo_url ? (
+                            <img src={b.logo_url} alt="" className="guangdada-filter-tag-avatar" referrerPolicy="no-referrer" />
+                          ) : null}
+                          已屏蔽：{b.advertiser_name || b.advertiser_id}
+                        </Tag>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
               {/* 底部查询按钮：使用当前表单（含关键词与所有筛选项）发起查询 */}
               <div className="guangdada-filters-footer">
                 <button type="submit" className="guangdada-query-btn-bottom" disabled={loading} title={loading ? '查询中...' : '使用当前筛选条件查询'}>

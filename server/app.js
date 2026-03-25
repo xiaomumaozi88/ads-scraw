@@ -71,6 +71,31 @@ if (process.env.NODE_ENV === 'production') {
     }
 })();
 
+// 可选：定时重启浏览器以释放长期运行带来的 CPU/内存累积（不重启 Node 进程）
+// 设置环境变量 BROWSER_RESTART_INTERVAL_HOURS=6 表示每 6 小时重启一次浏览器，设为 0 或不设则关闭
+const browserRestartHours = parseInt(process.env.BROWSER_RESTART_INTERVAL_HOURS || '0', 10);
+if (browserRestartHours > 0) {
+    const intervalMs = browserRestartHours * 60 * 60 * 1000;
+    setInterval(async () => {
+        try {
+            logger.info('定时重启浏览器以降低 CPU/内存占用...');
+            await Promise.all([
+                puppeteerServiceInsightrackr.closeBrowser(),
+                puppeteerServiceGuangdada.closeBrowser()
+            ]);
+            await new Promise((r) => setTimeout(r, 2000)); // 等待进程完全退出
+            await Promise.all([
+                puppeteerServiceInsightrackr.initializeBrowser(),
+                puppeteerServiceGuangdada.initializeBrowser()
+            ]);
+            logger.info('浏览器定时重启完成');
+        } catch (err) {
+            logger.error('浏览器定时重启失败:', err);
+        }
+    }, intervalMs);
+    console.log(`已启用浏览器定时重启，间隔 ${browserRestartHours} 小时`);
+}
+
 // 启动服务器（记录启动时间，供 /health 页展示「上次启动时间」「窗口打开时长」）
 app.listen(PORT, () => {
     global.serverStartTime = Date.now();

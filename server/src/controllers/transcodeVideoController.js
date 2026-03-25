@@ -45,3 +45,16 @@ export async function transcodeVideo(req, res) {
   res.on('close', () => cleanup());
   stream.pipe(res);
 }
+
+/**
+ * GET /api/transcode-queue
+ * 返回转码队列状态，供下载列表展示「当前 N 个处理中，M 个等待」
+ */
+export async function getTranscodeQueue(req, res) {
+  try {
+    const status = transcodeVideoService.getTranscodeQueueStatus();
+    res.json(status);
+  } catch (e) {
+    res.status(500).json({ running: 0, waiting: 0 });
+  }
+}

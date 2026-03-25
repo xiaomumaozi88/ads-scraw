@@ -1,0 +1,405 @@
+.gdd-creative-card {
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.2s ease;
+}
+
+.gdd-creative-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.gdd-creative-card--clickable {
+  cursor: pointer;
+}
+
+/* 批量下载：与 index.css 中 .batch-card-checkbox 配合，国内版卡片 hover / 批量模式时显示 */
+.gdd-creative-card__preview-wrap .batch-card-checkbox {
+  top: 8px;
+  right: 8px;
+  z-index: 8;
+}
+
+.gdd-creative-card:hover .batch-card-checkbox,
+.gdd-creative-card.gdd-creative-card--batch-mode .batch-card-checkbox {
+  opacity: 1;
+}
+
+.gdd-creative-card__top {
+  position: relative;
+}
+
+.gdd-creative-card__preview-wrap {
+  position: relative;
+  height: 180px;
+  overflow: hidden;
+  background: #f5f5f5;
+  border-radius: 5px 5px 0 0;
+}
+
+.gdd-creative-card__preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gdd-creative-card__preview-img--blur-bg {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  transform: scale(1.08);
+  filter: blur(14px);
+  opacity: 0.9;
+}
+
+.gdd-creative-card__preview-img--video-contain {
+  position: absolute;
+  inset: 0;
+  object-fit: contain;
+  z-index: 1;
+  transition: opacity 0.15s ease;
+}
+
+.gdd-creative-card__preview-img--video-poster-hidden {
+  opacity: 0;
+}
+
+.gdd-creative-card__preview-hover-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  z-index: 3;
+  background: transparent;
+  pointer-events: none;
+}
+
+.gdd-creative-card__preview-placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 13px;
+}
+
+.gdd-creative-card__preview-gradient {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.gdd-creative-card__video-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.gdd-creative-card__play {
+  color: #fff;
+  font-size: 16px;
+  margin-left: 3px;
+}
+
+.gdd-creative-card__favor {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  display: flex; /* 收藏按钮已从 JSX 暂时移除，恢复按钮时使用 */
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 6;
+}
+
+.gdd-creative-card__favor:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.gdd-creative-card__star {
+  font-size: 20px;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.45);
+}
+
+.gdd-creative-card__star--on {
+  color: #ffc53d;
+  text-shadow: none;
+}
+
+.gdd-creative-card__channel-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.gdd-creative-card .gdd-domestic-channel-icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+.gdd-creative-card__body-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 8px 10px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 5;
+  pointer-events: auto;
+}
+
+.gdd-creative-card__body-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  color: #fff;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gdd-creative-card__cta {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #fff;
+  background: #ff7a45;
+  border-radius: 4px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.gdd-creative-card__cta:hover {
+  color: #fff;
+  filter: brightness(1.05);
+}
+
+.gdd-creative-card__title-block {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px 6px;
+  align-items: flex-start;
+}
+
+.gdd-creative-card__app-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #f0f0f0;
+}
+
+.gdd-creative-card__title-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.gdd-creative-card__name-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  line-height: 18px;
+}
+
+.gdd-creative-card__app-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 108px);
+}
+
+.gdd-creative-card__dates {
+  font-size: 12px;
+  color: #909399;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.gdd-creative-card__sub-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 5px;
+  gap: 8px;
+}
+
+.gdd-creative-card__domain {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: #909399;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gdd-creative-card__channel-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.gdd-creative-card__channel-num {
+  font-size: 12px;
+  color: #303133;
+}
+
+.gdd-creative-card__category-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding: 0 12px 8px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.gdd-creative-card__category-ecom {
+  color: #909399;
+  flex-shrink: 0;
+}
+
+.gdd-creative-card__os {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.gdd-creative-card__os-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
+}
+
+.gdd-creative-card__os-txt {
+  font-size: 11px;
+  color: #909399;
+}
+
+.gdd-creative-card__vline {
+  width: 1px;
+  height: 12px;
+  background: #dcdfe6;
+  flex-shrink: 0;
+}
+
+.gdd-creative-card__vline--sm {
+  margin: 0 2px;
+}
+
+.gdd-creative-card__cat-primary {
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gdd-creative-card__cat-more {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+.gdd-creative-card__products {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: #909399;
+}
+
+.gdd-creative-card__metrics {
+  display: flex;
+  justify-content: space-around;
+  padding: 10px 8px 12px;
+  border-top: 1px solid #ebeef5;
+}
+
+.gdd-creative-card__metric {
+  text-align: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.gdd-creative-card__metric--tooltip {
+  cursor: help;
+}
+
+.gdd-creative-card__metric-val {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1.3;
+}
+
+.gdd-creative-card__metric-unit {
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.gdd-creative-card__metric-label {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #409eff;
+}
+
+.gdd-creative-card__detail {
+  display: block;
+  width: 100%;
+  padding: 8px 12px 12px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: #409eff;
+  cursor: pointer;
+  text-align: center;
+}
+
+.gdd-creative-card__detail:hover {
+  color: #66b1ff;
+}

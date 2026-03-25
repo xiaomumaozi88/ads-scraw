@@ -1,6 +1,12 @@
+import os from 'os';
 import * as puppeteerServiceInsightrackr from '../services/puppeteerServiceInsightrackr.js';
 import * as puppeteerServiceGuangdada from '../services/puppeteerService.js';
+import * as transcodeVideoService from '../services/transcodeVideoService.js';
 import { getRecentLogs, clearLogs } from '../utils/memoryLogAppender.js';
+
+function roundMb(bytes) {
+  return bytes == null ? null : Math.round((bytes / 1024 / 1024) * 10) / 10;
+}
 
 function formatUptime(ms) {
   if (ms == null || ms < 0) return null;
@@ -38,7 +44,7 @@ export const getHealth = async (req, res) => {
     const serverStartTime = global.serverStartTime || null;
     const uptimeMs = serverStartTime ? Date.now() - serverStartTime : null;
     const lastStartTimeFormatted = serverStartTime
-      ? new Date(serverStartTime).toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'medium', hour12: false })
+      ? new Date(serverStartTime).toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'medium', hour12: false, timeZone: 'Asia/Shanghai' })
       : null;
     const uptimeText = formatUptime(uptimeMs);
 
@@ -51,9 +57,62 @@ export const getHealth = async (req, res) => {
       console.error('健康检查 日志 失败:', e);
     }
 
+    let transcode = null;
+    try {
+      transcode = transcodeVideoService.getTranscodeQueueStatus();
+    } catch (e) {
+      console.error('健康检查 转码队列 失败:', e);
+      transcode = { error: e?.message || String(e) };
+    }
+
+    // 远程调试信息：当设置了 CHROME_REMOTE_DEBUGGING_PORT 时，用于人机验证等远程操作
+    const remoteDebug = {};
+    const portGuangdada = process.env.CHROME_REMOTE_DEBUGGING_PORT;
+    const portInsightrackr = process.env.CHROME_REMOTE_DEBUGGING_PORT_INSIGHTRACKR;
+    if (portGuangdada) {
+      remoteDebug.guangdada = {
+        enabled: true,
+        port: portGuangdada,
+        url: `http://localhost:${portGuangdada}`,
+        hint: '先建立 SSH 隧道后，在本机 Chrome 打开上述地址即可用 DevTools 查看/操作广大大页面',
+      };
+    }
+    if (portInsightrackr) {
+      remoteDebug.insightrackr = {
+        enabled: true,
+        port: portInsightrackr,
+        url: `http://localhost:${portInsightrackr}`,
+        hint: '先建立 SSH 隧道后，在本机 Chrome 打开上述地址即可用 DevTools 查看/操作 Insightrackr 页面',
+      };
+    }
+
+    let performance = null;
+    try {
+      const mem = process.memoryUsage();
+      const load = os.loadavg();
+      const cpu = process.cpuUsage();
+      performance = {
+        memory: {
+          heapUsedMb: roundMb(mem.heapUsed),
+          heapTotalMb: roundMb(mem.heapTotal),
+          rssMb: roundMb(mem.rss),
+          externalMb: roundMb(mem.external),
+        },
+        loadAvg: Array.isArray(load) && load.length >= 3 ? { '1min': load[0], '5min': load[1], '15min': load[2] } : null,
+        cpuUsageSeconds: { user: Math.round((cpu.user || 0) / 1e6 * 10) / 10, system: Math.round((cpu.system || 0) / 1e6 * 10) / 10 },
+        processUptimeSeconds: Math.round(process.uptime() * 10) / 10,
+        cpus: os.cpus?.()?.length ?? null,
+      };
+    } catch (e) {
+      console.error('健康检查 性能 失败:', e);
+      performance = { error: e?.message || String(e) };
+    }
+
     res.status(200).json({
       success: true,
       data: {
+        performance,
+        transcode,
         insightrackr: {
           name: 'Insightrackr',
           ...insightrackr
@@ -70,6 +129,7 @@ export const getHealth = async (req, res) => {
           uptimeMs,
           uptimeText
         },
+        remoteDebug: Object.keys(remoteDebug).length ? remoteDebug : undefined,
         recentLogs,
         recentErrors
       }

@@ -14,7 +14,6 @@ RUN npm run build
 FROM node:18-buster
 
 ENV BUILD=1
-ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
 
 # Buster 已归档，使用阿里云 debian-archive 源
 RUN echo "deb http://mirrors.aliyun.com/debian-archive/debian/ buster main" > /etc/apt/sources.list \
@@ -23,9 +22,13 @@ RUN echo "deb http://mirrors.aliyun.com/debian-archive/debian/ buster main" > /e
   && apt-get clean && apt-get update \
   && apt-get install -y wget gnupg ca-certificates procps libxss1 --fix-missing
 
-RUN wget -qO - https://dl.google.com/linux/linux_signing_key.pub | tee /etc/apt/trusted.gpg.d/google.asc \
-  && sh -c 'echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google.list' \
-  && apt-get update && apt-get install -y google-chrome-stable ffmpeg \
+# 直接下载 Chrome .deb 安装，避免 apt 源中 google-chrome-stable 无法定位
+# .deb 安装后二进制为 /usr/bin/google-chrome-stable，创建 google-chrome 供 Puppeteer 使用
+RUN apt-get update && apt-get install -y ffmpeg util-linux socat --fix-missing \
+  && wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb \
+  && dpkg -i /tmp/chrome.deb || apt-get install -f -y \
+  && ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome \
+  && rm -f /tmp/chrome.deb \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -36,5 +39,5 @@ COPY server ./server
 COPY --from=builder /app/dist ./dist
 
 ENV NODE_ENV=production
-EXPOSE 3000
+EXPOSE 3000 9222
 CMD ["node", "server/app.js"]

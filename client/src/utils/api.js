@@ -1,3 +1,5 @@
+import { buildDomesticAdInfoQuery } from './guangdadaDomesticAdInfo';
+
 const API_BASE = '/api';
 
 /** 需走代理的 CDN 域名（防盗链会导致部署到非白名单域名时 403，通过后端代理可正常播放） */
@@ -60,6 +62,16 @@ export async function transcodeVideoBackend(videoUrl, targetW = 800, targetH = 8
   return res.blob();
 }
 
+/**
+ * 获取后端视频转码队列状态，用于下载列表展示排队进度
+ * @returns {Promise<{ running: number, waiting: number }>}
+ */
+export async function getTranscodeQueueStatus() {
+  const res = await fetch(`${API_BASE}/transcode-queue`, { credentials: 'same-origin' });
+  if (!res.ok) return { running: 0, waiting: 0 };
+  return res.json();
+}
+
 export async function getStatus(platform) {
   // 使用相对路径，localhost 与 IP 访问都会走当前页面的 origin，由 Vite 代理到后端；登录状态在后端共享
   const response = await fetch(`${API_BASE}/${platform}/status`, {
@@ -96,6 +108,21 @@ export async function clearLogin(platform) {
 
 // 需要重新登录的错误码
 const LOGIN_REQUIRED_CODES = ['NOT_LOGGED_IN', 'NO_LOGIN_PAGE'];
+
+/** 广大大接口若返回人机验证，弹窗并抛错，便于上层统一处理 */
+function checkGuangdadaHumanVerification(result) {
+  if (
+    result &&
+    result.data &&
+    (result.data.id === 'need_human_machine_verification' ||
+      result.data.message === 'need_human_machine_verification')
+  ) {
+    alert('出现了人机交互验证，请联系管理员处理');
+    const err = new Error('need_human_machine_verification');
+    err.needHumanVerification = true;
+    throw err;
+  }
+}
 
 export async function searchData(platform, searchParams) {
   const response = await fetch(`${API_BASE}/${platform}/search`, {
@@ -164,6 +191,7 @@ export async function searchData(platform, searchParams) {
     throw loginError;
   }
 
+  if (platform === 'guangdada') checkGuangdadaHumanVerification(result);
   return result;
 }
 
@@ -183,6 +211,7 @@ export async function guangdadaMultiModalSearch(keyword) {
     }),
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   return result;
 }
 
@@ -196,6 +225,7 @@ export async function getGuangdadaAdvertiserAssociation(keyword, appType = 1) {
     credentials: 'same-origin'
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   return result;
 }
 
@@ -265,6 +295,7 @@ export async function getCount(platform, searchParams) {
     throw loginError;
   }
 
+  if (platform === 'guangdada') checkGuangdadaHumanVerification(result);
   return result;
 }
 
@@ -360,6 +391,7 @@ export async function getGuangdadaCreativeDetail(params) {
     credentials: 'same-origin',
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const err = new Error(result.message || '需要重新登录');
     err.code = result.code;
@@ -381,6 +413,7 @@ export async function getGuangdadaHiddenInfo(params) {
     credentials: 'same-origin',
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const err = new Error(result.message || '需要重新登录');
     err.code = result.code;
@@ -402,6 +435,7 @@ export async function translateTextGuangdada(text, target_lan = 'zh-CN') {
     }),
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const err = new Error(result.message || '需要重新登录');
     err.code = result.code;
@@ -423,6 +457,7 @@ export async function getGuangdadaRelatedAdvertisers(body) {
     body: JSON.stringify(body || {}),
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const err = new Error(result.message || '需要重新登录');
     err.code = result.code;
@@ -441,6 +476,7 @@ export async function getGuangdadaRelatedAds(body) {
     body: JSON.stringify(body || {}),
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const err = new Error(result.message || '需要重新登录');
     err.code = result.code;
@@ -459,6 +495,7 @@ export async function getGuangdadaSimilarAds(body) {
     body: JSON.stringify(body || {}),
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const err = new Error(result.message || '需要重新登录');
     err.code = result.code;
@@ -483,6 +520,7 @@ export async function getGuangdadaDailyPopularity(params) {
     credentials: 'same-origin',
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const err = new Error(result.message || '需要重新登录');
     err.code = result.code;
@@ -501,6 +539,7 @@ export async function getGuangdadaAdvRecList(body) {
     body: JSON.stringify(body || {}),
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const err = new Error(result.message || '需要重新登录');
     err.code = result.code;
@@ -519,6 +558,7 @@ export async function getGuangdadaAdvertiserDetail(params) {
     credentials: 'same-origin',
   });
   const result = await response.json();
+  checkGuangdadaHumanVerification(result);
   if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
     const err = new Error(result.message || '需要重新登录');
     err.code = result.code;
@@ -556,4 +596,81 @@ export async function getDistributeApp(platform, body) {
     throw err;
   }
   return result;
+}
+
+/**
+ * 国内版 BBA 广告列表：GET /api/guangdada-cn/ad-info（服务端代理；优先 X-BBA-Authorization / 环境变量；否则 Puppeteer 登录页从 localStorage jwt.cn 读取）
+ * @param {object} payload - GuangdadaDomesticSearchForm 提交的表单对象（含 position、keyword、exactSearch、excludeKeyword、dateRange 等）
+ * @param {{ bbaAuthorization?: string, bbaCookie?: string }} [options] - 可选：显式 JWT；bbaCookie 保留为兼容字段（上游当前不转发 Cookie）
+ */
+export async function searchGuangdadaCnAdInfo(payload, options = {}) {
+  const qs = buildDomesticAdInfoQuery(payload).toString();
+  const headers = { Accept: 'application/json' };
+  if (options.bbaAuthorization) {
+    headers['X-BBA-Authorization'] = String(options.bbaAuthorization).trim();
+  }
+  if (options.bbaCookie) {
+    headers['X-BBA-Cookie'] = String(options.bbaCookie).trim();
+  }
+  const pathAndQuery = `${API_BASE}/guangdada-cn/ad-info?${qs}`;
+  if (typeof window !== 'undefined') {
+    const fullUrl = `${window.location.origin}${pathAndQuery}`;
+    console.warn(
+      '[国内版 ad-info] ① 浏览器 → 本机后端（与 DevTools Network 中该条 URL 一致；② 转发 BBA 见服务端日志 tag「请求链路」）',
+      {
+        fullUrl,
+        pathAndQuery,
+        queryString: qs,
+        headersToBackend: {
+          Accept: headers.Accept,
+          'X-BBA-Authorization': headers['X-BBA-Authorization'] ? '[已设置]' : '(未设置，由服务端用登录态 JWT)',
+          'X-BBA-Cookie': headers['X-BBA-Cookie'] ? '[已设置]' : '(未设置)',
+        },
+      },
+    );
+  }
+  const response = await fetch(pathAndQuery, {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers,
+  });
+  const text = await response.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { _parseError: true, raw: text };
+  }
+  if (!response.ok) {
+    const msg =
+      (data && typeof data === 'object' && (data.message || data.msg)) ||
+      (typeof text === 'string' && text.slice(0, 200)) ||
+      response.statusText;
+    const err = new Error(String(msg));
+    if (
+      data &&
+      typeof data === 'object' &&
+      (data.requiresLogin === true || data.code === 'BBA_AUTH_REQUIRED')
+    ) {
+      err.requiresLogin = true;
+    }
+    throw err;
+  }
+
+  // 代理 HTTP 200 但 BBA 业务码非 20000 时，在浏览器控制台打印完整返回便于排查
+  if (data && typeof data === 'object' && typeof data.status === 'number' && data.status !== 20000) {
+    const forLog =
+      data.data && typeof data.data === 'object' && Array.isArray(data.data.data)
+        ? {
+            ...data,
+            data: {
+              ...data.data,
+              data: `[已省略 ${data.data.data.length} 条，见服务端日志可含完整结构]`,
+            },
+          }
+        : data;
+    console.warn('[国内版 ad-info] 广大大(BBA) 实际返回（业务 status≠20000）:', forLog);
+  }
+
+  return data;
 }

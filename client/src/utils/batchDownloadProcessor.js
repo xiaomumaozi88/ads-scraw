@@ -3,7 +3,48 @@
  * 当原尺寸 != 目标尺寸时：画布=目标尺寸，内容等比缩放完整显示居中，空白区域用高斯模糊填充
  */
 
+import { getProxiedMediaUrl } from './api';
+import { getDomesticVideoUrl, isDomesticVideoItem } from './domesticCreativeFormat';
+
 const BLUR_RADIUS = 24;
+
+/**
+ * 模拟进度条：在异步操作期间逐步推进 0 → cap（缓动，前快后慢），便于用户感知进度。
+ * 与真实进度取 max，cap 内不会超过 100，完成时由调用方传 100。
+ * @param {(value: number) => void} onProgress - 进度回调 0–100
+ * @param {{ cap?: number, intervalMs?: number, durationMs?: number }} options - cap 默认 90，intervalMs 默认 350，durationMs 默认 50 秒
+ * @returns {{ stop: () => void }}
+ */
+function createSimulatedProgress(onProgress, options = {}) {
+  const cap = Math.min(90, options.cap ?? 90);
+  const intervalMs = options.intervalMs ?? 350;
+  const durationMs = options.durationMs ?? 50000;
+  const start = Date.now();
+  let timerId = null;
+
+  const tick = () => {
+    const elapsed = Date.now() - start;
+    // 缓动：前快后慢，接近 cap
+    const tau = durationMs / 4;
+    const raw = cap * (1 - Math.exp(-elapsed / tau));
+    const value = Math.min(cap, Math.round(raw * 10) / 10);
+    onProgress(value);
+    if (value < cap) {
+      timerId = setTimeout(tick, intervalMs);
+    }
+  };
+
+  timerId = setTimeout(tick, intervalMs);
+
+  return {
+    stop() {
+      if (timerId != null) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
+    },
+  };
+}
 
 /** 超时包装：超时后 reject，避免一直卡住；超时时会打印错误 */
 function withTimeout(promise, ms, message = '操作超时') {
@@ -37,7 +78,7 @@ function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
 /** 稳定获取卡片项唯一 id（Insightrackr / 广大大），统一返回字符串便于 Set 比较 */
 export function getBatchItemId(item, platform) {
   const raw = platform === 'guangdada'
-    ? (item.ad_key ?? item.id ?? '')
+    ? (item.ad_key ?? item.id ?? item.material_key ?? item.creative_id ?? '')
     : (item.id ?? item.search_flag ?? item.ad_key ?? item.bizId ?? item.materialId ?? '');
   return String(raw ?? '');
 }
@@ -91,6 +132,24 @@ export function buildDownloadBaseName(competitorName, dateStr, materialId, sizeL
 export function getBatchDownloadInfo(item, platform) {
   const sanitize = (s) => (s == null ? '' : String(s).replace(/[\\/:*?"<>|\x00-\x1f]/g, '').trim().slice(0, 80));
   if (platform === 'guangdada') {
+    const hasIntlResources = Array.isArray(item.resource_urls) && item.resource_urls.length > 0;
+    const looksDomesticBba =
+      !hasIntlResources && (item.material_key != null || item.creative_id != null);
+    if (looksDomesticBba) {
+      const rawVideo = getDomesticVideoUrl(item);
+      const isVideo = isDomesticVideoItem(item) && !!rawVideo;
+      const rawImg =
+        item.preview_img ||
+        (Array.isArray(item.resources)
+          ? item.resources.find((r) => typeof r === 'string' && !/\.(mp4|webm|mov)(\?|$)/i.test(r))
+          : '') ||
+        '';
+      const rawPrimary = rawVideo || rawImg || '';
+      const url = rawPrimary ? getProxiedMediaUrl(rawPrimary) : '';
+      const title = item.title || item.body || item.message || '';
+      const name = (item.app_name || item.material_key || item.creative_id || '') + (title ? `_${title}` : '');
+      return { url, isVideo, isHtml: false, filename: sanitize(name) || 'creative' };
+    }
     const r0 = item.resource_urls?.[0];
     const isHtml = r0?.type === 4 && r0?.html_url && String(r0.html_url).trim() !== '';
     const isVideo = !isHtml && (item.ads_type === 2 || r0?.type === 2 || !!(r0?.video_url));
@@ -98,9 +157,9 @@ export function getBatchDownloadInfo(item, platform) {
     if (isHtml) url = r0.html_url.trim();
     else if (isVideo) url = r0?.video_url ?? '';
     else url = r0?.image_url ?? item.preview_img_url ?? '';
-  const title = item.title || item.message || item.body || '';
-  const name = (item.advertiser_name || item.ad_key || '') + (title ? `_${title}` : '');
-  return { url, isVideo, isHtml: !!isHtml, filename: sanitize(name) || 'creative' };
+    const title = item.title || item.message || item.body || '';
+    const name = (item.advertiser_name || item.ad_key || '') + (title ? `_${title}` : '');
+    return { url, isVideo, isHtml: !!isHtml, filename: sanitize(name) || 'creative' };
   }
   const isVideo = item.materialType === 2 || !!(item.videoUrl && item.videoUrl.trim());
   const url = isVideo
@@ -212,7 +271,6 @@ export async function processImageToBlob(imageUrl, targetW, targetH, onProgress 
 export async function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null) {
   // 1) 优先后端转码（更快、不占浏览器资源）
   try {
-    if (typeof onProgress === 'function') onProgress(10);
     const { transcodeVideoBackend } = await import('./api.js');
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 300000);
@@ -673,25 +731,66 @@ export function getMediaDimensions(url, isVideo) {
  */
 export async function processAndDownloadItem({ url, isVideo, isHtml, filename }, targetW, targetH, onProgress, baseFilename) {
   let blob;
+  let sim = null;
+  let lastForwarded = 0;
+  let realProgress = 0;
 
-  if (isHtml && url) {
-    if (onProgress) onProgress(10);
-    const resp = await fetchWithTimeout(url, { mode: 'cors', referrerPolicy: 'no-referrer' }, 60000);
-    const text = await resp.text();
-    blob = new Blob([text], { type: 'text/html;charset=utf-8' });
-    if (onProgress) onProgress(100);
-  } else {
-    const isOriginalSize = targetW == null && targetH == null;
-    if (isOriginalSize) {
-      if (onProgress) onProgress(10);
+  const forward = (value) => {
+    const v = Math.min(100, Math.max(0, value));
+    if (v > lastForwarded) {
+      lastForwarded = v;
+      if (onProgress) onProgress(v);
+    }
+  };
+
+  const wrappedProgress = onProgress
+    ? (p) => {
+        if (p != null) realProgress = Math.max(realProgress, Math.min(100, p));
+        if (realProgress >= 100) {
+          if (sim) {
+            sim.stop();
+            sim = null;
+          }
+          forward(100);
+          return;
+        }
+        forward(realProgress);
+      }
+    : null;
+
+  if (wrappedProgress) {
+    sim = createSimulatedProgress(
+      (simP) => {
+        const combined = Math.min(90, Math.max(simP, realProgress));
+        if (combined > lastForwarded) forward(combined);
+      },
+      { cap: 90, intervalMs: 350, durationMs: 55000 }
+    );
+  }
+
+  try {
+    if (isHtml && url) {
       const resp = await fetchWithTimeout(url, { mode: 'cors', referrerPolicy: 'no-referrer' }, 60000);
-      blob = await resp.blob();
-      if (onProgress) onProgress(100);
+      const text = await resp.text();
+      blob = new Blob([text], { type: 'text/html;charset=utf-8' });
+      if (wrappedProgress) wrappedProgress(100);
     } else {
-      blob = isVideo
-        ? await processVideoToBlob(url, targetW, targetH, onProgress)
-        : await processImageToBlob(url, targetW, targetH, onProgress);
-      if (!isVideo && onProgress) onProgress(100);
+      const isOriginalSize = targetW == null && targetH == null;
+      if (isOriginalSize) {
+        const resp = await fetchWithTimeout(url, { mode: 'cors', referrerPolicy: 'no-referrer' }, 60000);
+        blob = await resp.blob();
+        if (wrappedProgress) wrappedProgress(100);
+      } else {
+        blob = isVideo
+          ? await processVideoToBlob(url, targetW, targetH, wrappedProgress)
+          : await processImageToBlob(url, targetW, targetH, wrappedProgress);
+        if (!isVideo && wrappedProgress) wrappedProgress(100);
+      }
+    }
+  } finally {
+    if (sim) {
+      sim.stop();
+      sim = null;
     }
   }
 
@@ -723,6 +822,6 @@ export async function processAndDownloadItem({ url, isVideo, isHtml, filename },
   a.download = finalName;
   a.click();
   URL.revokeObjectURL(a.href);
-  if (isVideo && onProgress && !isHtml) onProgress(100);
+  if (isVideo && wrappedProgress && !isHtml) wrappedProgress(100);
   await new Promise((r) => setTimeout(r, 200));
 }

@@ -13,12 +13,14 @@ import * as clearLoginControllerGuangdada from '../controllers/clearLoginControl
 import * as searchControllerGuangdada from '../controllers/searchControllerGuangdada.js';
 import * as proxyMediaController from '../controllers/proxyMediaController.js';
 import * as transcodeVideoController from '../controllers/transcodeVideoController.js';
+import * as guangdadaCnAdInfoController from '../controllers/guangdadaCnAdInfoController.js';
 
 const router = Router();
 
 router.get('/health', healthController.getHealth);
 router.get('/proxy-media', proxyMediaController.getProxyMedia);
 router.post('/transcode-video', transcodeVideoController.transcodeVideo);
+router.get('/transcode-queue', transcodeVideoController.getTranscodeQueue);
 router.get('/download-image', proxyMediaController.getDownloadImage);
 router.post('/health/clear-logs', healthController.postClearLogs);
 router.post('/health/reopen-browser', healthController.postReopenBrowser);
@@ -54,5 +56,8 @@ router.post('/guangdada/related-ads', searchControllerGuangdada.relatedAds);
 router.get('/guangdada/advertiser-detail', searchControllerGuangdada.advertiserDetail);
 router.post('/guangdada/adv-rec-list', searchControllerGuangdada.advRecList);
 router.post('/guangdada/similar-ads', searchControllerGuangdada.similarAds);
+
+// 广大大国内版（BBA）广告列表代理
+router.get('/guangdada-cn/ad-info', guangdadaCnAdInfoController.getGuangdadaCnAdInfo);
 
 export default router;

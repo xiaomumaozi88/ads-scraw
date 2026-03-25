@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Dropdown, Drawer, Tag } from 'antd';
+import { Drawer, Tag } from 'antd';
 import PlatformSelection from './components/PlatformSelection';
 import BubbleHint from './components/BubbleHint';
 import { useDownloadList } from './contexts/DownloadListContext';
@@ -8,7 +8,7 @@ import LoginModal from './components/LoginModal';
 import DataCard from './components/DataCard';
 import { usePlatformStatus } from './hooks/usePlatformStatus';
 import { useLogs } from './hooks/useLogs';
-import { clearLogin } from './utils/api';
+import { clearLogin, getTranscodeQueueStatus } from './utils/api';
 import './styles/App.css';
 import insightrackrLogo from '../assets/insightrackr-logo.png';
 import guangdadaLogo from '../assets/guangdada-logo.svg';
@@ -33,13 +33,18 @@ function App() {
   }, [pathname, isSelectionView, selectedPlatform, navigate]);
 
   const [showLoginModal, setShowLoginModal] = useState(false);
+  /** Insightrackr：仅当进入该页后 status 请求返回「已登录」才为 true，用于控制自动请求时机 */
+  const [insightrackrStatusConfirmed, setInsightrackrStatusConfirmed] = useState(false);
   const [downloadDrawerOpen, setDownloadDrawerOpen] = useState(false);
   /** 气泡引导：从开始下载按钮飘向下载列表按钮的起始位置 */
   const [bubbleHintStartRect, setBubbleHintStartRect] = useState(null);
   /** 气泡到达时，下载列表按钮摇晃变大 */
   const [downloadBtnWobble, setDownloadBtnWobble] = useState(false);
   const downloadListBtnRef = useRef(null);
-  const { downloadList, downloading, batchSizeLabel } = useDownloadList();
+  const { downloadList, downloading } = useDownloadList();
+  /** 视频转码队列状态（仅当有视频任务且抽屉打开时轮询），用于展示「当前 N 个处理中，M 个等待」 */
+  const [transcodeQueueStatus, setTranscodeQueueStatus] = useState(null);
+  const transcodeQueuePollRef = useRef(null);
   const handleBatchModeEnteredWithHint = useCallback((rect) => {
     setBubbleHintStartRect(rect);
     setTimeout(() => setBubbleHintStartRect(null), 1500);
@@ -62,6 +67,11 @@ function App() {
     }
   };
 
+  // 离开 Insightrackr 时重置「status 已确认」标记，下次进入会重新等 status 返回再发自动请求
+  useEffect(() => {
+    if (pathname !== '/insightrackr') setInsightrackrStatusConfirmed(false);
+  }, [pathname]);
+
   // 在 Insightrackr / 广大大 路由下检查登录状态，未登录则弹出登录框（与 Insightrackr 一致）
   useEffect(() => {
     if (pathname !== '/insightrackr' && pathname !== '/guangdada') return;
@@ -70,6 +80,7 @@ function App() {
     refreshStatus(platform)
       .then((status) => {
         if (cancelled) return;
+        if (platform === 'insightrackr') setInsightrackrStatusConfirmed(status === 'ONLINE');
         if (status !== 'ONLINE') {
           setShowLoginModal(true);
           addLog(`需要登录 ${platform === 'insightrackr' ? 'Insightrackr' : '广大大'}，当前状态: ${status}`, 'info');
@@ -77,6 +88,7 @@ function App() {
       })
       .catch((error) => {
         if (cancelled) return;
+        if (platform === 'insightrackr') setInsightrackrStatusConfirmed(false);
         const isNetworkError = !error.message || /fetch|network|failed to fetch/i.test(error.message);
         if (isNetworkError) {
           addLog(`无法连接服务器，请确认后端已启动且使用同一地址访问（当前为 ${window.location.origin}）`, 'error');
@@ -104,7 +116,10 @@ function App() {
       setShowLoginModal(false);
       addLog(`登录成功，跳转到查询页面`, 'success');
       refreshStatus(selectedPlatform).then((status) => {
-        if (status === 'ONLINE') addLog(`登录状态已确认: ${status}`, 'success');
+        if (status === 'ONLINE') {
+          addLog(`登录状态已确认: ${status}`, 'success');
+          if (selectedPlatform === 'insightrackr') setInsightrackrStatusConfirmed(true);
+        }
       }).catch((err) => addLog(`登录状态检查失败: ${err.message}`, 'error'));
     }
   };
@@ -113,6 +128,34 @@ function App() {
     navigate('/');
     addLog('返回平台选择', 'info');
   };
+
+  // 下载抽屉打开且存在待处理/处理中的视频任务时，轮询转码队列状态
+  const hasVideoTaskInProgress = downloadList.some(
+    (item) => (item.status === 'pending' || item.status === 'processing') && item.isVideo
+  );
+  useEffect(() => {
+    if (!downloadDrawerOpen || !hasVideoTaskInProgress) {
+      setTranscodeQueueStatus(null);
+      if (transcodeQueuePollRef.current) {
+        clearInterval(transcodeQueuePollRef.current);
+        transcodeQueuePollRef.current = null;
+      }
+      return;
+    }
+    const fetchQueue = () => {
+      getTranscodeQueueStatus()
+        .then(setTranscodeQueueStatus)
+        .catch(() => setTranscodeQueueStatus(null));
+    };
+    fetchQueue();
+    transcodeQueuePollRef.current = setInterval(fetchQueue, 3000);
+    return () => {
+      if (transcodeQueuePollRef.current) {
+        clearInterval(transcodeQueuePollRef.current);
+        transcodeQueuePollRef.current = null;
+      }
+    };
+  }, [downloadDrawerOpen, hasVideoTaskInProgress]);
 
   const handleRequireLogin = () => {
     setShowLoginModal(true);
@@ -178,23 +221,9 @@ function App() {
               </button>
             </span>
             {getStatus(selectedPlatform) === 'ONLINE' ? (
-              <Dropdown
-                menu={{
-                  items: [
-                    {
-                      key: 'relogin',
-                      label: '重新登录',
-                      onClick: () => handleReLogin(selectedPlatform)
-                    }
-                  ]
-                }}
-                trigger={['click']}
-                placement="bottomRight"
-              >
-                <button type="button" className="search-page-header-user">
-                  {getStatusDetail(selectedPlatform)?.email || '已登录'}
-                </button>
-              </Dropdown>
+              <button type="button" className="search-page-header-user">
+                {getStatusDetail(selectedPlatform)?.email || '已登录'}
+              </button>
             ) : (
               <span className="search-page-header-user search-page-header-user--muted">未登录</span>
             )}
@@ -208,8 +237,20 @@ function App() {
           width={600}
           className="download-list-drawer"
         >
-          {batchSizeLabel ? (
-            <div className="download-list-drawer-size-block">本批次输出尺寸：{batchSizeLabel}</div>
+          {transcodeQueueStatus && hasVideoTaskInProgress ? (
+            <div className="download-list-drawer-queue-block">
+              {(() => {
+                const videoPending = downloadList.filter((i) => i.isVideo && (i.status === 'pending' || i.status === 'processing')).length;
+                const running = transcodeQueueStatus.running ?? 0;
+                const waiting = transcodeQueueStatus.waiting ?? 0;
+                return (
+                  <>
+                    视频转码：本批次 {videoPending} 个视频任务
+                    {(running > 0 || waiting > 0) ? `；服务器当前 ${running} 个处理中，${waiting} 个排队` : ''}
+                  </>
+                );
+              })()}
+            </div>
           ) : null}
           {downloadList.length === 0 ? (
             <div className="download-list-drawer-empty">暂无下载任务</div>
@@ -227,12 +268,9 @@ function App() {
                     <span className="download-list-item__filename" title={item.filename}>
                       {item.filename.length > 40 ? item.filename.slice(0, 38) + '…' : item.filename}
                     </span>
-                    <span className="download-list-item__status">
-                      {item.status === 'pending' && '等待中'}
-                      {item.status === 'processing' && `处理中 ${Math.round(item.progress)}%`}
-                      {item.status === 'done' && '已完成'}
-                      {item.status === 'error' && (item.errorMessage || '失败')}
-                    </span>
+                    {item.status === 'error' && item.errorMessage && (
+                      <span className="download-list-item__error">{item.errorMessage}</span>
+                    )}
                   </div>
                   {(item.status === 'processing' || item.status === 'done') && (
                     <div className="download-list-item__progress-wrap">
@@ -257,6 +295,7 @@ function App() {
             addLog={addLog}
             onRequireLogin={handleRequireLogin}
             isLoggedIn={getStatus(selectedPlatform) === 'ONLINE'}
+            insightrackrStatusConfirmed={insightrackrStatusConfirmed}
             onBatchModeEnteredWithHint={handleBatchModeEnteredWithHint}
             refreshPlatformStatus={refreshStatus}
           />
