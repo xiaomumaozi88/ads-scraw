@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import './PlatformSelection.css';
 import insightrackrLogo from '../../assets/insightrackr-logo.png';
 import guangdadaLogo from '../../assets/guangdada-logo.svg';
@@ -41,6 +42,9 @@ function PlatformSelection({ onSelectPlatform }) {
           </div>
         ))}
       </div>
+      <p className="platform-selection-debug-link">
+        <Link to="/external-search-debug">外部查询接口调试（临时）</Link>
+      </p>
     </div>
   );
 }

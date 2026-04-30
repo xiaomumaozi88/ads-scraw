@@ -154,14 +154,46 @@ export const postClearLogs = async (req, res) => {
   }
 };
 
+/** 关闭后等待 Chrome 进程完全退出，再启动；过短易导致第二实例启动失败（profile/端口占用） */
+const BROWSER_REOPEN_DELAY_MS = Math.max(
+  0,
+  parseInt(process.env.BROWSER_REOPEN_DELAY_MS || '2500', 10)
+);
+
 /** POST /api/health/reopen-browser：关闭并重新打开各平台浏览器窗口 */
 export const postReopenBrowser = async (req, res) => {
   try {
-    await puppeteerServiceInsightrackr.closeBrowser();
-    await puppeteerServiceGuangdada.closeBrowser();
-    await puppeteerServiceInsightrackr.initializeBrowser();
-    await puppeteerServiceGuangdada.initializeBrowser();
-    res.status(200).json({ success: true, message: '浏览器窗口已重新打开' });
+    await Promise.allSettled([
+      puppeteerServiceInsightrackr.closeBrowser(),
+      puppeteerServiceGuangdada.closeBrowser(),
+    ]);
+    await new Promise((r) => setTimeout(r, BROWSER_REOPEN_DELAY_MS));
+    // 与 app.js 启动一致：并行拉起双 Chrome，缩短总耗时、避免串行时长时间无响应
+    await Promise.all([
+      puppeteerServiceInsightrackr.initializeBrowser(),
+      puppeteerServiceGuangdada.initializeBrowser(),
+    ]);
+    const [insightrackr, guangdada] = await Promise.all([
+      puppeteerServiceInsightrackr.getHealthInfo(),
+      puppeteerServiceGuangdada.getHealthInfo(),
+    ]);
+    const irOk = !!insightrackr.browserExists;
+    const gdOk = !!guangdada.browserExists;
+    if (irOk && gdOk) {
+      return res.status(200).json({
+        success: true,
+        message: '浏览器窗口已重新打开',
+        data: { insightrackr, guangdada },
+      });
+    }
+    const failed = [];
+    if (!irOk) failed.push('Insightrackr');
+    if (!gdOk) failed.push('广大大');
+    return res.status(200).json({
+      success: false,
+      message: `以下浏览器未能成功启动：${failed.join('、')}。请查看服务器日志或稍后重试；也可增大环境变量 BROWSER_REOPEN_DELAY_MS（当前 ${BROWSER_REOPEN_DELAY_MS}ms）。`,
+      data: { insightrackr, guangdada },
+    });
   } catch (error) {
     console.error('重新打开浏览器失败:', error);
     res.status(500).json({ success: false, message: error.message || '重新打开失败' });

@@ -114,12 +114,68 @@ npm start
 - `POST /api/insightrackr/search` - 搜索数据
 - `POST /api/insightrackr/clearLogin` - 清除登录状态
 
+#### 外部素材查询接口（带筛选）
+
+- `GET /api/external/insightrackr/top50`
+- `POST /api/external/insightrackr/top50`
+
+请求体（或等价的 query 参数）：
+
+- **keyWord**：必填，关键词字符串。
+- **sortBy**：可选，排序字段，取值：`heat`（默认，热度）、`exposure`（曝光预估）、`share`、`like`、`comment`，也支持对应的中文别名。
+- **topN**：可选，返回素材条数，默认 50，最大 500。
+- **timeRange**：可选，时间范围快捷值：`7d` / `30d` / `90d` / `1y`（近一年）。  
+- **startDate / endDate**：可选，显式日期范围（`YYYY-MM-DD`）。如果提供，将优先于 `timeRange` 生效。
+- **countryLevel2**：可选，Insightrackr 国家 / 地区 code 数组，等同前端表单中的 `countryLevel2`，例如：`["US","JP"]`。
+- **languages**：可选，标题语言 code 数组，等同前端表单中的语言选择，例如：`["en","zh-cn"]`。
+- **materialType**：可选，素材类型，字符串 `"1"`（图片）、`"2"`（视频），等同前端 `creativeType`。
+- **aspectRatio**：可选，画面比例，统一枚举：
+  - `landscape` / `横版`：在 Insightrackr 中映射为 `creativeList` 里的 `gs=1`
+  - `portrait` / `竖版`：映射为 `gs=2`
+  - `square` / `方形`：映射为 `gs=3`
+
+说明：
+
+- 时间范围最终会写入 `baseOption.startTime` / `endTime`，格式为 `YYYY-MM-DD`。
+- `countryLevel2`、`languages`、`materialType`、`aspectRatio` 均是对现有 Insightrackr 搜索表单字段的薄封装，内部不做额外魔改，只负责规范化格式。
+
 ### 广大大（待实现）
 
 - `POST /api/guangdada/login` - 登录
 - `GET /api/guangdada/status` - 获取登录状态
 - `POST /api/guangdada/search` - 搜索数据
 - `POST /api/guangdada/clearLogin` - 清除登录状态
+
+#### 外部素材查询接口（带筛选）
+
+- `GET /api/external/guangdada/top50`
+- `POST /api/external/guangdada/top50`
+
+请求体（或等价的 query 参数）：
+
+- **keyWord**：必填，关键词字符串。
+- **sortBy**：可选，排序字段，取值：`heat`（默认，热度）、`exposure`（曝光估值）、`share`、`like`、`comment`，也支持对应的中文别名。
+- **topN**：可选，返回素材条数，默认 50，最大 500。
+- **timeRange**：可选，时间范围快捷值：`7d` / `30d` / `90d` / `1y`。
+- **startDate / endDate**：可选，显式日期范围（`YYYY-MM-DD`）。如果提供，将优先于 `timeRange` 生效。
+- **guangdadaCountry**：可选，广大大国家 / 地区 code 数组，取值与前端 `GUANGDADA_COUNTRY_CATEGORIES` 一致，例如：`["USA","JPN"]`。
+- **guangdadaCopyLangs**：可选，文案语言 code 数组，取值与 `GUANGDADA_COPY_LANG_OPTIONS` 一致，例如：`["zh-CN","en"]`。
+- **guangdadaMediaType / materialType**：可选，素材类型：
+  - `'image'` / `'图片'` → 图片
+  - `'video'` / `'视频'` → 视频
+  - `'carousel'` / `'轮播'`
+  - `'html'`
+  - `'playable'` / `'试玩'` / `'试玩广告'`
+  内部会映射为广大大 API 的 `ads_type` 数组（例如图片=1、视频=2 等）。
+- **aspectRatio**：可选，画面比例，统一枚举：
+  - `portrait` / `竖版`：映射为 `ads_format = ["1:2","9:16","3:4","4:5"]`
+  - `landscape` / `横版`：映射为 `ads_format = ["2:1","16:9","4:3","5:4","banner"]`
+  - `square` / `方形`：映射为 `ads_format = ["1:1"]`
+
+说明：
+
+- 时间范围最终会写入广大大接口的 `seen_begin` / `seen_end`（Unix 秒级时间戳），按北京时间 00:00:00～23:59:59 计算。
+- 国家、语言、素材类型、画面比例等字段与站内广大大搜索使用的是同一套 code 与语义，便于服务端和前端共用枚举。
 
 ## 环境变量
 

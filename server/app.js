@@ -1,6 +1,5 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import bodyParser from 'body-parser';
 import log4js from 'log4js';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
@@ -42,7 +41,15 @@ const PORT = process.env.PORT || 3000;
 
 // todo 目前是 CORS 允许所有来源，生产环境需要限制来源
 app.use(cors());
-app.use(bodyParser.json());
+// 广大大多模态搜索可把整段 data URL 放在 JSON 里，需单独放宽体积；其余接口仍用较小上限
+const jsonParserDefault = express.json({ limit: '2mb' });
+const jsonParserGuangdadaMultimodal = express.json({ limit: '80mb' });
+app.use((req, res, next) => {
+    if (req.method === 'POST' && req.path === '/api/guangdada/multi-modal-search') {
+        return jsonParserGuangdadaMultimodal(req, res, next);
+    }
+    return jsonParserDefault(req, res, next);
+});
 
 // API 路由必须在静态兜底之前注册，否则 GET /api/* 会被下面的 * 匹配成 index.html
 app.use('/api', apiRoutes);

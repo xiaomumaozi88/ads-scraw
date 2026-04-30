@@ -35,7 +35,136 @@ function formatGuangdadaCount(num) {
   return `${n}`;
 }
 
-function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, insightrackrStatusConfirmed = false, onBatchModeEnteredWithHint, refreshPlatformStatus }) {
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(new Error('读取文件失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function videoFileFirstFrameToDataUrl(file) {
+  return new Promise((resolve) => {
+    let objectUrl = null;
+    try {
+      const video = document.createElement('video');
+      objectUrl = URL.createObjectURL(file);
+      video.src = objectUrl;
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'metadata';
+
+      const cleanup = () => {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      };
+      const captureFrame = () => {
+        try {
+          const w = video.videoWidth || 0;
+          const h = video.videoHeight || 0;
+          if (!w || !h) return '';
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return '';
+          ctx.drawImage(video, 0, 0, w, h);
+          return canvas.toDataURL('image/jpeg', 0.9);
+        } catch (e) {
+          return '';
+        }
+      };
+
+      video.addEventListener('loadedmetadata', () => {
+        const duration = Number.isFinite(video.duration) ? video.duration : 0;
+        // 避开 0 秒黑帧，优先取前段非首帧
+        const targetTime = duration > 0 ? Math.min(1, Math.max(0.2, duration * 0.1)) : 0.2;
+
+        const onSeeked = () => {
+          const frame = captureFrame();
+          cleanup();
+          resolve(frame);
+        };
+
+        video.addEventListener('seeked', onSeeked, { once: true });
+        try {
+          video.currentTime = targetTime;
+        } catch (e) {
+          video.removeEventListener('seeked', onSeeked);
+          const frame = captureFrame();
+          cleanup();
+          resolve(frame);
+        }
+      }, { once: true });
+
+      video.addEventListener('error', () => {
+        cleanup();
+        resolve('');
+      }, { once: true });
+    } catch (e) {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      resolve('');
+    }
+  });
+}
+
+function inferPreviewTypeFromUrl(url) {
+  const u = String(url || '').toLowerCase();
+  return /\.(mp4|mov|m4v|webm|avi|mkv)(\?|#|$)/.test(u) ? 'video' : 'image';
+}
+
+async function resolveMultimodalPreview(mr, cdnUrl) {
+  const result = {
+    previewUrl: cdnUrl ? String(cdnUrl).trim() : '',
+    previewType: 'image',
+  };
+  if (!mr || typeof mr !== 'object') return result;
+
+  if (mr.mode === 'url') {
+    result.previewType = inferPreviewTypeFromUrl(mr.url);
+    return result;
+  }
+
+  if (mr.mode === 'file' && mr.file) {
+    const isVideo = mr.media === 'video' || (mr.file.type && mr.file.type.startsWith('video/'));
+    result.previewType = isVideo ? 'video' : 'image';
+    if (isVideo) {
+      const frame = await videoFileFirstFrameToDataUrl(mr.file);
+      if (frame) result.previewUrl = frame;
+    } else if (!result.previewUrl) {
+      const imgDataUrl = await fileToDataUrl(mr.file);
+      if (imgDataUrl) result.previewUrl = imgDataUrl;
+    }
+  }
+  return result;
+}
+
+async function resolveMultimodalLocalPreview(mr) {
+  if (!mr || typeof mr !== 'object') return { previewUrl: '', previewType: 'image' };
+  if (mr.mode === 'url') {
+    return { previewUrl: '', previewType: inferPreviewTypeFromUrl(mr.url) };
+  }
+  if (mr.mode === 'file' && mr.file) {
+    const isVideo = mr.media === 'video' || (mr.file.type && mr.file.type.startsWith('video/'));
+    if (isVideo) {
+      const frame = await videoFileFirstFrameToDataUrl(mr.file);
+      return { previewUrl: frame || '', previewType: 'video' };
+    }
+    const imgDataUrl = await fileToDataUrl(mr.file);
+    return { previewUrl: imgDataUrl || '', previewType: 'image' };
+  }
+  return { previewUrl: '', previewType: 'image' };
+}
+
+function DataCard({
+  platform,
+  addLog,
+  onRequireLogin,
+  isLoggedIn,
+  insightrackrStatusConfirmed = false,
+  onBatchModeEnteredWithHint,
+  refreshPlatformStatus,
+}) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [countData, setCountData] = useState(null);
@@ -127,18 +256,70 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, insightrackrSt
     }
 
     const keyword = platform === 'guangdada' ? (paramsToUse.keyword ?? paramsToUse.keyWord) : paramsToUse.keyWord;
-    addLog(`开始查询数据 [${platform}]，关键词: ${keyword}`, 'info');
+    const keywordLog =
+      typeof keyword === 'string' && keyword.length > 180
+        ? `${keyword.slice(0, 120)}…（共 ${keyword.length} 字符）`
+        : keyword;
+    addLog(`开始查询数据 [${platform}]，关键词: ${keywordLog}`, 'info');
 
     if (platform === 'guangdada' && (paramsToUse.guangdada_search_category || paramsToUse.guangdadaSearchCategory) === '素材内容') {
-      const kw = paramsToUse.keyword ?? paramsToUse.keyWord;
-      const kwStr = typeof kw === 'string' ? kw.trim() : (Array.isArray(kw) && kw.length > 0 ? String(kw[0]).trim() : '');
-      if (kwStr) {
+      const mr = paramsToUse.guangdadaMultimodalRequest;
+      const canMulti =
+        (mr && mr.mode === 'url' && String(mr.url || '').trim()) ||
+        (mr && mr.mode === 'file' && mr.file);
+      if (canMulti) {
         try {
-          const multiRes = await guangdadaMultiModalSearch(kwStr);
-          if (multiRes.success && multiRes.data && multiRes.data.multimodal_md5) {
-            paramsToUse = { ...paramsToUse, multimodal_md5: multiRes.data.multimodal_md5 };
+          const localPreview = await resolveMultimodalLocalPreview(mr);
+          if (localPreview.previewUrl) {
+            paramsToUse = {
+              ...paramsToUse,
+              multimodal_preview_url: localPreview.previewUrl,
+              multimodal_preview_type: localPreview.previewType,
+              ...(mr?.mode === 'url' && String(mr?.url || '').trim()
+                ? { multimodal_resource_link: String(mr.url).trim() }
+                : {}),
+            };
+            setCurrentSearchParams(paramsToUse);
+          } else if (localPreview.previewType === 'video') {
+            paramsToUse = {
+              ...paramsToUse,
+              multimodal_preview_type: 'video',
+              ...(mr?.mode === 'url' && String(mr?.url || '').trim()
+                ? { multimodal_resource_link: String(mr.url).trim() }
+                : {}),
+            };
+          } else if (mr?.mode === 'url' && String(mr?.url || '').trim()) {
+            paramsToUse = {
+              ...paramsToUse,
+              multimodal_resource_link: String(mr.url).trim(),
+            };
+          }
+
+          let multiRes;
+          if (mr && mr.mode === 'url') {
+            multiRes = await guangdadaMultiModalSearch(mr);
+          } else if (mr && mr.mode === 'file' && mr.file) {
+            multiRes = await guangdadaMultiModalSearch(mr);
+          }
+          if (multiRes && multiRes.success && multiRes.data && multiRes.data.multimodal_md5) {
+            const cdn = multiRes.data.multi_modal_file_cdn_url;
+            const preview = await resolveMultimodalPreview(mr, cdn);
+            paramsToUse = {
+              ...paramsToUse,
+              multimodal_md5: multiRes.data.multimodal_md5,
+              ...(cdn != null && String(cdn).trim() ? { multi_modal_file_cdn_url: String(cdn).trim() } : {}),
+              multimodal_preview_url: preview.previewUrl || null,
+              multimodal_preview_type: preview.previewType || 'image',
+              ...(mr?.mode === 'url' && String(mr?.url || '').trim()
+                ? { multimodal_resource_link: String(mr.url).trim() }
+                : {}),
+              keyword: '',
+              keyWord: '',
+              guangdadaMultimodalRequest: null,
+            };
+            setCurrentSearchParams(paramsToUse);
             addLog('multi-modal-search 成功，已带入 list/count', 'info');
-          } else if (!multiRes.success) {
+          } else if (multiRes && !multiRes.success) {
             addLog(`multi-modal-search 失败: ${multiRes.message || '未返回 multimodal_md5'}`, 'warn');
           }
         } catch (err) {
@@ -208,7 +389,7 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, insightrackrSt
           }
         } else {
           setData(searchResult.data);
-          setCurrentSearchParams(searchParams);
+          setCurrentSearchParams(paramsToUse);
           setMediaDistribute({});
           setAppDistribute({});
           setCountData(countInner);
@@ -389,6 +570,18 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, insightrackrSt
       ? guangdadaPendingDateRange
       : defaultDateRange;
 
+  const guangdadaMaterialContentMode =
+    platform === 'guangdada' &&
+    (effectiveParams?.guangdadaSearchCategory || effectiveParams?.guangdada_search_category) === '素材内容';
+  const guangdadaSortFieldForBar =
+    platform === 'guangdada'
+      ? (() => {
+          const raw = effectiveParams?.sort_field ?? '-first_seen';
+          if (!guangdadaMaterialContentMode && raw === '-multimodal_similarity') return '-first_seen';
+          return raw;
+        })()
+      : (effectiveParams?.sort_field ?? '-first_seen');
+
   const handleDateChange = (dateRange) => {
     if (!dateRange?.startTime || !dateRange?.endTime) return;
     if (effectiveParams) {
@@ -421,6 +614,20 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, insightrackrSt
       handleSearch({ ...effectiveParams, ...updates });
     }
   };
+
+  const handleClearGuangdadaMultimodalSelected = useCallback(() => {
+    if (platform !== 'guangdada' || !effectiveParams) return;
+    const {
+      multimodal_md5: _mm,
+      multi_modal_file_cdn_url: _cdn,
+      multimodal_preview_url: _preview,
+      multimodal_preview_type: _previewType,
+      multimodal_resource_link: _resourceLink,
+      guangdadaMultimodalRequest: _mr,
+      ...rest
+    } = effectiveParams;
+    setCurrentSearchParams(rest);
+  }, [platform, effectiveParams]);
 
   /** 广大大：点击「不看该广告主创意」后请求 hidden-info，加入屏蔽列表并立即 refetch */
   const handleBlockAdvertiser = useCallback(async (item) => {
@@ -532,6 +739,15 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, insightrackrSt
           guangdadaSortField={platform === 'guangdada' ? effectiveParams?.sort_field : undefined}
           guangdadaDedupType={platform === 'guangdada' ? effectiveParams?.duplicate_removal : undefined}
           guangdadaDateRange={platform === 'guangdada' ? dateRangeValue : undefined}
+          guangdadaMultimodalPreviewUrl={platform === 'guangdada' ? effectiveParams?.multimodal_preview_url : undefined}
+          guangdadaMultimodalPreviewType={platform === 'guangdada' ? effectiveParams?.multimodal_preview_type : undefined}
+          guangdadaMultimodalResourceLink={platform === 'guangdada' ? effectiveParams?.multimodal_resource_link : undefined}
+          onClearGuangdadaMultimodalSelected={platform === 'guangdada' ? handleClearGuangdadaMultimodalSelected : undefined}
+          guangdadaLastSearchCategory={
+            platform === 'guangdada'
+              ? (effectiveParams?.guangdadaSearchCategory ?? effectiveParams?.guangdada_search_category ?? null)
+              : null
+          }
           insightrackrSearchTab={platform === 'insightrackr' ? insightrackrSearchTab : undefined}
           insightrackrInitialFormData={platform === 'insightrackr' ? insightrackrFormByTab[insightrackrSearchTab] : undefined}
           onInsightrackrFormDataChange={platform === 'insightrackr' ? (formData) => setInsightrackrFormByTab((prev) => ({ ...prev, [insightrackrSearchTab]: formData })) : undefined}
@@ -557,8 +773,9 @@ function DataCard({ platform, addLog, onRequireLogin, isLoggedIn, insightrackrSt
               )}
             </div>
             <SortDedupBar
-            sortField={effectiveParams?.sort_field ?? '-first_seen'}
+            sortField={guangdadaSortFieldForBar}
             dedupType={effectiveParams?.duplicate_removal ?? 0}
+            materialContentMode={guangdadaMaterialContentMode}
             hasKeyword={platform === 'guangdada'
               ? (() => {
                   const kw = effectiveParams?.keyword;

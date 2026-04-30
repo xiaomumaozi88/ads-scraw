@@ -43,6 +43,7 @@ import SortSelector from './SortSelector';
 import { buildGuangdadaApiBody } from '../utils/guangdadaApiBody';
 import { getGuangdadaAdvertiserAssociation } from '../utils/api';
 import InsightrackrGlobalSearch from './InsightrackrGlobalSearch';
+import GuangdadaAiFileSearchModal from './GuangdadaAiFileSearchModal';
 import { GUANGDADA_COUNTRY_CODE_TO_CN } from '../data/guangdadaCountries';
 import { CHANNEL_VALUE_MAP } from '../data/guangdadaChannels';
 import { GUANGDADA_COPY_LANG_OPTIONS } from '../data/guangdadaCopyLangs';
@@ -503,15 +504,37 @@ function getDefaultInsightrackrFormState() {
     guangdadaCodFlag: 0,
     guangdadaSearchArbitrageFlag: 0,
     guangdadaWebsiteTypeCodes: [],
+    guangdadaMultimodalRequest: null,
   };
 }
 
-function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdadaDedupType, guangdadaDateRange, insightrackrSearchTab = 'imagevideo', insightrackrInitialFormData, onInsightrackrFormDataChange, guangdadaBlockedAdvertisers = [], onGuangdadaUnblockAdvertiser, requestDefaultSearch = false, onDefaultSearchTriggered }) {
+function SearchForm({
+  platform,
+  onSearch,
+  loading,
+  guangdadaSortField,
+  guangdadaDedupType,
+  guangdadaDateRange,
+  guangdadaMultimodalPreviewUrl,
+  guangdadaMultimodalPreviewType,
+  guangdadaMultimodalResourceLink,
+  onClearGuangdadaMultimodalSelected,
+  guangdadaLastSearchCategory,
+  insightrackrSearchTab = 'imagevideo',
+  insightrackrInitialFormData,
+  onInsightrackrFormDataChange,
+  guangdadaBlockedAdvertisers = [],
+  onGuangdadaUnblockAdvertiser,
+  requestDefaultSearch = false,
+  onDefaultSearchTriggered,
+}) {
   const [formData, setFormData] = useState(() =>
     platform === 'insightrackr' && insightrackrInitialFormData != null
       ? insightrackrInitialFormData
       : getDefaultInsightrackrFormState()
   );
+  const formDataRef = useRef(formData);
+  formDataRef.current = formData;
 
   const [excludePopoverOpen, setExcludePopoverOpen] = useState(false);
   const [excludeKeywordDraft, setExcludeKeywordDraft] = useState([]);
@@ -528,6 +551,17 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       setExcludeKeywordDraft([...(formData.guangdadaExcludeKeyword || [])]);
     }
   }, [excludePopoverOpen]);
+
+  // 排序条改排序后会更新 effectiveParams；仅当「当前表单搜索分类」与「上次请求的分类」一致时同步到表单，避免切到「素材内容」后被旧排序覆盖
+  useEffect(() => {
+    if (platform !== 'guangdada') return;
+    if (guangdadaSortField == null || guangdadaLastSearchCategory == null) return;
+    setFormData((prev) => {
+      if (prev.guangdadaSearchCategory !== guangdadaLastSearchCategory) return prev;
+      if (prev.sort_field === guangdadaSortField) return prev;
+      return { ...prev, sort_field: guangdadaSortField };
+    });
+  }, [platform, guangdadaSortField, guangdadaLastSearchCategory]);
 
   // 广大大：TimeFilter 切换时间后，同步 formData.dateRange，以便点击「查询」时使用正确的时间范围
   useEffect(() => {
@@ -610,6 +644,7 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
   const associationTimerRef = useRef(null);
   const associationBlurTimerRef = useRef(null);
   const keywordInputWrapRef = useRef(null);
+  const [aiFileModalOpen, setAiFileModalOpen] = useState(false);
 
   const sameAdvertiser = (a, b) =>
     (a.domain && b.domain && a.domain === b.domain && a.advertiser_name === b.advertiser_name) ||
@@ -1071,9 +1106,11 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
       searchParams.pageSize = formDataToUse.pageSize ?? 60;
       searchParams.startTime = startTime;
       searchParams.endTime = endTime;
-      // 电商/品牌下有关键词时默认选中「相关性」排序
+      // 电商/品牌下有关键词时默认选中「相关性」排序；素材内容默认「素材相关性」
       if (formDataToUse.guangdadaPrimaryTab === '电商/品牌' && (formDataToUse.keyWord || '').trim()) {
         searchParams.sort_field = '-correlation';
+      } else if (formDataToUse.guangdadaSearchCategory === '素材内容') {
+        searchParams.sort_field = formDataToUse.sort_field ?? guangdadaSortField ?? '-multimodal_similarity';
       } else {
         searchParams.sort_field = guangdadaSortField ?? formDataToUse.sort_field ?? '-first_seen';
       }
@@ -1136,10 +1173,27 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
         }
       }
       // 广大大：直接返回与 guangdada.net 标准请求一致的 API body，便于在 Network 中核对参数
-      return buildGuangdadaApiBody(searchParams);
+      const body = buildGuangdadaApiBody(searchParams);
+      if (formDataToUse.guangdadaMultimodalRequest != null) {
+        return { ...body, guangdadaMultimodalRequest: formDataToUse.guangdadaMultimodalRequest };
+      }
+      return body;
     }
 
     return searchParams;
+  };
+
+  const handleGuangdadaAiFileConfirm = (payload) => {
+    const merged = {
+      ...formDataRef.current,
+      keyWord: '',
+      guangdadaMultimodalRequest: payload,
+      sort_field: '-multimodal_similarity',
+    };
+    setFormData(merged);
+    if (platform === 'insightrackr' && onInsightrackrFormDataChange) onInsightrackrFormDataChange(merged);
+    setAiFileModalOpen(false);
+    onSearch(buildSearchParams(merged));
   };
 
   // 进入页面且已登录时，用当前（默认）表单参数发起一次查询，仅执行一次
@@ -1157,16 +1211,36 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
   };
 
   const handleChange = (field, value) => {
-    setFormData(prev => {
+    const shouldClearMultimodalByCategorySwitch =
+      platform === 'guangdada' &&
+      field === 'guangdadaSearchCategory' &&
+      value === '广告信息' &&
+      formData.guangdadaSearchCategory === '素材内容';
+    setFormData((prev) => {
       const next = { ...prev, [field]: value };
+      if (platform === 'guangdada' && field === 'guangdadaSearchCategory') {
+        if (value === '素材内容') {
+          next.sort_field = '-multimodal_similarity';
+        } else if (value === '广告信息' && prev.sort_field === '-multimodal_similarity') {
+          next.sort_field = '-first_seen';
+          next.guangdadaMultimodalRequest = null;
+        }
+      }
+      if (platform === 'guangdada' && field === 'keyWord' && prev.guangdadaSearchCategory === '素材内容') {
+        next.guangdadaMultimodalRequest = null;
+      }
       if (platform === 'insightrackr' && onInsightrackrFormDataChange) onInsightrackrFormDataChange(next);
       return next;
     });
+    if (shouldClearMultimodalByCategorySwitch) {
+      onClearGuangdadaMultimodalSelected?.();
+    }
   };
 
   return (
     <form id="searchFormContainer" onSubmit={handleSubmit} className={platform === 'guangdada' ? 'search-form search-form--guangdada' : 'search-form'}>
       {platform === 'guangdada' ? (
+        <>
         <div className="guangdada-search-top">
           <div className="guangdada-search-top-content">
 {/* 一级分类：游戏 / 工具 / 电商/品牌 */}
@@ -1243,97 +1317,115 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                   popupClassName="guangdada-search-type-dropdown"
                 />
               )}
-              <div className="guangdada-keyword-input-wrap" ref={keywordInputWrapRef}>
-                <input
-                  type="text"
-                  id="searchKeyword"
-                  name="keyword"
-                  className="guangdada-search-input"
-                  autoComplete="off"
-                  placeholder={
-                    formData.guangdadaSearchCategory === '广告信息'
-                      ? (() => {
-                          const opts = formData.guangdadaPrimaryTab === '电商/品牌' ? GUANGDADA_SEARCH_TYPE_OPTIONS_ECOMMERCE : GUANGDADA_SEARCH_TYPE_OPTIONS;
-                          const current = formData.guangdadaPrimaryTab === '电商/品牌' ? (formData.guangdadaSearchType ?? '0') : (formData.guangdadaSearchType || '综合');
-                          return opts.find((o) => o.value === current)?.placeholder ?? opts[0].placeholder;
-                        })()
-                      : '搜索广告主、文案、包名等关键词'
-                  }
-                  value={formData.keyWord}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    handleChange('keyWord', v);
-                    // 清空关键词时只清空联想下拉列表，已选广告主保留
-                    if (!(v && v.trim())) setAssociationList([]);
-                  }}
-                  onFocus={() => {
-                    if (associationBlurTimerRef.current) {
-                      clearTimeout(associationBlurTimerRef.current);
-                      associationBlurTimerRef.current = null;
+              <div
+                className={`guangdada-keyword-input-wrap${
+                  formData.guangdadaSearchCategory === '素材内容' && formData.guangdadaPrimaryTab !== '电商/品牌'
+                    ? ' guangdada-keyword-input-wrap--with-ai'
+                    : ''
+                }`}
+                ref={keywordInputWrapRef}
+              >
+                <div className="guangdada-keyword-input-inner">
+                  <input
+                    type="text"
+                    id="searchKeyword"
+                    name="keyword"
+                    className="guangdada-search-input"
+                    autoComplete="off"
+                    placeholder={
+                      formData.guangdadaSearchCategory === '广告信息'
+                        ? (() => {
+                            const opts = formData.guangdadaPrimaryTab === '电商/品牌' ? GUANGDADA_SEARCH_TYPE_OPTIONS_ECOMMERCE : GUANGDADA_SEARCH_TYPE_OPTIONS;
+                            const current = formData.guangdadaPrimaryTab === '电商/品牌' ? (formData.guangdadaSearchType ?? '0') : (formData.guangdadaSearchType || '综合');
+                            return opts.find((o) => o.value === current)?.placeholder ?? opts[0].placeholder;
+                          })()
+                        : '搜索广告主、文案、包名等关键词'
                     }
-                    if (formData.guangdadaPrimaryTab !== '电商/品牌' && (associationList.length > 0 || associationLoading)) setAssociationOpen(true);
-                  }}
-                  onBlur={() => {
-                    // 短延时以便点击下拉项时 onMouseDown(preventDefault) 先于 blur 生效；关闭主要依赖「点击外部」监听
-                    associationBlurTimerRef.current = setTimeout(() => {
-                      associationBlurTimerRef.current = null;
-                      setAssociationOpen(false);
-                    }, 120);
-                  }}
-                />
-                {formData.guangdadaSearchCategory === '广告信息' && formData.guangdadaPrimaryTab !== '电商/品牌' && associationOpen && (associationList.length > 0 || associationLoading) && (
-                  <div className="guangdada-association-dropdown">
-                    <div className="guangdada-association-header">
-                      <span className="guangdada-association-header-label">广告主</span>
-                      <span className="guangdada-association-header-col">近90天创意</span>
-                      <span className="guangdada-association-header-col">上月下载</span>
-                    </div>
-                    {associationLoading ? (
-                      <div className="guangdada-association-loading">加载中...</div>
-                    ) : (
-                      <ul className="guangdada-association-list">
-                        {associationList.map((item, i) => {
-                          const isSelected = isAdvertiserSelected(item);
-                          return (
-                            <li
-                              key={item.domain || item.cross_app_id || i}
-                              className={`guangdada-association-item${isSelected ? ' guangdada-association-item--selected' : ''}`}
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                toggleAdvertiserSelection(item);
-                              }}
-                            >
-                              <div className="guangdada-association-item-main">
-                                {item.logo_url ? (
-                                  <img src={item.logo_url} alt="" className="guangdada-association-logo" referrerPolicy="no-referrer" />
-                                ) : (
-                                  <div className="guangdada-association-logo guangdada-association-logo--placeholder" />
-                                )}
-                                <div className="guangdada-association-info">
-                                  <div className="guangdada-association-name">
-                                    {item.advertiser_name || '—'}
-                                    {isSelected && <span className="guangdada-association-item-selected-badge">已选</span>}
+                    value={formData.keyWord}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      handleChange('keyWord', v);
+                      // 清空关键词时只清空联想下拉列表，已选广告主保留
+                      if (!(v && v.trim())) setAssociationList([]);
+                    }}
+                    onFocus={() => {
+                      if (associationBlurTimerRef.current) {
+                        clearTimeout(associationBlurTimerRef.current);
+                        associationBlurTimerRef.current = null;
+                      }
+                      if (formData.guangdadaPrimaryTab !== '电商/品牌' && (associationList.length > 0 || associationLoading)) setAssociationOpen(true);
+                    }}
+                    onBlur={() => {
+                      // 短延时以便点击下拉项时 onMouseDown(preventDefault) 先于 blur 生效；关闭主要依赖「点击外部」监听
+                      associationBlurTimerRef.current = setTimeout(() => {
+                        associationBlurTimerRef.current = null;
+                        setAssociationOpen(false);
+                      }, 120);
+                    }}
+                  />
+                  {formData.guangdadaSearchCategory === '广告信息' && formData.guangdadaPrimaryTab !== '电商/品牌' && associationOpen && (associationList.length > 0 || associationLoading) && (
+                    <div className="guangdada-association-dropdown">
+                      <div className="guangdada-association-header">
+                        <span className="guangdada-association-header-label">广告主</span>
+                        <span className="guangdada-association-header-col">近90天创意</span>
+                        <span className="guangdada-association-header-col">上月下载</span>
+                      </div>
+                      {associationLoading ? (
+                        <div className="guangdada-association-loading">加载中...</div>
+                      ) : (
+                        <ul className="guangdada-association-list">
+                          {associationList.map((item, i) => {
+                            const isSelected = isAdvertiserSelected(item);
+                            return (
+                              <li
+                                key={item.domain || item.cross_app_id || i}
+                                className={`guangdada-association-item${isSelected ? ' guangdada-association-item--selected' : ''}`}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  toggleAdvertiserSelection(item);
+                                }}
+                              >
+                                <div className="guangdada-association-item-main">
+                                  {item.logo_url ? (
+                                    <img src={item.logo_url} alt="" className="guangdada-association-logo" referrerPolicy="no-referrer" />
+                                  ) : (
+                                    <div className="guangdada-association-logo guangdada-association-logo--placeholder" />
+                                  )}
+                                  <div className="guangdada-association-info">
+                                    <div className="guangdada-association-name">
+                                      {item.advertiser_name || '—'}
+                                      {isSelected && <span className="guangdada-association-item-selected-badge">已选</span>}
+                                    </div>
+                                    <div className="guangdada-association-meta">{item.domain || item.cross_app_id || '—'}</div>
+                                    {item.developer && <div className="guangdada-association-developer">{item.developer}</div>}
                                   </div>
-                                  <div className="guangdada-association-meta">{item.domain || item.cross_app_id || '—'}</div>
-                                  {item.developer && <div className="guangdada-association-developer">{item.developer}</div>}
                                 </div>
-                              </div>
-                              <span className="guangdada-association-creative">{item.ads_count_last_90_days != null ? item.ads_count_last_90_days : '—'}</span>
-                              <span className="guangdada-association-download">
-                                {item.download != null
-                                  ? (item.download >= 10000 ? `${(item.download / 10000).toFixed(0)}万` : item.download)
-                                  : '—'}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
+                                <span className="guangdada-association-creative">{item.ads_count_last_90_days != null ? item.ads_count_last_90_days : '—'}</span>
+                                <span className="guangdada-association-download">
+                                  {item.download != null
+                                    ? (item.download >= 10000 ? `${(item.download / 10000).toFixed(0)}万` : item.download)
+                                    : '—'}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {formData.guangdadaSearchCategory === '素材内容' && formData.guangdadaPrimaryTab !== '电商/品牌' && (
+                  <button
+                    type="button"
+                    className="guangdada-ai-file-trigger-btn"
+                    onClick={() => setAiFileModalOpen(true)}
+                  >
+                    AI文件搜索
+                  </button>
                 )}
               </div>
             </div>
-            {formData.guangdadaSearchCategory === '广告信息' && (
+            {(formData.guangdadaSearchCategory === '广告信息' || formData.guangdadaSearchCategory === '素材内容') && (
               <div className="guangdada-search-options">
                 <Popover
                   open={excludePopoverOpen}
@@ -2778,11 +2870,70 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
                 const filterTags = getGuangdadaFilterTags(formData);
                 const hasSelectedAdv = (formData.guangdadaSearchCategory === '广告信息' || formData.guangdadaSearchCategory === '素材内容') && selectedAdvertisers.length > 0;
                 const hasBlockedAdv = guangdadaBlockedAdvertisers.length > 0;
-                if (filterTags.length === 0 && !hasSelectedAdv && !hasBlockedAdv) return null;
+                const showMultimodalSelected =
+                  formData.guangdadaSearchCategory === '素材内容' &&
+                  formData.guangdadaPrimaryTab !== '电商/品牌' &&
+                  !!guangdadaMultimodalPreviewUrl;
+                const showMultimodalLink =
+                  formData.guangdadaSearchCategory === '素材内容' &&
+                  formData.guangdadaPrimaryTab !== '电商/品牌' &&
+                  !!guangdadaMultimodalResourceLink;
+                const showMultimodalPreviewOnly = showMultimodalSelected && !showMultimodalLink;
+                const multimodalTitle = guangdadaMultimodalPreviewType === 'video' ? '搜素视频' : '搜索图片';
+                if (filterTags.length === 0 && !hasSelectedAdv && !hasBlockedAdv && !showMultimodalPreviewOnly && !showMultimodalLink) return null;
                 return (
                   <div className="guangdada-filter-tags-section">
                     <span className="guangdada-filter-tags-title">筛选项</span>
                     <div className="guangdada-filter-tags-row">
+                      {showMultimodalLink && (
+                        <Tooltip title={guangdadaMultimodalResourceLink} placement="top">
+                          <Tag
+                            closable
+                            onClose={(e) => {
+                              e.preventDefault();
+                              const merged = {
+                                ...formDataRef.current,
+                                keyWord: '',
+                                guangdadaMultimodalRequest: null,
+                              };
+                              setFormData(merged);
+                              onClearGuangdadaMultimodalSelected?.();
+                            }}
+                            className="guangdada-filter-tag guangdada-multimodal-link-tag"
+                          >
+                            <span className="guangdada-multimodal-link-text">
+                              资源链接：{guangdadaMultimodalResourceLink}
+                            </span>
+                          </Tag>
+                        </Tooltip>
+                      )}
+                      {showMultimodalPreviewOnly && (
+                        <Tag
+                          closable
+                          onClose={(e) => {
+                            e.preventDefault();
+                            const merged = {
+                              ...formDataRef.current,
+                              keyWord: '',
+                              guangdadaMultimodalRequest: null,
+                            };
+                            setFormData(merged);
+                            onClearGuangdadaMultimodalSelected?.();
+                          }}
+                          className="guangdada-filter-tag guangdada-multimodal-selected-tag"
+                        >
+                          <Tooltip title={multimodalTitle} placement="top">
+                            <div className="guangdada-multimodal-selected-cell guangdada-multimodal-selected-cell--in-filter-tags">
+                              <img
+                                src={guangdadaMultimodalPreviewUrl}
+                                alt="多模态搜索预览"
+                                className="guangdada-multimodal-selected-thumb"
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                          </Tooltip>
+                        </Tag>
+                      )}
                       {filterTags.map((t) => (
                         <Tooltip
                           key={t.fieldKey}
@@ -2841,6 +2992,12 @@ function SearchForm({ platform, onSearch, loading, guangdadaSortField, guangdada
               </div>
             </div>
         </div>
+        <GuangdadaAiFileSearchModal
+          open={aiFileModalOpen}
+          onCancel={() => setAiFileModalOpen(false)}
+          onConfirm={handleGuangdadaAiFileConfirm}
+        />
+        </>
       ) : (
         <>
       <div className={`form-group${platform === 'insightrackr' ? ' insightrackr-search-row' : ''}`}>

@@ -9,7 +9,8 @@ const CREATIVE_LIST_URL = `${GUANGDADA_API_BASE}/napi/v1/creative/list`;
 /** API sort_field 有效取值（文档约定，默认 -first_seen） */
 const SORT_FIELD_ALLOWED = new Set([
   '-correlation', '-impression', '-first_seen', '-last_seen', '-days',
-  '-related_ads_count', '-heat_degree', '-like_count', '-comment_count', '-share_count'
+  '-related_ads_count', '-heat_degree', '-like_count', '-comment_count', '-share_count',
+  '-multimodal_similarity',
 ]);
 
 /** 素材类型中文 -> API ads_type */
@@ -231,7 +232,12 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
     exclude_keyword,
     advertiser_key,
     exclude_advertiser_key,
+    guangdadaSearchCategory,
+    guangdada_search_category,
   } = searchParams;
+
+  const searchCategory = guangdadaSearchCategory ?? guangdada_search_category;
+  const isMaterialContentCategory = searchCategory === '素材内容';
 
   let seenBegin = paramSeenBegin;
   let seenEnd = paramSeenEnd;
@@ -248,7 +254,8 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
   }
 
   const pageSizeNum = Math.min(60, parseInt(page_size ?? pageSize, 10) || 60);
-  const sortFieldApi = (sort_field && SORT_FIELD_ALLOWED.has(String(sort_field))) ? String(sort_field) : '-first_seen';
+  const defaultSortField = isMaterialContentCategory ? '-multimodal_similarity' : '-first_seen';
+  const sortFieldApi = (sort_field && SORT_FIELD_ALLOWED.has(String(sort_field))) ? String(sort_field) : defaultSortField;
 
   // search_type: 非必填默认"0"，"0"-默认搜索 "1"-精确搜索（API 实际接收字符串）
   const searchTypeStr = guangdadaExactSearch !== false ? '1' : '0';
@@ -486,6 +493,10 @@ export function buildGuangdadaRequestBody(searchParams = {}) {
   if (aiImage) body.ai_image_tag = aiImage;
   const aiVideo = buildAiTagObject(guangdadaVideoAnalysis, VIDEO_AI_PARENT);
   if (aiVideo) body.ai_video_tag = aiVideo;
+
+  if (searchParams.multimodal_md5 != null && String(searchParams.multimodal_md5).trim() !== '') {
+    body.multimodal_md5 = String(searchParams.multimodal_md5).trim();
+  }
 
   return body;
 }

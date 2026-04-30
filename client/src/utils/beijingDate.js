@@ -14,3 +14,8 @@ export function getTodayBeijingStr() {
 export function getTodayBeijingDayjs() {
   return dayjs(getTodayBeijingStr());
 }
+
+/** Unix 毫秒 → 上海时区 `YYYY-MM-DD HH:mm:ss`（与广大大国内口径一致） */
+export function formatMsShanghai(ms) {
+  return new Date(ms).toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' });
+}

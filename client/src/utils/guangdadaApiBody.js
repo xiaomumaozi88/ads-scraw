@@ -230,8 +230,8 @@ export function buildGuangdadaApiBody(params = {}) {
   const defaultSort = isMaterialContent ? '-multimodal_similarity' : '-first_seen';
   const sortFieldApi = (sort_field && SORT_FIELD_ALLOWED.has(String(sort_field))) ? String(sort_field) : defaultSort;
 
-  // search_type: 广告信息传 "1"（字符串），素材内容传 0（数字）
-  const searchType = guangdadaSearchCategory === '素材内容' ? 0 : '1';
+  // search_type：与官网一致为字符串 "0"|"1"（勾选精确搜索为 "1"）。勿对素材内容使用数字 0，否则服务端曾误判非直连 body 并丢弃 multimodal_md5。
+  const searchType = guangdadaExactSearch !== false ? '1' : '0';
   const body = {
     page: Math.max(1, Math.min(500, parseInt(page, 10) || 1)),
     page_size: pageSizeNum,
@@ -240,6 +240,7 @@ export function buildGuangdadaApiBody(params = {}) {
     sort_field: sortFieldApi,
     duplicate_removal: parseInt(duplicate_removal, 10) || 0,
     search_type: searchType,
+    new_advertiser_flag: false,
     complete_country_match: !!guangdadaOnlyInSelectedRegion,
     fb_merge: Array.isArray(guangdadaChannels) && guangdadaChannels.includes('merge_facebook'),
     new_ads_flag: guangdadaNewAds ? 1 : 0,

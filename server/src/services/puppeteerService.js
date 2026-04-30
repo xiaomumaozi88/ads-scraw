@@ -10,6 +10,14 @@ import {LoginStatus} from '../constants/index.js';
 import {upload} from '../utils/utils.js';
 import {buildGuangdadaRequestBody} from './guangdadaApiService.js';
 
+/** 判断前端是否已发来 guangdada.net 直连 JSON（须保留 multimodal_md5、sort_field 等）。search_type 官网为字符串；曾用数字 0 会导致误判并走 buildGuangdadaRequestBody 丢字段。 */
+function isGuangdadaSearchParamsApiFormat(sp) {
+    if (!sp || typeof sp !== 'object') return false;
+    const st = sp.search_type;
+    const searchTypeOk = st === '1' || st === '0' || st === 1 || st === 0;
+    return typeof sp.seen_begin === 'number' && typeof sp.seen_end === 'number' && searchTypeOk;
+}
+
 // 使用 Stealth 插件来避免反爬虫检测
 puppeteer.use(StealthPlugin());
 
@@ -31,6 +39,8 @@ let loginInfo = {
     authorization: null, // JWT token（napi 等常用，多与 jwt.nbs 一致）
     /** 国内版 BBA（iframe-cn / bbaapi）须用 localStorage `jwt` 里的 cn，与 nbs 权限载荷不同 */
     authorizationCn: null,
+    /** 国内 cn 令牌过期时间（毫秒），来自 jwt.cn 的 payload.exp 或 jwt 外层 JSON 常见字段 */
+    cnJwtExpiresAtMs: null,
     deviceId: null,
     userToken: null,
 };
@@ -76,6 +86,66 @@ async function ensureGuangdadaGlobalDisplayAdsForInternationalApis(page) {
     }
 }
 
+/** 从 JWT 字符串 payload 读取 exp（秒）→ 过期时刻毫秒 */
+function guangdadaJwtPayloadExpMs(token) {
+    if (typeof token !== 'string' || !token.trim()) return null;
+    const parts = token.trim().split('.');
+    if (parts.length < 2) return null;
+    try {
+        let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const pad = b64.length % 4;
+        if (pad) b64 += '='.repeat(4 - pad);
+        const payload = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+        const exp = payload && payload.exp;
+        if (exp == null || !Number.isFinite(Number(exp))) return null;
+        return Math.round(Number(exp) * 1000);
+    } catch {
+        return null;
+    }
+}
+
+/** localStorage `jwt` 外层 JSON 上常见的过期字段 → 毫秒（秒级时间戳会乘 1000） */
+function guangdadaJwtWrapperExpiresMs(wrapper) {
+    if (!wrapper || typeof wrapper !== 'object') return null;
+    const nowMs = Date.now();
+    const relativeKeys = ['expires_in', 'expiresIn'];
+    for (const k of relativeKeys) {
+        const v = wrapper[k];
+        if (v == null) continue;
+        const n = typeof v === 'number' ? v : (typeof v === 'string' && /^\d+$/.test(v.trim()) ? parseInt(v.trim(), 10) : NaN);
+        if (!Number.isFinite(n) || n <= 0) continue;
+        // 兼容三种口径：
+        // 1) 毫秒时间戳（13 位） 2) 秒时间戳（10 位） 3) 相对秒数（常见 expires_in）
+        if (n >= 1e12) return Math.round(n); // epoch ms
+        if (n >= 1e9) return Math.round(n * 1000); // epoch s
+        return nowMs + Math.round(n * 1000); // ttl seconds
+    }
+    const keys = [
+        'expires', 'expireTime', 'expire_time', 'expiresAt', 'expires_at',
+        'expirationTime', 'expiration_time', 'expiredAt', 'expired_at',
+        'tokenExpire', 'token_expire', 'expire', 'exp',
+    ];
+    for (const k of keys) {
+        const v = wrapper[k];
+        if (v == null) continue;
+        if (typeof v === 'number' && Number.isFinite(v)) {
+            return v < 1e12 ? Math.round(v * 1000) : Math.round(v);
+        }
+        if (typeof v === 'string' && /^\d+$/.test(v.trim())) {
+            const n = parseInt(v.trim(), 10);
+            if (!Number.isFinite(n)) continue;
+            return n < 1e12 ? n * 1000 : n;
+        }
+    }
+    return null;
+}
+
+function resolveGuangdadaCnJwtExpiresAtMs(cnToken, wrapper) {
+    const fromCn = guangdadaJwtPayloadExpMs(cnToken);
+    if (fromCn != null) return fromCn;
+    return guangdadaJwtWrapperExpiresMs(wrapper);
+}
+
 /**
  * 从 guangdada.net 的 localStorage/sessionStorage 中 `jwt`（或 `JWT`）JSON 解析 `cn` 字段，
  * 供 bba.ttads.net iframe-cn / bbaapi 使用（与 napi 用的 nbs 不是同一枚 JWT）。
@@ -83,23 +153,27 @@ async function ensureGuangdadaGlobalDisplayAdsForInternationalApis(page) {
 async function syncAuthorizationCnFromJwtStorage(page) {
     if (!page || page.isClosed()) return;
     try {
-        const cn = await page.evaluate(() => {
+        const result = await page.evaluate(() => {
             for (const jwtKey of ['jwt', 'JWT']) {
                 const raw = localStorage.getItem(jwtKey) || sessionStorage.getItem(jwtKey);
                 if (!raw || typeof raw !== 'string') continue;
                 try {
                     const o = JSON.parse(raw);
-                    if (o && typeof o.cn === 'string' && o.cn.trim()) return o.cn.trim();
+                    if (!o || typeof o !== 'object') continue;
+                    const cn = typeof o.cn === 'string' && o.cn.trim() ? o.cn.trim() : null;
+                    return { cn, wrapper: o };
                 } catch (_) {
                     /* ignore */
                 }
             }
-            return null;
+            return { cn: null, wrapper: null };
         });
-        if (cn) {
-            loginInfo.authorizationCn = cn;
+        if (result.cn) {
+            loginInfo.authorizationCn = result.cn;
             logger.info('✅ 已从 jwt 存储同步国内版(BBA) cn 令牌');
         }
+        const expMs = resolveGuangdadaCnJwtExpiresAtMs(result.cn, result.wrapper);
+        loginInfo.cnJwtExpiresAtMs = expMs != null ? expMs : null;
     } catch (e) {
         logger.warn('从 jwt 同步 cn 令牌失败:', e.message);
     }
@@ -237,9 +311,14 @@ export const getBrowserWSEndpoint = () => {
 };
 
 export const closeBrowser = async () => {
-    if (browser) {
+    loginPage = null;
+    if (!browser) return;
+    try {
         await browser.close();
+    } catch (e) {
+        logger.warn('关闭广大大浏览器失败:', e.message);
     }
+    browser = null;
 };
 
 // 爬取 display-ads 页面数据
@@ -492,9 +571,14 @@ export const scrapeDisplayAds = async () => {
 
 // 查询当前状态（不自动检查，只返回当前状态）
 export const getStatus = async () => {
+    if (status.current === LoginStatus.ONLINE && loginPage && !loginPage.isClosed()) {
+        await syncAuthorizationCnFromJwtStorage(loginPage).catch(() => {});
+    }
+    const online = status.current === LoginStatus.ONLINE;
     return {
         status: status.current,
-        email: status.current === LoginStatus.ONLINE ? loginInfo.email : null
+        email: online ? loginInfo.email : null,
+        cnJwtExpiresAt: online && loginInfo.cnJwtExpiresAtMs != null ? loginInfo.cnJwtExpiresAtMs : null,
     };
 };
 
@@ -528,9 +612,12 @@ export async function refreshGuangdadaBbaAuthFromLoginPage() {
 /** 健康检查：浏览器是否存在、页面数、登录状态与账号，供 /health 排查用 */
 export const getHealthInfo = async () => {
     if (!browser) {
-        return { browserExists: false, pageCount: 0, status: status.current, email: null, isLoggedIn: false };
+        return { browserExists: false, pageCount: 0, status: status.current, email: null, isLoggedIn: false, cnJwtExpiresAt: null };
     }
     try {
+        if (status.current === LoginStatus.ONLINE && loginPage && !loginPage.isClosed()) {
+            await syncAuthorizationCnFromJwtStorage(loginPage).catch(() => {});
+        }
         const pages = await browser.pages();
         const isLoggedIn = status.current === LoginStatus.ONLINE;
         return {
@@ -538,7 +625,8 @@ export const getHealthInfo = async () => {
             pageCount: pages.length,
             status: status.current,
             email: isLoggedIn ? loginInfo.email : null,
-            isLoggedIn
+            isLoggedIn,
+            cnJwtExpiresAt: isLoggedIn && loginInfo.cnJwtExpiresAtMs != null ? loginInfo.cnJwtExpiresAtMs : null,
         };
     } catch (e) {
         logger.warn('getHealthInfo 广大大:', e.message);
@@ -548,6 +636,7 @@ export const getHealthInfo = async () => {
             status: status.current,
             email: status.current === LoginStatus.ONLINE ? loginInfo.email : null,
             isLoggedIn: status.current === LoginStatus.ONLINE,
+            cnJwtExpiresAt: status.current === LoginStatus.ONLINE && loginInfo.cnJwtExpiresAtMs != null ? loginInfo.cnJwtExpiresAtMs : null,
             error: e.message
         };
     }
@@ -1224,17 +1313,46 @@ export const getLoginInfo = () => {
     };
 };
 
-/** 仅请求 multi-modal-search，返回 multimodal_md5。params 支持 { multimodal_search_type, multimodal_search_content, snapshot_flag } 或旧版 keyword 字符串 */
+/** 仅请求 multi-modal-search，返回 multimodal_md5。旧版：字符串 → type=1+content。对象：与官网 multipart 一致——图 type=2+file；视频文件 type=3+file+空 content；链接 type=3+content、无 file。 */
 export const fetchMultiModalSearch = async (params = {}) => {
-    const isLegacy = typeof params === 'string' || (params != null && !('multimodal_search_content' in params) && !('multimodal_search_type' in params));
-    const type = isLegacy ? '1' : (params.multimodal_search_type != null ? String(params.multimodal_search_type) : '1');
-    const content = isLegacy
-        ? (typeof params === 'string' ? params.trim() : (Array.isArray(params) && params.length > 0 ? String(params[0]).trim() : ''))
-        : (params.multimodal_search_content != null ? String(params.multimodal_search_content).trim() : '');
-    const snapshot = isLegacy ? 'false' : (params.snapshot_flag != null ? String(params.snapshot_flag) : 'false');
-    if (!content) {
+    const isLegacyString = typeof params === 'string';
+    const isLegacyArray = !isLegacyString && Array.isArray(params) && params.length > 0;
+    let type = '1';
+    let content = '';
+    let snapshot = 'false';
+    let fileBase64 = '';
+    let fileName = '';
+    let fileMime = '';
+
+    if (isLegacyString) {
+        content = String(params).trim();
+        type = '1';
+    } else if (isLegacyArray) {
+        content = String(params[0]).trim();
+        type = '1';
+    } else if (params && typeof params === 'object') {
+        type = params.multimodal_search_type != null ? String(params.multimodal_search_type) : '1';
+        content = params.multimodal_search_content != null ? String(params.multimodal_search_content).trim() : '';
+        snapshot = params.snapshot_flag != null ? String(params.snapshot_flag) : 'false';
+        const f = params.file;
+        if (f && typeof f === 'object' && f.base64) {
+            fileBase64 = String(f.base64).replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '');
+            fileName = f.filename != null ? String(f.filename).slice(0, 512) : 'upload';
+            fileMime = f.mimeType != null ? String(f.mimeType).slice(0, 128) : 'application/octet-stream';
+        }
+    }
+
+    const hasFile = fileBase64.length > 0;
+    if (type === '1' && !content) {
         return { success: false, data: { multimodal_md5: null }, code: 400, message: '关键词为空' };
     }
+    if (type === '2' && !hasFile) {
+        return { success: false, data: { multimodal_md5: null }, code: 400, message: '图片搜索需上传文件（multipart file）' };
+    }
+    if (type === '3' && !hasFile && !content) {
+        return { success: false, data: { multimodal_md5: null }, code: 400, message: '请提供视频文件或素材链接' };
+    }
+
     if (status.current !== LoginStatus.ONLINE) {
         return { success: false, data: { multimodal_md5: null }, code: 'NOT_LOGGED_IN', message: '未登录，请先登录' };
     }
@@ -1269,8 +1387,21 @@ export const fetchMultiModalSearch = async (params = {}) => {
         }
         const multimodalResult = await loginPage.evaluate(async (opts, authToken, devId, uToken) => {
             const form = new FormData();
+            if (opts.fileBase64) {
+                let binary;
+                try {
+                    binary = atob(opts.fileBase64);
+                } catch (e) {
+                    return { ok: false, multimodal_md5: null, err: 'base64' };
+                }
+                const len = binary.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+                const blob = new Blob([bytes], { type: opts.fileMime || 'application/octet-stream' });
+                form.append('file', blob, opts.fileName || 'upload');
+            }
             form.append('multimodal_search_type', opts.type);
-            form.append('multimodal_search_content', opts.content);
+            form.append('multimodal_search_content', opts.content || '');
             form.append('snapshot_flag', opts.snapshot);
             const headers = {
                 'Accept': 'application/json, text/plain, */*',
@@ -1299,14 +1430,31 @@ export const fetchMultiModalSearch = async (params = {}) => {
                 }
             }
             const md5 = data && data.data && data.data.multimodal_md5 ? data.data.multimodal_md5 : null;
-            return { ok: res.ok, multimodal_md5: md5 };
-        }, { type, content, snapshot }, authorizationToken, deviceId, userToken);
+            const cdnUrl =
+                data && data.data && data.data.multi_modal_file_cdn_url != null
+                    ? String(data.data.multi_modal_file_cdn_url).trim()
+                    : null;
+            return { ok: res.ok, multimodal_md5: md5, multi_modal_file_cdn_url: cdnUrl || null };
+        }, {
+            type,
+            content,
+            snapshot,
+            fileBase64: hasFile ? fileBase64 : '',
+            fileName: hasFile ? fileName : '',
+            fileMime: hasFile ? fileMime : '',
+        }, authorizationToken, deviceId, userToken);
         const multimodal_md5 = multimodalResult && multimodalResult.multimodal_md5 ? multimodalResult.multimodal_md5 : null;
+        const multi_modal_file_cdn_url =
+            multimodalResult && multimodalResult.multi_modal_file_cdn_url
+                ? String(multimodalResult.multi_modal_file_cdn_url).trim()
+                : null;
+        const dataPayload = { multimodal_md5 };
+        if (multi_modal_file_cdn_url) dataPayload.multi_modal_file_cdn_url = multi_modal_file_cdn_url;
         return {
             success: !!multimodal_md5,
-            data: { multimodal_md5 },
+            data: dataPayload,
             code: multimodal_md5 ? 200 : 500,
-            message: multimodal_md5 ? 'ok' : (multimodalResult && !multimodalResult.ok ? 'multi-modal-search 请求失败' : '未返回 multimodal_md5')
+            message: multimodal_md5 ? 'ok' : (multimodalResult && multimodalResult.err === 'base64' ? '文件 Base64 无效' : (multimodalResult && !multimodalResult.ok ? 'multi-modal-search 请求失败' : '未返回 multimodal_md5'))
         };
     } catch (error) {
         logger.error('fetchMultiModalSearch 失败:', error);
@@ -1318,6 +1466,67 @@ export const fetchMultiModalSearch = async (params = {}) => {
         };
     }
 };
+
+/**
+ * 「素材内容」：有 multimodal_md5 时沿用多模态排序；纯文本关键词直连 list/count（keyword 数组 + search_type=1），跳过 multi-modal-search；
+ * 关键词为 http(s) 链接时仍走 multi-modal-search(type=3)。
+ */
+async function resolveGuangdadaMaterialCategoryForNapi(requestBody, searchParams, opts = {}) {
+    const { setDefaultMultimodalSort = true } = opts;
+    const keywordRaw = requestBody.keyword ?? searchParams?.keyword ?? searchParams?.keyWord;
+    const firstKw =
+        Array.isArray(keywordRaw) && keywordRaw.length > 0
+            ? String(keywordRaw[0]).trim()
+            : typeof keywordRaw === 'string'
+              ? keywordRaw.trim()
+              : '';
+    const hasMultimodalMd5 = requestBody.multimodal_md5 != null && String(requestBody.multimodal_md5).trim() !== '';
+    if (hasMultimodalMd5) {
+        if (setDefaultMultimodalSort) {
+            requestBody.sort_field = requestBody.sort_field || '-multimodal_similarity';
+        }
+        logger.info('广大大素材内容：使用前端传入的 multimodal_md5');
+        return;
+    }
+    if (!firstKw) {
+        logger.warn('广大大素材内容模式下关键词为空');
+        return;
+    }
+    if (/^https?:\/\//i.test(firstKw)) {
+        const mmParams = {
+            multimodal_search_type: '3',
+            multimodal_search_content: firstKw,
+            snapshot_flag: 'false',
+        };
+        logger.info('广大大素材内容：链接关键词走 multi-modal-search (type=3)');
+        const mm = await fetchMultiModalSearch(mmParams);
+        if (mm.success && mm.data && mm.data.multimodal_md5) {
+            requestBody.multimodal_md5 = mm.data.multimodal_md5;
+            if (setDefaultMultimodalSort) {
+                requestBody.sort_field = requestBody.sort_field || '-multimodal_similarity';
+            }
+        } else {
+            logger.warn('广大大 multi-modal-search 未返回 multimodal_md5:', mm);
+        }
+        return;
+    }
+    const kwList =
+        Array.isArray(keywordRaw) && keywordRaw.length > 0
+            ? keywordRaw.map((k) => String(k).trim()).filter(Boolean)
+            : [firstKw];
+    requestBody.keyword = kwList;
+    requestBody.search_type = 1;
+    if (requestBody.position === undefined || requestBody.position === null || requestBody.position === '') {
+        requestBody.position = '0';
+    }
+    requestBody.new_advertiser_flag = requestBody.new_advertiser_flag ?? false;
+    const sf = requestBody.sort_field;
+    if (sf === '-multimodal_similarity' || sf === undefined || sf === null || sf === '') {
+        requestBody.sort_field = '-correlation';
+    }
+    delete requestBody.multimodal_md5;
+    logger.info('广大大素材内容：纯文本直连 napi（keyword[] + search_type=1），已跳过 multi-modal-search');
+}
 
 // 请求数据接口
 export const fetchSearchData = async (searchParams = {}) => {
@@ -1550,74 +1759,22 @@ export const fetchSearchData = async (searchParams = {}) => {
         }
         
         // 若前端已发送广大大 API 格式（含 seen_begin、search_type、tag_ids 等），直接使用；否则从表单参数构建
-        const isApiFormat =
-          typeof searchParams.seen_begin === 'number' &&
-          typeof searchParams.seen_end === 'number' &&
-          (searchParams.search_type === '1' || searchParams.search_type === '0');
-        let requestBody = isApiFormat ? { ...searchParams } : buildGuangdadaRequestBody(searchParams);
-        // 素材内容：若前端已传 multimodal_md5（前端显式调 multi-modal-search）则直接用；否则后端再请求
+        let requestBody = isGuangdadaSearchParamsApiFormat(searchParams) ? { ...searchParams } : buildGuangdadaRequestBody(searchParams);
+        // 素材内容：有 multimodal_md5 则沿用；纯文本关键词直连 list（keyword[] + search_type=1）
         const isMaterialCategory = (requestBody.guangdada_search_category || searchParams.guangdada_search_category || searchParams.guangdadaSearchCategory) === '素材内容';
         if (isMaterialCategory) {
-            const hasMultimodalMd5 = requestBody.multimodal_md5 != null && String(requestBody.multimodal_md5).trim() !== '';
-            if (hasMultimodalMd5) {
-                requestBody.sort_field = requestBody.sort_field || '-multimodal_similarity';
-                logger.info('广大大素材内容：使用前端传入的 multimodal_md5');
-            } else {
-                const keywordRaw = requestBody.keyword ?? searchParams.keyword ?? searchParams.keyWord;
-                const keyword = typeof keywordRaw === 'string'
-                    ? keywordRaw.trim()
-                    : (Array.isArray(keywordRaw) && keywordRaw.length > 0)
-                        ? String(keywordRaw[0]).trim()
-                        : '';
-                if (keyword) {
-                    logger.info('广大大素材内容：后端兜底请求 multi-modal-search，keyword=', keyword);
-                    const multimodalResult = await loginPage.evaluate(async (kw, authToken, devId, uToken) => {
-                        const form = new FormData();
-                        form.append('multimodal_search_type', '1');
-                        form.append('multimodal_search_content', kw);
-                        form.append('snapshot_flag', 'false');
-                        const headers = {
-                            'Accept': 'application/json, text/plain, */*',
-                            'Authorization': authToken || '',
-                            'Origin': 'https://guangdada.net',
-                            'Referer': 'https://guangdada.net/modules/creative/display-ads',
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                        };
-                        if (devId) headers['x-device-id'] = devId;
-                        if (uToken) headers['x-nbs-user-token'] = uToken;
-                        headers['x-product-id'] = '2';
-                        headers['x-timezone'] = '+0800';
-                        const res = await fetch('/napi/v1/creative/multi-modal-search', {
-                            method: 'POST',
-                            headers,
-                            credentials: 'include',
-                            body: form
-                        });
-                        const text = await res.text();
-                        let data = null;
-                        if (text && text.trim()) {
-                            try {
-                                data = JSON.parse(text);
-                            } catch (e) {
-                                return { ok: false, multimodal_md5: null };
-                            }
-                        }
-                        const md5 = data && data.data && data.data.multimodal_md5 ? data.data.multimodal_md5 : null;
-                        return { ok: res.ok, multimodal_md5: md5 };
-                    }, keyword, authorizationToken, deviceId, userToken);
-                    if (multimodalResult && multimodalResult.multimodal_md5) {
-                        requestBody.multimodal_md5 = multimodalResult.multimodal_md5;
-                        requestBody.sort_field = '-multimodal_similarity';
-                    } else {
-                        logger.warn('广大大 multi-modal-search 未返回 multimodal_md5:', multimodalResult);
-                    }
-                } else {
-                    logger.warn('广大大素材内容模式下关键词为空，跳过 multi-modal-search');
-                }
-            }
+            await resolveGuangdadaMaterialCategoryForNapi(requestBody, searchParams, { setDefaultMultimodalSort: true });
             delete requestBody.guangdada_search_category;
         }
         logger.info('广大大实际请求体 (guangdada.net/napi/v1/creative/list):', JSON.stringify(requestBody, null, 2));
+        // 强诊断：核对前端期望排序与最终下发排序（特别是素材内容+multimodal）
+        logger.info(
+            '[强诊断][广大大 list 排序] expected=%s, actual=%s, hasMultimodal=%s, category=%s',
+            searchParams?.sort_field ?? '(none)',
+            requestBody?.sort_field ?? '(none)',
+            !!(requestBody?.multimodal_md5 && String(requestBody.multimodal_md5).trim()),
+            requestBody?.guangdada_search_category ?? searchParams?.guangdada_search_category ?? searchParams?.guangdadaSearchCategory ?? '(none)'
+        );
         
         // 使用 Puppeteer 页面发送请求
         const response = await loginPage.evaluate(async (body, authToken, deviceId, userToken) => {
@@ -1709,6 +1866,33 @@ export const fetchSearchData = async (searchParams = {}) => {
         if (response.data && (response.data.code === 401 || response.status === 401)) {
             logger.warn('服务器返回 401 错误，尝试重新获取 token');
             // 可以在这里实现重新获取 token 的逻辑
+        }
+
+        // 强诊断：抽样输出返回顺序，快速判断上游是否按 sort_field 生效
+        try {
+            const rows =
+                (Array.isArray(response?.data?.data?.list) && response.data.data.list) ||
+                (Array.isArray(response?.data?.list) && response.data.list) ||
+                (Array.isArray(response?.data?.data?.rows) && response.data.data.rows) ||
+                [];
+            if (rows.length > 0) {
+                const reqSort = String(requestBody?.sort_field || '').trim();
+                const sortKey = reqSort.startsWith('-') ? reqSort.slice(1) : reqSort;
+                const head = rows.slice(0, 10).map((it, idx) => ({
+                    i: idx + 1,
+                    ad_key: it?.ad_key ?? it?.creative_key ?? null,
+                    heat_degree: it?.heat_degree ?? null,
+                    heat: it?.heat ?? null,
+                    first_seen: it?.first_seen ?? null,
+                    last_seen: it?.last_seen ?? null,
+                    sortValue: sortKey ? (it?.[sortKey] ?? null) : null,
+                }));
+                logger.info('[强诊断][广大大 list 返回前10条关键字段] %s', JSON.stringify(head));
+            } else {
+                logger.info('[强诊断][广大大 list 返回前10条关键字段] 无可用列表数据');
+            }
+        } catch (diagErr) {
+            logger.warn('[强诊断][广大大 list] 返回数据抽样失败: %s', diagErr?.message || diagErr);
         }
         
         return {
@@ -1931,63 +2115,13 @@ export const fetchCountData = async (searchParams = {}) => {
                 logger.warn('从网络请求获取 token 失败:', e.message);
             }
         }
-        const isApiFormat =
-          typeof searchParams.seen_begin === 'number' &&
-          typeof searchParams.seen_end === 'number' &&
-          (searchParams.search_type === '1' || searchParams.search_type === '0');
-        let requestBody = isApiFormat ? { ...searchParams } : buildGuangdadaRequestBody(searchParams);
+        let requestBody = isGuangdadaSearchParamsApiFormat(searchParams) ? { ...searchParams } : buildGuangdadaRequestBody(searchParams);
         const isMaterialCategoryCount = (requestBody.guangdada_search_category || searchParams.guangdada_search_category || searchParams.guangdadaSearchCategory) === '素材内容';
         if (isMaterialCategoryCount) {
-            const hasMultimodalMd5 = requestBody.multimodal_md5 != null && String(requestBody.multimodal_md5).trim() !== '';
-            if (!hasMultimodalMd5) {
-                const keywordRaw = requestBody.keyword ?? searchParams.keyword ?? searchParams.keyWord;
-                const keyword = typeof keywordRaw === 'string'
-                    ? keywordRaw.trim()
-                    : (Array.isArray(keywordRaw) && keywordRaw.length > 0)
-                        ? String(keywordRaw[0]).trim()
-                        : '';
-                if (keyword) {
-                    const multimodalResult = await loginPage.evaluate(async (kw, authToken, devId, uToken) => {
-                        const form = new FormData();
-                        form.append('multimodal_search_type', '1');
-                        form.append('multimodal_search_content', kw);
-                        form.append('snapshot_flag', 'false');
-                        const headers = {
-                            'Accept': 'application/json, text/plain, */*',
-                            'Authorization': authToken || '',
-                            'Origin': 'https://guangdada.net',
-                            'Referer': 'https://guangdada.net/modules/creative/display-ads',
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                        };
-                        if (devId) headers['x-device-id'] = devId;
-                        if (uToken) headers['x-nbs-user-token'] = uToken;
-                        headers['x-product-id'] = '2';
-                        headers['x-timezone'] = '+0800';
-                        const res = await fetch('/napi/v1/creative/multi-modal-search', {
-                            method: 'POST',
-                            headers,
-                            credentials: 'include',
-                            body: form
-                        });
-                        const text = await res.text();
-                        let data = null;
-                        if (text && text.trim()) {
-                            try {
-                                data = JSON.parse(text);
-                            } catch (e) {
-                                return { ok: false, multimodal_md5: null };
-                            }
-                        }
-                        const md5 = data && data.data && data.data.multimodal_md5 ? data.data.multimodal_md5 : null;
-                        return { ok: res.ok, multimodal_md5: md5 };
-                    }, keyword, authorizationToken, deviceId, userToken);
-                    if (multimodalResult && multimodalResult.multimodal_md5) {
-                        requestBody.multimodal_md5 = multimodalResult.multimodal_md5;
-                    }
-                }
-            }
+            await resolveGuangdadaMaterialCategoryForNapi(requestBody, searchParams, { setDefaultMultimodalSort: false });
             delete requestBody.guangdada_search_category;
         }
+        // 与 list 保持一致：count 不再覆盖 sort_field，直接沿用前端/构建后的排序参数
         logger.info('广大大 count 请求体 (guangdada.net/napi/v1/creative/count):', JSON.stringify(requestBody, null, 2));
 
         const response = await loginPage.evaluate(async (body, authToken, devId, uToken) => {
@@ -2958,6 +3092,7 @@ export const clearLogin = async () => {
             email: null,
             authorization: null,
             authorizationCn: null,
+            cnJwtExpiresAtMs: null,
             deviceId: null,
             userToken: null,
         };

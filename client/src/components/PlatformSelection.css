@@ -110,6 +110,22 @@
   opacity: 1;
 }
 
+.platform-selection-debug-link {
+  margin-top: 36px;
+  text-align: center;
+}
+
+.platform-selection-debug-link a {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.95rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.platform-selection-debug-link a:hover {
+  color: #fff;
+}
+
 @media (max-width: 768px) {
   .platform-selection-header h1 {
     font-size: 2rem;

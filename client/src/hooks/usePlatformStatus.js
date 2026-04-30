@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getStatus } from '../utils/api';
 
-const defaultDetail = () => ({ status: 'LOGGED_OUT', email: null });
+const defaultDetail = () => ({ status: 'LOGGED_OUT', email: null, cnJwtExpiresAt: null });
 
 export function usePlatformStatus() {
   const [statuses, setStatuses] = useState({
@@ -16,7 +16,14 @@ export function usePlatformStatus() {
       const data = await getStatus(platform);
       const newStatus = data.data?.status || data.status || 'LOGGED_OUT';
       const email = data.data?.email ?? null;
-      setStatuses(prev => ({ ...prev, [platform]: { status: newStatus, email } }));
+      const cnJwtExpiresAt =
+        platform === 'guangdada' && data.data && 'cnJwtExpiresAt' in data.data
+          ? data.data.cnJwtExpiresAt
+          : null;
+      setStatuses(prev => ({
+        ...prev,
+        [platform]: { status: newStatus, email, cnJwtExpiresAt },
+      }));
       return newStatus;
     } catch (error) {
       console.error(`获取 ${platform} 状态失败:`, error);

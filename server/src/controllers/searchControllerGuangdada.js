@@ -67,14 +67,29 @@ export const count = async (req, res) => {
   }
 };
 
-/** 广大大素材内容多模态搜索：仅请求 multi-modal-search 返回 multimodal_md5，供前端显式调用；请求体与广大大实际参数一致 */
+/** 广大大素材内容多模态搜索：仅请求 multi-modal-search 返回 multimodal_md5，供前端显式调用；与 guangdada.net 一致：链接 type=3+content；图 type=2+file；视频文件 type=3+file；纯文本 type=1+content */
 export const multiModalSearch = async (req, res) => {
   try {
     const body = req.body || {};
+    const rawFile = body.file;
+    const file =
+      rawFile && typeof rawFile === 'object' && rawFile.base64 != null && String(rawFile.base64).trim() !== ''
+        ? {
+            base64: String(rawFile.base64).replace(/^data:[^;]+;base64,/, '').replace(/\s/g, ''),
+            filename: String(rawFile.filename || rawFile.name || 'upload').slice(0, 512),
+            mimeType: String(rawFile.mimeType || rawFile.type || 'application/octet-stream').slice(0, 128),
+          }
+        : null;
     const params = {
       multimodal_search_type: body.multimodal_search_type != null ? String(body.multimodal_search_type) : '1',
-      multimodal_search_content: body.multimodal_search_content != null ? String(body.multimodal_search_content).trim() : (body.keyword != null ? String(body.keyword).trim() : ''),
+      multimodal_search_content:
+        body.multimodal_search_content != null
+          ? String(body.multimodal_search_content)
+          : body.keyword != null
+            ? String(body.keyword).trim()
+            : '',
       snapshot_flag: body.snapshot_flag != null ? String(body.snapshot_flag) : 'false',
+      file,
     };
     const result = await puppeteerService.fetchMultiModalSearch(params);
     if (!result.success) {

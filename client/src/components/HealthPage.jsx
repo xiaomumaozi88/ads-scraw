@@ -58,14 +58,41 @@ function HealthPage() {
   const handleReopenBrowser = () => {
     setActionError(null);
     setReopenLoading(true);
-    fetch(`${API_BASE}/health/reopen-browser`, { method: 'POST', credentials: 'same-origin' })
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success) fetchHealth();
-        else setActionError(json.message || '重新打开失败');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 180000);
+    fetch(`${API_BASE}/health/reopen-browser`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        let json = {};
+        try {
+          json = await res.json();
+        } catch {
+          json = {};
+        }
+        await fetchHealth();
+        if (!res.ok) {
+          setActionError(json.message || `重新打开失败（HTTP ${res.status}）`);
+          return;
+        }
+        if (!json.success) {
+          setActionError(json.message || '重新打开失败');
+        }
       })
-      .catch((err) => setActionError(err.message || '请求异常'))
-      .finally(() => setReopenLoading(false));
+      .catch((err) => {
+        if (err.name === 'AbortError') {
+          setActionError('重新打开超时（超过 3 分钟），请稍后在页面上刷新健康状态或查看服务器是否仍在启动 Chrome。');
+        } else {
+          setActionError(err.message || '请求异常');
+        }
+        fetchHealth();
+      })
+      .finally(() => {
+        clearTimeout(timer);
+        setReopenLoading(false);
+      });
   };
 
   const handleClearLogin = (platform) => {
@@ -231,6 +258,12 @@ function HealthPage() {
                     <dd>{p.status ?? '-'} {p.isLoggedIn ? '(已登录)' : ''}</dd>
                     <dt>登录账号</dt>
                     <dd>{p.email ? String(p.email) : '-'}</dd>
+                    {key === 'guangdada' && (
+                      <>
+                        <dt>国内令牌到期</dt>
+                        <dd>{p.cnJwtExpiresAt ? formatBeijingTime(p.cnJwtExpiresAt) : '-'}</dd>
+                      </>
+                    )}
                     {p.error && (
                       <>
                         <dt>错误信息</dt>

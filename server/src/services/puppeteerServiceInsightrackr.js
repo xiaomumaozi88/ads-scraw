@@ -130,6 +130,77 @@ async function setupAntiDetection(page) {
     });
 }
 
+/**
+ * 主配置 launch 失败时的兜底选项：必须显式指定系统 Chrome。
+ * Docker 镜像未安装 Puppeteer 自带 Chromium，若省略 executablePath 会报「Could not find Chrome (ver. 128…)」。
+ * 兜底不传 remote-debugging-port，避免与已占用端口冲突导致反复失败。
+ */
+function buildInsightrackrFallbackLaunchOptions() {
+    const opt = puppeteerOptionsInsightrackr;
+    const executablePath =
+        opt.executablePath ||
+        (process.platform === 'darwin'
+            ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+            : '/usr/bin/google-chrome');
+    const minimalArgs = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-gpu',
+        '--no-zygote',
+        '--no-first-run',
+        '--no-default-browser-check',
+    ];
+    const out = {
+        headless: opt.headless !== undefined ? opt.headless : process.env.NODE_ENV === 'production',
+        userDataDir: opt.userDataDir,
+        executablePath,
+        args: minimalArgs,
+        defaultViewport: opt.defaultViewport || { width: 1920, height: 1280 },
+    };
+    if (process.env.PUPPETEER_DUMP_IO === '1') {
+        out.dumpio = true;
+    }
+    return out;
+}
+
+function logBrowserLaunchError(label, err) {
+    logger.error(`${label}:`, err?.message || err);
+    if (err?.cause) {
+        logger.error(`${label} cause:`, err.cause?.message || err.cause);
+    }
+    if (err?.stack) {
+        logger.error(`${label} stack:`, err.stack);
+    }
+    try {
+        const names = Object.getOwnPropertyNames(err || {});
+        if (names.length) {
+            const snap = {};
+            for (const k of names) {
+                try {
+                    snap[k] = err[k];
+                } catch {
+                    snap[k] = '(unreadable)';
+                }
+            }
+            const s = JSON.stringify(snap);
+            if (s && s !== '{}') {
+                logger.error(`${label} (detail):`, s.length > 2500 ? `${s.slice(0, 2500)}…` : s);
+            }
+        }
+    } catch {
+        // ignore
+    }
+}
+
+async function afterInsightrackrBrowserLaunched() {
+    await browser.defaultBrowserContext().overridePermissions('https://data.insightrackr.com/', [
+        'clipboard-read',
+        'clipboard-write',
+    ]);
+}
+
 export const initializeBrowser = async () => {
     console.log('准备启动 Insightrackr 浏览器（使用反检测模式）');
     
@@ -163,41 +234,36 @@ export const initializeBrowser = async () => {
             throw new Error('浏览器连接验证失败');
         }
         
-        await browser.defaultBrowserContext().overridePermissions('https://data.insightrackr.com/', ['clipboard-read', 'clipboard-write']);
+        await afterInsightrackrBrowserLaunched();
         console.log('Insightrackr 浏览器已启动（反检测模式）');
         logger.info('浏览器启动成功（反检测模式）');
     } catch (e) {
-        logger.error('浏览器启动失败:', e.message);
-        logger.error('错误详情:', e);
+        logBrowserLaunchError('Insightrackr 浏览器启动失败', e);
         console.error('浏览器启动失败，请检查 Chrome/Chromium 是否正确安装');
         console.error('错误信息:', e.message);
-        console.error('完整错误:', e);
         browser = null;
-        // 重新尝试使用默认配置
+        // 兜底：系统 Chrome + 与生产一致的 headless/userDataDir（不依赖 Puppeteer 捆绑 Chromium）
         try {
-            logger.info('尝试使用默认配置启动浏览器');
-            browser = await puppeteer.launch({
-                headless: false,
-                args: [
-                    '--no-sandbox', 
-                    '--disable-setuid-sandbox',
-                    '--disable-blink-features=AutomationControlled'
-                ]
-            });
-            
-            // 验证浏览器连接
+            const fallbackOpts = buildInsightrackrFallbackLaunchOptions();
+            logger.info('尝试使用兜底配置启动浏览器:', JSON.stringify(fallbackOpts, null, 2));
+            browser = await puppeteer.launch(fallbackOpts);
+
             try {
                 await browser.version();
-                logger.info('使用默认配置启动浏览器成功，连接验证通过');
+                logger.info('兜底配置启动成功，连接验证通过');
             } catch (e3) {
-                logger.error('默认配置浏览器连接验证失败:', e3.message);
+                logBrowserLaunchError('兜底配置浏览器连接验证失败', e3);
                 if (browser) {
                     await browser.close().catch(() => {});
                 }
                 browser = null;
+                return;
             }
+
+            await afterInsightrackrBrowserLaunched();
+            logger.info('Insightrackr 浏览器已通过兜底配置启动');
         } catch (e2) {
-            logger.error('使用默认配置也启动失败:', e2.message);
+            logBrowserLaunchError('Insightrackr 兜底配置启动失败', e2);
             browser = null;
         }
     }
@@ -219,10 +285,14 @@ export const getBrowserWSEndpoint = () => {
 };
 
 export const closeBrowser = async () => {
-    if (browser) {
+    loginPage = null;
+    if (!browser) return;
+    try {
         await browser.close();
-        browser = null;
+    } catch (e) {
+        logger.warn('关闭 Insightrackr 浏览器失败:', e.message);
     }
+    browser = null;
 };
 
 // 获取状态 - 仅在有登录页时做校验，避免用新页面（无会话）误判为未登录

@@ -125,12 +125,13 @@ function checkGuangdadaHumanVerification(result) {
 }
 
 export async function searchData(platform, searchParams) {
+  const payload = platform === 'guangdada' ? bodyForGuangdadaSearch(searchParams) : searchParams;
   const response = await fetch(`${API_BASE}/${platform}/search`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(searchParams),
+    body: JSON.stringify(payload),
   });
   const text = await response.text();
   const contentType = response.headers.get('content-type');
@@ -195,20 +196,88 @@ export async function searchData(platform, searchParams) {
   return result;
 }
 
-/** 广大大素材内容多模态搜索：显式请求 multi-modal-search，返回 multimodal_md5；请求体与广大大实际参数一致，便于在 Network 中查看 */
-export async function guangdadaMultiModalSearch(keyword) {
-  const multimodal_search_content = keyword != null
-    ? (typeof keyword === 'string' ? keyword.trim() : (Array.isArray(keyword) && keyword.length > 0 ? String(keyword[0]).trim() : ''))
-    : '';
+function stripGuangdadaClientOnlyFields(params) {
+  if (!params || typeof params !== 'object') return params;
+  const {
+    guangdadaMultimodalRequest: _drop,
+    multi_modal_file_cdn_url: _cdn,
+    multimodal_preview_url: _previewUrl,
+    multimodal_preview_type: _previewType,
+    multimodal_resource_link: _resourceLink,
+    ...rest
+  } = params;
+  return rest;
+}
+
+/** 广大大 list/count 请求体中勿传仅前端使用的字段 */
+function bodyForGuangdadaSearch(searchParams) {
+  return stripGuangdadaClientOnlyFields(searchParams);
+}
+
+/** 广大大素材内容 multi-modal-search：与 guangdada.net 一致（经后端 Puppeteer 转发）。
+ * - 字符串：http(s) → type=3+content；否则 type=1+content
+ * - { mode:'url', url }
+ * - { mode:'file', media:'image'|'video', file: File }
+ */
+export async function guangdadaMultiModalSearch(keywordOrPayload) {
+  let body;
+
+  const fileToBase64Payload = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const s = reader.result;
+        if (typeof s !== 'string') {
+          reject(new Error('读取文件失败'));
+          return;
+        }
+        const i = s.indexOf(',');
+        resolve(i >= 0 ? s.slice(i + 1) : s);
+      };
+      reader.onerror = () => reject(new Error('读取文件失败'));
+      reader.readAsDataURL(file);
+    });
+
+  if (keywordOrPayload && typeof keywordOrPayload === 'object' && !Array.isArray(keywordOrPayload) && keywordOrPayload.mode === 'url') {
+    const url = String(keywordOrPayload.url || '').trim();
+    body = { multimodal_search_type: '3', multimodal_search_content: url, snapshot_flag: 'false' };
+  } else if (keywordOrPayload && typeof keywordOrPayload === 'object' && keywordOrPayload.mode === 'file' && keywordOrPayload.file) {
+    const file = keywordOrPayload.file;
+    const base64 = await fileToBase64Payload(file);
+    const isVideo = keywordOrPayload.media === 'video' || (file.type && file.type.startsWith('video/'));
+    body = {
+      multimodal_search_type: isVideo ? '3' : '2',
+      multimodal_search_content: '',
+      snapshot_flag: 'false',
+      file: {
+        filename: file.name || (isVideo ? 'upload.mp4' : 'upload.png'),
+        mimeType: file.type || (isVideo ? 'video/mp4' : 'image/png'),
+        base64,
+      },
+    };
+  } else {
+    const raw =
+      keywordOrPayload != null
+        ? typeof keywordOrPayload === 'string'
+          ? keywordOrPayload.trim()
+          : Array.isArray(keywordOrPayload) && keywordOrPayload.length > 0
+            ? String(keywordOrPayload[0]).trim()
+            : ''
+        : '';
+    if (!raw) {
+      return { success: false, data: { multimodal_md5: null }, message: '多模态内容为空' };
+    }
+    const isUrl = /^https?:\/\//i.test(raw);
+    body = isUrl
+      ? { multimodal_search_type: '3', multimodal_search_content: raw, snapshot_flag: 'false' }
+      : { multimodal_search_type: '1', multimodal_search_content: raw, snapshot_flag: 'false' };
+  }
+
   const response = await fetch(`${API_BASE}/guangdada/multi-modal-search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
-    body: JSON.stringify({
-      multimodal_search_type: '1',
-      multimodal_search_content: multimodal_search_content || '',
-      snapshot_flag: 'false',
-    }),
+    body: JSON.stringify(body),
   });
   const result = await response.json();
   checkGuangdadaHumanVerification(result);
@@ -235,12 +304,13 @@ export async function getCount(platform, searchParams) {
     throw new Error('Count 接口仅支持 Insightrackr、广大大 平台');
   }
 
+  const payload = platform === 'guangdada' ? bodyForGuangdadaSearch(searchParams) : searchParams;
   const response = await fetch(`${API_BASE}/${platform}/count`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(searchParams),
+    body: JSON.stringify(payload),
   });
   
   // 检查响应状态

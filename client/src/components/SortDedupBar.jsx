@@ -4,13 +4,27 @@ import { GUANGDADA_SORT_OPTIONS, GUANGDADA_DEDUP_OPTIONS } from '../data/guangda
 
 const RELEVANCE_VALUE = '-correlation';
 const RELEVANCE_DISABLED_TIP = '只有在输入关键词后才可以进行相关性排序';
+const MULTIMODAL_SORT_VALUE = '-multimodal_similarity';
+const MULTIMODAL_DISABLED_TIP = '仅在「素材内容」搜索下可使用素材相关性排序';
 
-function SortDedupBar({ sortField = '-first_seen', dedupType = 0, hasKeyword = false, onSortChange, onDedupChange, className }) {
+function SortDedupBar({
+  sortField = '-first_seen',
+  dedupType = 0,
+  hasKeyword = false,
+  materialContentMode = false,
+  onSortChange,
+  onDedupChange,
+  className,
+}) {
   const renderSortOption = (opt) => {
     const isRelevance = opt.value === RELEVANCE_VALUE;
+    const isMultimodalSort = opt.value === MULTIMODAL_SORT_VALUE;
     const disabledByKeyword = isRelevance && !hasKeyword;
-    const disabled = opt.disabled || disabledByKeyword;
-    const tooltipTitle = disabled && isRelevance ? RELEVANCE_DISABLED_TIP : null;
+    const disabledByMaterial = opt.requiresMaterialContent && !materialContentMode;
+    const disabled = opt.disabled || disabledByKeyword || disabledByMaterial;
+    let tooltipTitle = null;
+    if (disabled && isRelevance) tooltipTitle = RELEVANCE_DISABLED_TIP;
+    else if (disabled && isMultimodalSort) tooltipTitle = MULTIMODAL_DISABLED_TIP;
 
     const btn = (
       <button

@@ -11,6 +11,8 @@ import * as loginControllerGuangdada from '../controllers/loginControllerGuangda
 import * as statusControllerGuangdada from '../controllers/statusControllerGuangdada.js';
 import * as clearLoginControllerGuangdada from '../controllers/clearLoginControllerGuangdada.js';
 import * as searchControllerGuangdada from '../controllers/searchControllerGuangdada.js';
+import * as externalSearchController from '../controllers/externalSearchController.js';
+import * as externalSearchDebugController from '../controllers/externalSearchDebugController.js';
 import * as proxyMediaController from '../controllers/proxyMediaController.js';
 import * as transcodeVideoController from '../controllers/transcodeVideoController.js';
 import * as guangdadaCnAdInfoController from '../controllers/guangdadaCnAdInfoController.js';
@@ -56,6 +58,16 @@ router.post('/guangdada/related-ads', searchControllerGuangdada.relatedAds);
 router.get('/guangdada/advertiser-detail', searchControllerGuangdada.advertiserDetail);
 router.post('/guangdada/adv-rec-list', searchControllerGuangdada.advRecList);
 router.post('/guangdada/similar-ads', searchControllerGuangdada.similarAds);
+
+// 外部聚合调用（独立接口）
+router.post('/external/insightrackr/top50', externalSearchController.externalInsightrackrTop50);
+router.get('/external/insightrackr/top50', externalSearchController.externalInsightrackrTop50);
+router.post('/external/guangdada/top50', externalSearchController.externalGuangdadaTop50);
+router.get('/external/guangdada/top50', externalSearchController.externalGuangdadaTop50);
+
+/** 临时：外部查询调试日志（生产默认关闭，见 EXTERNAL_SEARCH_DEBUG） */
+router.get('/external/debug-log', externalSearchDebugController.getExternalSearchDebugLog);
+router.post('/external/debug-log/clear', externalSearchDebugController.postClearExternalSearchDebugLog);
 
 // 广大大国内版（BBA）广告列表代理
 router.get('/guangdada-cn/ad-info', guangdadaCnAdInfoController.getGuangdadaCnAdInfo);
