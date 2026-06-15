@@ -138,7 +138,10 @@ function HealthPage() {
             </div>
           </section>
 
-          {data.remoteDebug && (data.remoteDebug.guangdada?.enabled || data.remoteDebug.insightrackr?.enabled) && (
+          {data.remoteDebug &&
+            (data.remoteDebug.guangdada?.enabled ||
+              data.remoteDebug.insightrackr?.enabled ||
+              data.remoteDebug.sensortower?.enabled) && (
             <section className="health-summary health-remote-debug">
               <h2>远程调试（人机验证 / 远程操作页面）</h2>
               <p className="health-remote-debug-desc">
@@ -164,6 +167,32 @@ function HealthPage() {
                         <li>在 DevTools 的 Console 中可执行 JS 模拟点击，例如完成人机验证：<br />
                           <code>document.querySelector('验证码按钮选择器')?.click()</code>
                         </li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
+                {data.remoteDebug.sensortower?.enabled && (
+                  <div className="health-remote-debug-card">
+                    <h3>Sensor Tower</h3>
+                    <p className="health-remote-debug-port">端口：<strong>{data.remoteDebug.sensortower.port}</strong></p>
+                    <p className="health-remote-debug-url">
+                      调试地址：<code>{data.remoteDebug.sensortower.url}</code>
+                    </p>
+                    <p className="health-remote-debug-hint">{data.remoteDebug.sensortower.hint}</p>
+                    <div className="health-remote-debug-steps">
+                      <strong>操作步骤：</strong>
+                      <ol>
+                        <li>
+                          在本机执行 SSH 隧道：<br />
+                          <code>
+                            ssh -L {data.remoteDebug.sensortower.port}:localhost:{data.remoteDebug.sensortower.port}{' '}
+                            用户@服务器IP
+                          </code>
+                        </li>
+                        <li>
+                          在本机 Chrome 打开 <code>{data.remoteDebug.sensortower.url}</code>
+                        </li>
+                        <li>点开对应页面后，在 DevTools 中完成新设备验证或 MFA 等操作</li>
                       </ol>
                     </div>
                   </div>
@@ -243,7 +272,7 @@ function HealthPage() {
 
           <section className="health-platforms">
             <h2>各平台</h2>
-            {['insightrackr', 'guangdada'].map((key) => {
+            {['insightrackr', 'guangdada', 'sensortower'].map((key) => {
               const p = data[key];
               if (!p) return null;
               return (

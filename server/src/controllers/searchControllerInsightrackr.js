@@ -1,7 +1,5 @@
 import * as puppeteerService from '../services/puppeteerServiceInsightrackr.js';
-import log4js from 'log4js';
-
-const logger = global.logger || log4js.getLogger('search-controller-insightrackr');
+import { logger } from '../utils/logger.js';
 
 /**
  * 构建搜索请求参数

@@ -77,7 +77,17 @@ export async function getStatus(platform) {
   const response = await fetch(`${API_BASE}/${platform}/status`, {
     credentials: 'same-origin',
   });
-  const result = await response.json();
+  const raw = await response.text();
+  if (!raw || !raw.trim()) {
+    // 后端重启瞬间可能出现空响应，避免直接抛出 JSON.parse 错误
+    return { code: 200, data: { status: 'LOGGED_OUT', email: null }, message: '状态接口返回空响应', success: false };
+  }
+  let result;
+  try {
+    result = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`状态接口返回了非 JSON 内容: ${raw.slice(0, 120)}`);
+  }
   // 统一从 data.status 读取，兼容 200 且 success: false 时仍有 data
   if (result && result.data == null && !response.ok) {
     throw new Error(result.message || `请求失败: ${response.status}`);
@@ -85,13 +95,20 @@ export async function getStatus(platform) {
   return result;
 }
 
-export async function login(platform, email, password) {
+export async function login(platform, email, password, otp, authLink) {
+  const body = { email, password };
+  if (otp != null && String(otp).trim() !== '') {
+    body.otp = String(otp).trim();
+  }
+  if (authLink != null && String(authLink).trim() !== '') {
+    body.authLink = String(authLink).trim();
+  }
   const response = await fetch(`${API_BASE}/${platform}/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   });
   return await response.json();
 }
@@ -107,7 +124,7 @@ export async function clearLogin(platform) {
 }
 
 // 需要重新登录的错误码
-const LOGIN_REQUIRED_CODES = ['NOT_LOGGED_IN', 'NO_LOGIN_PAGE'];
+const LOGIN_REQUIRED_CODES = ['NOT_LOGGED_IN', 'NO_LOGIN_PAGE', 'SESSION_EXPIRED'];
 
 /** 广大大接口若返回人机验证，弹窗并抛错，便于上层统一处理 */
 function checkGuangdadaHumanVerification(result) {

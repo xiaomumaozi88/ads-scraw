@@ -1,0 +1,252 @@
+[
+  {
+    "code": "AR",
+    "nameZh": "阿根廷",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/ar.png"
+  },
+  {
+    "code": "AE",
+    "nameZh": "阿联酋",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/ae.png"
+  },
+  {
+    "code": "AT",
+    "nameZh": "奥地利",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/at.png"
+  },
+  {
+    "code": "AU",
+    "nameZh": "澳大利亚",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/au.png"
+  },
+  {
+    "code": "PA",
+    "nameZh": "巴拿马",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/pa.png"
+  },
+  {
+    "code": "BR",
+    "nameZh": "巴西",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/br.png"
+  },
+  {
+    "code": "BE",
+    "nameZh": "比利时",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/be.png"
+  },
+  {
+    "code": "PL",
+    "nameZh": "波兰",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/pl.png"
+  },
+  {
+    "code": "DK",
+    "nameZh": "丹麦",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/dk.png"
+  },
+  {
+    "code": "DE",
+    "nameZh": "德国",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/de.png"
+  },
+  {
+    "code": "RU",
+    "nameZh": "俄罗斯",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/ru.png"
+  },
+  {
+    "code": "EC",
+    "nameZh": "厄瓜多尔",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/ec.png"
+  },
+  {
+    "code": "FR",
+    "nameZh": "法国",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/fr.png"
+  },
+  {
+    "code": "PH",
+    "nameZh": "菲律宾",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/ph.png"
+  },
+  {
+    "code": "CO",
+    "nameZh": "哥伦比亚",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/co.png"
+  },
+  {
+    "code": "KR",
+    "nameZh": "韩国",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/kr.png"
+  },
+  {
+    "code": "NL",
+    "nameZh": "荷兰",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/nl.png"
+  },
+  {
+    "code": "CA",
+    "nameZh": "加拿大",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/ca.png"
+  },
+  {
+    "code": "CZ",
+    "nameZh": "捷克共和国",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/cz.png"
+  },
+  {
+    "code": "LU",
+    "nameZh": "卢森堡",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/lu.png"
+  },
+  {
+    "code": "RO",
+    "nameZh": "罗马尼亚",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/ro.png"
+  },
+  {
+    "code": "MY",
+    "nameZh": "马来西亚",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/my.png"
+  },
+  {
+    "code": "US",
+    "nameZh": "美国",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/us.png"
+  },
+  {
+    "code": "PE",
+    "nameZh": "秘鲁",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/pe.png"
+  },
+  {
+    "code": "MX",
+    "nameZh": "墨西哥",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/mx.png"
+  },
+  {
+    "code": "ZA",
+    "nameZh": "南非",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/za.png"
+  },
+  {
+    "code": "NG",
+    "nameZh": "尼日利亚",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/ng.png"
+  },
+  {
+    "code": "NO",
+    "nameZh": "挪威",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/no.png"
+  },
+  {
+    "code": "PT",
+    "nameZh": "葡萄牙",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/pt.png"
+  },
+  {
+    "code": "JP",
+    "nameZh": "日本",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/jp.png"
+  },
+  {
+    "code": "SE",
+    "nameZh": "瑞典",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/se.png"
+  },
+  {
+    "code": "CH",
+    "nameZh": "瑞士",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/ch.png"
+  },
+  {
+    "code": "SA",
+    "nameZh": "沙特阿拉伯",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/sa.png"
+  },
+  {
+    "code": "TW",
+    "nameZh": "台湾",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/tw.png"
+  },
+  {
+    "code": "TH",
+    "nameZh": "泰国",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/th.png"
+  },
+  {
+    "code": "TR",
+    "nameZh": "土耳其",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/tr.png"
+  },
+  {
+    "code": "UA",
+    "nameZh": "乌克兰",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/ua.png"
+  },
+  {
+    "code": "ES",
+    "nameZh": "西班牙",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/es.png"
+  },
+  {
+    "code": "GR",
+    "nameZh": "希腊",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/gr.png"
+  },
+  {
+    "code": "HK",
+    "nameZh": "香港",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/hk.png"
+  },
+  {
+    "code": "SG",
+    "nameZh": "新加坡",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/sg.png"
+  },
+  {
+    "code": "NZ",
+    "nameZh": "新西兰",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/nz.png"
+  },
+  {
+    "code": "IL",
+    "nameZh": "以色列",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/il.png"
+  },
+  {
+    "code": "IT",
+    "nameZh": "意大利",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/it.png"
+  },
+  {
+    "code": "IN",
+    "nameZh": "印度",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/in.png"
+  },
+  {
+    "code": "ID",
+    "nameZh": "印度尼西亚",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/id.png"
+  },
+  {
+    "code": "GB",
+    "nameZh": "英国",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/gb.png"
+  },
+  {
+    "code": "VN",
+    "nameZh": "越南",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/vn.png"
+  },
+  {
+    "code": "CL",
+    "nameZh": "智利",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/cl.png"
+  },
+  {
+    "code": "CN",
+    "nameZh": "中国",
+    "flagUrl": "https://app.sensortower-china.com/assets/flags/cn.png"
+  }
+]

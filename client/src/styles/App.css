@@ -43,6 +43,23 @@
   filter: brightness(0) invert(1);
 }
 
+/* Sensor Tower 无官方 SVG 资源时用字标，保证与浅色 header 上对比度 */
+.search-page-header-logo-st {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #0d47a1;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
 .search-page-header-suffix {
   font-size: 1.25rem;
   font-weight: 600;

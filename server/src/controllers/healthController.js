@@ -1,6 +1,7 @@
 import os from 'os';
 import * as puppeteerServiceInsightrackr from '../services/puppeteerServiceInsightrackr.js';
 import * as puppeteerServiceGuangdada from '../services/puppeteerService.js';
+import * as puppeteerServiceSensorTower from '../services/puppeteerServiceSensorTower.js';
 import * as transcodeVideoService from '../services/transcodeVideoService.js';
 import { getRecentLogs, clearLogs } from '../utils/memoryLogAppender.js';
 
@@ -25,6 +26,7 @@ export const getHealth = async (req, res) => {
   try {
     let insightrackr;
     let guangdada;
+    let sensortower;
     try {
       insightrackr = await puppeteerServiceInsightrackr.getHealthInfo();
     } catch (e) {
@@ -37,9 +39,15 @@ export const getHealth = async (req, res) => {
       console.error('健康检查 广大大 失败:', e);
       guangdada = { browserExists: false, pageCount: 0, status: null, email: null, isLoggedIn: false, error: e?.message || String(e) };
     }
+    try {
+      sensortower = await puppeteerServiceSensorTower.getHealthInfo();
+    } catch (e) {
+      console.error('健康检查 Sensor Tower 失败:', e);
+      sensortower = { browserExists: false, pageCount: 0, status: null, email: null, isLoggedIn: false, error: e?.message || String(e) };
+    }
 
-    const totalBrowsers = [insightrackr.browserExists, guangdada.browserExists].filter(Boolean).length;
-    const totalPages = (insightrackr.pageCount || 0) + (guangdada.pageCount || 0);
+    const totalBrowsers = [insightrackr.browserExists, guangdada.browserExists, sensortower.browserExists].filter(Boolean).length;
+    const totalPages = (insightrackr.pageCount || 0) + (guangdada.pageCount || 0) + (sensortower.pageCount || 0);
 
     const serverStartTime = global.serverStartTime || null;
     const uptimeMs = serverStartTime ? Date.now() - serverStartTime : null;
@@ -69,6 +77,7 @@ export const getHealth = async (req, res) => {
     const remoteDebug = {};
     const portGuangdada = process.env.CHROME_REMOTE_DEBUGGING_PORT;
     const portInsightrackr = process.env.CHROME_REMOTE_DEBUGGING_PORT_INSIGHTRACKR;
+    const portSensorTower = process.env.CHROME_REMOTE_DEBUGGING_PORT_SENSORTOWER;
     if (portGuangdada) {
       remoteDebug.guangdada = {
         enabled: true,
@@ -83,6 +92,14 @@ export const getHealth = async (req, res) => {
         port: portInsightrackr,
         url: `http://localhost:${portInsightrackr}`,
         hint: '先建立 SSH 隧道后，在本机 Chrome 打开上述地址即可用 DevTools 查看/操作 Insightrackr 页面',
+      };
+    }
+    if (portSensorTower) {
+      remoteDebug.sensortower = {
+        enabled: true,
+        port: portSensorTower,
+        url: `http://localhost:${portSensorTower}`,
+        hint: '先建立 SSH 隧道后，在本机 Chrome 打开上述地址即可用 DevTools 查看/操作 Sensor Tower 页面',
       };
     }
 
@@ -120,6 +137,10 @@ export const getHealth = async (req, res) => {
         guangdada: {
           name: '广大大',
           ...guangdada
+        },
+        sensortower: {
+          name: 'Sensor Tower',
+          ...sensortower
         },
         summary: {
           totalBrowsers,
@@ -166,33 +187,38 @@ export const postReopenBrowser = async (req, res) => {
     await Promise.allSettled([
       puppeteerServiceInsightrackr.closeBrowser(),
       puppeteerServiceGuangdada.closeBrowser(),
+      puppeteerServiceSensorTower.closeBrowser(),
     ]);
     await new Promise((r) => setTimeout(r, BROWSER_REOPEN_DELAY_MS));
     // 与 app.js 启动一致：并行拉起双 Chrome，缩短总耗时、避免串行时长时间无响应
     await Promise.all([
       puppeteerServiceInsightrackr.initializeBrowser(),
       puppeteerServiceGuangdada.initializeBrowser(),
+      puppeteerServiceSensorTower.initializeBrowser(),
     ]);
-    const [insightrackr, guangdada] = await Promise.all([
+    const [insightrackr, guangdada, sensortower] = await Promise.all([
       puppeteerServiceInsightrackr.getHealthInfo(),
       puppeteerServiceGuangdada.getHealthInfo(),
+      puppeteerServiceSensorTower.getHealthInfo(),
     ]);
     const irOk = !!insightrackr.browserExists;
     const gdOk = !!guangdada.browserExists;
-    if (irOk && gdOk) {
+    const stOk = !!sensortower.browserExists;
+    if (irOk && gdOk && stOk) {
       return res.status(200).json({
         success: true,
         message: '浏览器窗口已重新打开',
-        data: { insightrackr, guangdada },
+        data: { insightrackr, guangdada, sensortower },
       });
     }
     const failed = [];
     if (!irOk) failed.push('Insightrackr');
     if (!gdOk) failed.push('广大大');
+    if (!stOk) failed.push('Sensor Tower');
     return res.status(200).json({
       success: false,
       message: `以下浏览器未能成功启动：${failed.join('、')}。请查看服务器日志或稍后重试；也可增大环境变量 BROWSER_REOPEN_DELAY_MS（当前 ${BROWSER_REOPEN_DELAY_MS}ms）。`,
-      data: { insightrackr, guangdada },
+      data: { insightrackr, guangdada, sensortower },
     });
   } catch (error) {
     console.error('重新打开浏览器失败:', error);

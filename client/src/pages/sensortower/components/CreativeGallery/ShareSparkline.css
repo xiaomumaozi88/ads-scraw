@@ -1,0 +1,13 @@
+.st-sparkline {
+  display: block;
+  flex-shrink: 0;
+}
+
+.st-sparkline--empty {
+  color: #b0bec5;
+  font-size: 0.85rem;
+}
+
+.st-sparkline__line {
+  vector-effect: non-scaling-stroke;
+}

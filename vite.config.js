@@ -18,6 +18,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    /** 占用时直接报错，避免静默改用 5174/5175 导致浏览器仍打开 5173 却看到其它项目的默认页 */
+    strictPort: true,
     host: true, // 允许局域网通过 IP 访问
     proxy: {
       '/api': {

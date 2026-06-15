@@ -17,7 +17,6 @@
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "flag-icon-css": "^4.1.7",
-    "log4js": "^6.9.1",
     "puppeteer": "^23.1.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
@@ -29,7 +28,7 @@
   },
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "cross-env NODE_ENV=development nodemon server/app.js",
+    "dev:server": "cross-env NODE_ENV=development nodemon --ignore \"tmp/**\" --ignore \"dist/**\" server/app.js",
     "dev:client": "vite",
     "build": "vite build",
     "preview": "vite preview",

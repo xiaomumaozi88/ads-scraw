@@ -18,6 +18,13 @@ const platforms = [
     description: '广告创意分析平台',
     logo: guangdadaLogo,
     color: '#764ba2'
+  },
+  {
+    id: 'sensortower',
+    name: 'Sensor Tower',
+    description: '应用分析与创意库',
+    logo: null,
+    color: '#0d47a1'
   }
 ];
 
@@ -37,7 +44,13 @@ function PlatformSelection({ onSelectPlatform }) {
             style={{ '--card-color': platform.color }}
           >
             <div className="platform-card-logo-wrap">
-              <img src={platform.logo} alt={platform.name} className="platform-card-logo" />
+              {platform.logo ? (
+                <img src={platform.logo} alt={platform.name} className="platform-card-logo" />
+              ) : (
+                <span className="platform-card-logo platform-card-logo--text" aria-hidden>
+                  ST
+                </span>
+              )}
             </div>
           </div>
         ))}

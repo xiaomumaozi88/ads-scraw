@@ -19,7 +19,7 @@
 - **Node.js** - 运行时
 - **Express** - Web 框架
 - **Puppeteer** - 浏览器自动化
-- **Log4js** - 日志记录
+- **内置 logger**（`server/src/utils/logger.js`）- 日志记录
 
 ## 项目结构
 
@@ -64,8 +64,18 @@ npm run dev
 
 这将同时启动：
 
-- Vite 开发服务器（前端）：[http://localhost:5173](http://localhost:5173)
-- Express 服务器（后端）：[http://localhost:3000](http://localhost:3000)
+- **Vite 开发服务器（前端页面请打开此地址）**：[http://localhost:5173](http://localhost:5173)
+- Express 服务器（后端 API）：[http://localhost:3000](http://localhost:3000)
+
+开发模式下 **`http://localhost:3000` 不托管 React**，直接访问根路径会由服务端 **302 重定向到** `http://localhost:5173`（同路径，例如 `/sensortower` → `http://localhost:5173/sensortower`）。若你修改了 Vite 端口，请设置环境变量 `DEV_CLIENT_ORIGIN` 与之一致（如 `http://127.0.0.1:5174`）。
+
+**若浏览器里是 Vite 默认「Get started」、标签标题也不是「广告数据查询平台」**，按下面顺序排查（本项目源码里 **没有** create-vite 默认页；同一端口若 `curl` 与浏览器表现不一致，多半是 **代理或缓存**）：
+
+1. **查看网页源代码**（右键 → 显示网页源代码）：应能看到注释 `ads-scraw: client/index.html`，且 `<title>` 为「广告数据查询平台」。若看不到，说明当前 **HTTP 响应不是本仓库的 `client/index.html`**（例如走了代理或连到了别的进程）。
+2. **开发者工具 → Console**：启动开发后应出现 **`[ads-scraw] 开发入口已加载`**。若没有，说明 **`/src/main.jsx` 未被执行**（可在 Network 里看该请求是否 200、是否来自 `localhost:5173`）。
+3. **改用 IP 访问**：先试 **`http://127.0.0.1:5173/`**（避免部分环境下 `localhost` 解析/代理异常）；再试终端里打印的 **局域网地址**（如 `http://192.168.x.x:5173/`）。
+4. **系统代理 / Clash / VPN**：若终端里出现类似 **`198.18.x.x`** 的网卡，请将 **`localhost`、`127.0.0.1`** 加入 **绕过代理 / DIRECT**，避免本机开发流量被错误转发。
+5. **5173 端口占用**：本项目已启用 **`strictPort`**；若启动报错，请先释放端口后再 `npm run dev`。也可用 **无痕窗口** 或 **强制刷新**（macOS：`Cmd+Shift+R`）排除旧缓存。
 
 ### 分别启动
 

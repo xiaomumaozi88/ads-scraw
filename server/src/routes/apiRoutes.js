@@ -16,6 +16,11 @@ import * as externalSearchDebugController from '../controllers/externalSearchDeb
 import * as proxyMediaController from '../controllers/proxyMediaController.js';
 import * as transcodeVideoController from '../controllers/transcodeVideoController.js';
 import * as guangdadaCnAdInfoController from '../controllers/guangdadaCnAdInfoController.js';
+// Sensor Tower
+import * as loginControllerSensorTower from '../controllers/loginControllerSensorTower.js';
+import * as statusControllerSensorTower from '../controllers/statusControllerSensorTower.js';
+import * as clearLoginControllerSensorTower from '../controllers/clearLoginControllerSensorTower.js';
+import * as searchControllerSensorTower from '../controllers/searchControllerSensorTower.js';
 
 const router = Router();
 
@@ -58,6 +63,12 @@ router.post('/guangdada/related-ads', searchControllerGuangdada.relatedAds);
 router.get('/guangdada/advertiser-detail', searchControllerGuangdada.advertiserDetail);
 router.post('/guangdada/adv-rec-list', searchControllerGuangdada.advRecList);
 router.post('/guangdada/similar-ads', searchControllerGuangdada.similarAds);
+
+// Sensor Tower
+router.post('/sensortower/login', loginControllerSensorTower.login);
+router.get('/sensortower/status', statusControllerSensorTower.getStatus);
+router.post('/sensortower/clearLogin', clearLoginControllerSensorTower.clearLogin);
+router.post('/sensortower/search', searchControllerSensorTower.search);
 
 // 外部聚合调用（独立接口）
 router.post('/external/insightrackr/top50', externalSearchController.externalInsightrackrTop50);

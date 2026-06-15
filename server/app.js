@@ -1,40 +1,17 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import log4js from 'log4js';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import apiRoutes from './src/routes/apiRoutes.js';
-import dayjs from 'dayjs';
 import * as puppeteerServiceInsightrackr from './src/services/puppeteerServiceInsightrackr.js';
 import * as puppeteerServiceGuangdada from './src/services/puppeteerService.js';
-import memoryLogAppender from './src/utils/memoryLogAppender.js';
+import * as puppeteerServiceSensorTower from './src/services/puppeteerServiceSensorTower.js';
+import { logger } from './src/utils/logger.js';
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// 配置日志记录（main 输出到控制台，memory 写入内存供 /health 展示）
-log4js.configure({
-    appenders: {
-        main: {
-            type: 'stdout',
-            layout: {
-                type: 'pattern',
-                pattern: '%x{date} %p [%c,1,2,false] %z --- [nio-4001-exec-1] server.index : %m%n',
-                tokens: {
-                    date: () => dayjs().format('YYYY-MM-DD HH:mm:ss.SSS'),
-                },
-            },
-        },
-        memory: {
-            type: memoryLogAppender,
-            layout: { type: 'messagePassThrough' },
-        },
-    },
-    categories: { default: { appenders: ['main', 'memory'], level: 'info' } },
-});
-global.logger = log4js.getLogger('insightrackr-scraper');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +31,16 @@ app.use((req, res, next) => {
 // API 路由必须在静态兜底之前注册，否则 GET /api/* 会被下面的 * 匹配成 index.html
 app.use('/api', apiRoutes);
 
+// 开发环境：Express 不托管前端静态资源（由 Vite 5173 提供），避免访问 :3000 根路径出现 Cannot GET /
+if (process.env.NODE_ENV !== 'production') {
+    const devClientBase = (process.env.DEV_CLIENT_ORIGIN || 'http://localhost:5173').replace(/\/$/, '');
+    app.use((req, res, next) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+        if (req.path.startsWith('/api')) return next();
+        return res.redirect(302, devClientBase + req.originalUrl);
+    });
+}
+
 // 静态文件服务 - 生产环境使用构建后的 React 应用
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(join(__dirname, '..', 'dist')));
@@ -63,13 +50,14 @@ if (process.env.NODE_ENV === 'production') {
     });
 }
 
-// 启动 Puppeteer 浏览器实例（Insightrackr + 广大大各一个）
+// 启动 Puppeteer 浏览器实例（Insightrackr + 广大大 + Sensor Tower 各一）
 (async () => {
     try {
         console.log('正在初始化浏览器...');
         await Promise.all([
             puppeteerServiceInsightrackr.initializeBrowser(),
-            puppeteerServiceGuangdada.initializeBrowser()
+            puppeteerServiceGuangdada.initializeBrowser(),
+            puppeteerServiceSensorTower.initializeBrowser(),
         ]);
         console.log('浏览器初始化完成');
     } catch (error) {
@@ -88,12 +76,14 @@ if (browserRestartHours > 0) {
             logger.info('定时重启浏览器以降低 CPU/内存占用...');
             await Promise.all([
                 puppeteerServiceInsightrackr.closeBrowser(),
-                puppeteerServiceGuangdada.closeBrowser()
+                puppeteerServiceGuangdada.closeBrowser(),
+                puppeteerServiceSensorTower.closeBrowser(),
             ]);
             await new Promise((r) => setTimeout(r, 2000)); // 等待进程完全退出
             await Promise.all([
                 puppeteerServiceInsightrackr.initializeBrowser(),
-                puppeteerServiceGuangdada.initializeBrowser()
+                puppeteerServiceGuangdada.initializeBrowser(),
+                puppeteerServiceSensorTower.initializeBrowser(),
             ]);
             logger.info('浏览器定时重启完成');
         } catch (err) {
@@ -113,7 +103,8 @@ app.listen(PORT, () => {
 process.on('SIGINT', async () => {
     await Promise.all([
         puppeteerServiceInsightrackr.closeBrowser(),
-        puppeteerServiceGuangdada.closeBrowser()
+        puppeteerServiceGuangdada.closeBrowser(),
+        puppeteerServiceSensorTower.closeBrowser(),
     ]);
     process.exit();
 });

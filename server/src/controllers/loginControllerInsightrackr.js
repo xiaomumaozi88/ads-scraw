@@ -1,4 +1,5 @@
 import * as puppeteerService from '../services/puppeteerServiceInsightrackr.js';
+import { logger } from '../utils/logger.js';
 
 export const login = async (req, res) => {
     try {
@@ -11,10 +12,8 @@ export const login = async (req, res) => {
     } catch (error) {
         console.error('登录控制器捕获到错误:', error);
         console.error('错误堆栈:', error.stack);
-        if (typeof logger !== 'undefined') {
-            logger.error(`请求登录失败: ${error}`);
-            logger.error('错误堆栈:', error.stack);
-        }
+        logger.error(`请求登录失败: ${error}`);
+        logger.error('错误堆栈:', error.stack);
         res.status(200).json({
             data: null, 
             success: false, 

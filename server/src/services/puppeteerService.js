@@ -3,12 +3,14 @@ import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { spawn } from 'child_process';
 import {puppeteerOptions} from '../config.js';
+import { removeChromeUserDataSingletonLocks } from '../utils/removeChromeUserDataSingletonLocks.js';
 import {rm} from 'fs/promises';
-import {dirname, join} from 'path';
+import {dirname} from 'path';
 import {fileURLToPath} from 'url';
 import {LoginStatus} from '../constants/index.js';
 import {upload} from '../utils/utils.js';
 import {buildGuangdadaRequestBody} from './guangdadaApiService.js';
+import { logger } from '../utils/logger.js';
 
 /** 判断前端是否已发来 guangdada.net 直连 JSON（须保留 multimodal_md5、sort_field 等）。search_type 官网为字符串；曾用数字 0 会导致误判并走 buildGuangdadaRequestBody 丢字段。 */
 function isGuangdadaSearchParamsApiFormat(sp) {
@@ -25,8 +27,8 @@ const __filename = fileURLToPath(import.meta.url);
 // 获取当前目录的绝对路径
 const __dirname = dirname(__filename);
 
-// 指定要删除的文件夹路径
-const folderToDelete = join(__dirname, '../../tmp/guangdada_spider_usr_dir');
+// 与 config 中广大大 userDataDir 一致（绝对路径，避免与 cwd 不一致）
+const folderToDelete = puppeteerOptions.userDataDir;
 
 let browser;
 let loginPage; // 登录页面
@@ -249,6 +251,20 @@ async function setupAntiDetection(page) {
 
 export const initializeBrowser = async () => {
     console.log('准备启动广大大浏览器');
+    if (browser) {
+        try {
+            await browser.close();
+            logger.info('已关闭旧广大大浏览器实例');
+        } catch (e) {
+            logger.warn('关闭旧广大大浏览器失败:', e.message);
+        }
+        browser = null;
+    }
+    const profileCloseMs = Math.max(0, parseInt(process.env.BROWSER_PROFILE_CLOSE_DELAY_MS || '800', 10));
+    if (profileCloseMs > 0) {
+        await new Promise((r) => setTimeout(r, profileCloseMs));
+    }
+    removeChromeUserDataSingletonLocks(puppeteerOptions.userDataDir);
     try {
         const launchOpts = { ...puppeteerOptions };
         const debugPort = process.env.CHROME_REMOTE_DEBUGGING_PORT;

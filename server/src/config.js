@@ -1,14 +1,51 @@
 // src/config.js
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { resolveChromeExecutablePath } from './utils/resolveChromeExecutablePath.js';
+
+const __configDir = path.dirname(fileURLToPath(import.meta.url));
+/** 仓库根目录（含 `tmp/`）。Puppeteer 的 userDataDir 必须锚定在此，否则相对路径会随 `process.cwd()` 变化，Chrome 每次像新用户一样需重新登录 */
+export const REPO_ROOT = path.resolve(__configDir, '..', '..');
+
+function chromeProfileDir(subdir) {
+    return path.join(REPO_ROOT, 'tmp', subdir);
+}
+
+/** 各 Puppeteer 实例共用；按本机解析，避免 macOS 上使用 npm start（NODE_ENV=production）时仍指向 Linux 的 /usr/bin/google-chrome */
+const CHROME_EXECUTABLE_PATH = resolveChromeExecutablePath();
+
+/**
+ * 是否无头模式。`npm start` 为 production 时各平台默认无界面；本地调试要弹出 Chrome：`HEADLESS=false npm start`
+ */
+export function resolvePuppeteerHeadless(defaultForThisProfile) {
+    const v = process.env.HEADLESS ?? process.env.PUPPETEER_HEADLESS;
+    if (v === undefined || v === '') return defaultForThisProfile;
+    const s = String(v).trim().toLowerCase();
+    if (['0', 'false', 'no', 'off'].includes(s)) return false;
+    if (['1', 'true', 'yes', 'on'].includes(s)) return true;
+    return defaultForThisProfile;
+}
+
+/** Chrome 启动时默认简体中文（UI 语言 + Accept-Language 偏好） */
+export const CHROME_ZH_CN_LAUNCH_ARGS = [
+    '--lang=zh-CN',
+    '--accept-lang=zh-CN,zh;q=0.9,en;q=0.8',
+];
+
+export function chromeLaunchArgs(extra = []) {
+    return [...CHROME_ZH_CN_LAUNCH_ARGS, ...extra];
+}
+
 // 广大大使用的配置（userDataDir 独立，避免与 Insightrackr 冲突）
 export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
     defaultViewport: {
         width: 1920,
         height: 1280,
     },
-    headless: true, // 是否不打开浏览器
-    userDataDir: "tmp/guangdada_spider_usr_dir",
-    executablePath: '/usr/bin/google-chrome', // 运用额外装置的谷歌浏览器
-    args: [
+    headless: resolvePuppeteerHeadless(true), // 是否不打开浏览器
+    userDataDir: chromeProfileDir('guangdada_spider_usr_dir'),
+    executablePath: CHROME_EXECUTABLE_PATH,
+    args: chromeLaunchArgs([
         '--no-sandbox',
         '--disable-client-side-phishing-detection',
         '--disable-setuid-sandbox',
@@ -36,17 +73,17 @@ export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
         '--disable-session-crashed-bubble',
         '--noerrdialogs',
         // '--single-process',
-    ],
+    ]),
 } : {
     defaultViewport: {
         width: 1920,
         height: 1280,
     },
-    headless: false, // 是否不打开浏览器
-    userDataDir: "tmp/guangdada_spider_usr_dir",
+    headless: resolvePuppeteerHeadless(false), // 是否不打开浏览器
+    userDataDir: chromeProfileDir('guangdada_spider_usr_dir'),
     // macOS Chrome 路径
-    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    args: [
+    executablePath: CHROME_EXECUTABLE_PATH,
+    args: chromeLaunchArgs([
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-web-security',
@@ -72,7 +109,7 @@ export const puppeteerOptions = process.env.NODE_ENV !== 'development' ? {
         '--window-size=1920,1080',
         // '--single-process',
         // '--disable-gpu',
-    ],
+    ]),
 };
 
 // Insightrackr 使用的配置（独立 userDataDir，与广大大分开，避免双平台同时登录时第二个浏览器启动失败）
@@ -81,10 +118,10 @@ export const puppeteerOptionsInsightrackr = process.env.NODE_ENV !== 'developmen
         width: 1920,
         height: 1280,
     },
-    headless: true,
-    userDataDir: 'tmp/insightrackr_spider_usr_dir',
-    executablePath: '/usr/bin/google-chrome',
-    args: [
+    headless: resolvePuppeteerHeadless(true),
+    userDataDir: chromeProfileDir('insightrackr_spider_usr_dir'),
+    executablePath: CHROME_EXECUTABLE_PATH,
+    args: chromeLaunchArgs([
         '--no-sandbox',
         '--disable-client-side-phishing-detection',
         '--disable-setuid-sandbox',
@@ -111,16 +148,16 @@ export const puppeteerOptionsInsightrackr = process.env.NODE_ENV !== 'developmen
         '--disable-translate',
         '--disable-session-crashed-bubble',
         '--noerrdialogs',
-    ],
+    ]),
 } : {
     defaultViewport: {
         width: 1920,
         height: 1280,
     },
-    headless: false,
-    userDataDir: 'tmp/insightrackr_spider_usr_dir',
-    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    args: [
+    headless: resolvePuppeteerHeadless(false),
+    userDataDir: chromeProfileDir('insightrackr_spider_usr_dir'),
+    executablePath: CHROME_EXECUTABLE_PATH,
+    args: chromeLaunchArgs([
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-web-security',
@@ -144,7 +181,78 @@ export const puppeteerOptionsInsightrackr = process.env.NODE_ENV !== 'developmen
         '--use-mock-keychain',
         '--no-zygote',
         '--window-size=1920,1080',
-    ],
+    ]),
+};
+
+// Sensor Tower（独立 userDataDir，与 Insightrackr / 广大大分开）
+export const puppeteerOptionsSensorTower = process.env.NODE_ENV !== 'development' ? {
+    defaultViewport: {
+        width: 1920,
+        height: 1280,
+    },
+    headless: resolvePuppeteerHeadless(true),
+    userDataDir: chromeProfileDir('sensortower_spider_usr_dir'),
+    executablePath: CHROME_EXECUTABLE_PATH,
+    args: chromeLaunchArgs([
+        '--no-sandbox',
+        '--disable-client-side-phishing-detection',
+        '--disable-setuid-sandbox',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-popup-blocking',
+        '--disable-offer-store-unmasked-wallet-cards',
+        '--disable-speech-api',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--no-zygote',
+        '--disable-gpu',
+        '--disable-background-networking',
+        '--disable-sync',
+        '--disable-translate',
+        '--disable-session-crashed-bubble',
+        '--noerrdialogs',
+    ]),
+} : {
+    defaultViewport: {
+        width: 1920,
+        height: 1280,
+    },
+    headless: resolvePuppeteerHeadless(false),
+    userDataDir: chromeProfileDir('sensortower_spider_usr_dir'),
+    executablePath: CHROME_EXECUTABLE_PATH,
+    args: chromeLaunchArgs([
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-client-side-phishing-detection',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-popup-blocking',
+        '--disable-offer-store-unmasked-wallet-cards',
+        '--disable-speech-api',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--no-pings',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--no-zygote',
+        '--window-size=1920,1080',
+    ]),
 };
 
 // src/config.js
@@ -153,9 +261,9 @@ export const puppeteerOptionsA3 = process.env.NODE_ENV !== 'development' ? {
         width: 1920,
         height: 1280,
     },
-    headless: true, // 是否不打开浏览器
-    userDataDir: "tmp/gpc_order_spider_usr_dir3_a3",
-    executablePath: '/usr/bin/google-chrome', // 运用额外装置的谷歌浏览器
+    headless: resolvePuppeteerHeadless(true), // 是否不打开浏览器
+    userDataDir: chromeProfileDir('gpc_order_spider_usr_dir3_a3'),
+    executablePath: CHROME_EXECUTABLE_PATH,
     args: [
         '--no-sandbox',
         '--disable-client-side-phishing-detection',
@@ -184,8 +292,9 @@ export const puppeteerOptionsA3 = process.env.NODE_ENV !== 'development' ? {
         width: 1920,
         height: 1280,
     },
-    headless: false, // 是否不打开浏览器
-    userDataDir: "tmp/gpc_order_spider_usr_dir3_a3",
+    headless: resolvePuppeteerHeadless(false), // 是否不打开浏览器
+    userDataDir: chromeProfileDir('gpc_order_spider_usr_dir3_a3'),
+    executablePath: CHROME_EXECUTABLE_PATH,
     args: [
         '--no-sandbox',
         '--disable-client-side-phishing-detection',

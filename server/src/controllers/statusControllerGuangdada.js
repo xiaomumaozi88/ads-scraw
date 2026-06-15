@@ -1,4 +1,5 @@
 import * as puppeteerService from '../services/puppeteerService.js';
+import { logger } from '../utils/logger.js';
 
 export const getStatus = async (req, res) => {
     try {

@@ -6,7 +6,8 @@ const defaultDetail = () => ({ status: 'LOGGED_OUT', email: null, cnJwtExpiresAt
 export function usePlatformStatus() {
   const [statuses, setStatuses] = useState({
     insightrackr: defaultDetail(),
-    guangdada: defaultDetail()
+    guangdada: defaultDetail(),
+    sensortower: defaultDetail(),
   });
   const [loading, setLoading] = useState({});
 
@@ -41,6 +42,7 @@ export function usePlatformStatus() {
   useEffect(() => {
     fetchStatus('insightrackr');
     fetchStatus('guangdada');
+    fetchStatus('sensortower');
   }, [fetchStatus]);
 
   return {

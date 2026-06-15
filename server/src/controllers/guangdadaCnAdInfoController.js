@@ -1,11 +1,9 @@
-import log4js from 'log4js';
 import { bbaApiAuthorization, bbaApiBase } from '../config.js';
+import { logger } from '../utils/logger.js';
 import {
   getStoredGuangdadaBbaAuthorization,
   refreshGuangdadaBbaAuthFromLoginPage,
 } from '../services/puppeteerService.js';
-
-const logger = global.logger || log4js.getLogger('guangdada-cn-ad-info');
 
 /** BBA 上游：不携带 Origin、Cookie（仅 Authorization + Referer 等） */
 function buildBbaUpstreamHeaders(auth) {

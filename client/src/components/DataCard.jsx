@@ -21,6 +21,7 @@ import GuangdadaDomesticShortcutBar from './GuangdadaDomesticShortcutBar';
 import DataDisplay from './DataDisplay';
 import TimeFilter from './TimeFilter';
 import SortDedupBar from './SortDedupBar';
+import SensorTowerPanel from '../pages/sensortower/SensorTowerPanel';
 
 /** 广大大 count 数值格式化为「万、百万、千万、亿」等 */
 function formatGuangdadaCount(num) {
@@ -673,6 +674,18 @@ function DataCard({
 
   const showGlobalData = platform !== 'guangdada' || guangdadaEdition === 'global';
   const showDomesticPanel = platform === 'guangdada' && guangdadaEdition === 'domestic';
+
+  if (platform === 'sensortower') {
+    return (
+      <div className="card data-card data-card--sensortower">
+        <SensorTowerPanel
+          isLoggedIn={isLoggedIn}
+          addLog={addLog}
+          onRequireLogin={onRequireLogin}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="card data-card">

@@ -1,5 +1,6 @@
 import * as puppeteerService from '../services/puppeteerService.js';
 import * as puppeteerServiceA3 from '../services/puppeteerServiceA3.js';
+import { logger } from '../utils/logger.js';
 
 const A3_GOOGLE_ACCOUNT = 'infocenter@a3games.com';
 

@@ -19,7 +19,8 @@ function LoginCard({ platform, onLoginSuccess, addLog }) {
     setLoading(true);
     setMessage({ text: '', type: '' });
 
-    const platformName = platform === 'insightrackr' ? 'Insightrackr' : '广大大';
+    const platformName =
+      platform === 'insightrackr' ? 'Insightrackr' : platform === 'sensortower' ? 'Sensor Tower' : '广大大';
     addLog(`开始登录 ${platformName}，邮箱: ${email}`, 'info');
 
     try {

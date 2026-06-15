@@ -1,4 +1,5 @@
 import * as puppeteerService from '../services/puppeteerService.js';
+import { logger } from '../utils/logger.js';
 
 export const login = async (req, res) => {
     try {

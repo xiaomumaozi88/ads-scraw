@@ -14,15 +14,33 @@ import insightrackrLogo from '../assets/insightrackr-logo.png';
 import guangdadaLogo from '../assets/guangdada-logo.svg';
 import guangdadaBg from '../assets/guangdada-bg.svg';
 
-const PLATFORM_ROUTES = { insightrackr: '/insightrackr', guangdada: '/guangdada' };
+const PLATFORM_ROUTES = {
+  insightrackr: '/insightrackr',
+  guangdada: '/guangdada',
+  sensortower: '/sensortower',
+};
+
+function platformDisplayName(platform) {
+  if (platform === 'insightrackr') return 'Insightrackr';
+  if (platform === 'guangdada') return '广大大';
+  if (platform === 'sensortower') return 'Sensor Tower';
+  return platform || '';
+}
 
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const pathname = location.pathname || '/';
 
-  // 从路由推导当前平台：/insightrackr -> insightrackr，/guangdada -> guangdada，/ -> null
-  const selectedPlatform = pathname === '/insightrackr' ? 'insightrackr' : pathname === '/guangdada' ? 'guangdada' : null;
+  // 从路由推导当前平台
+  const selectedPlatform =
+    pathname === '/insightrackr'
+      ? 'insightrackr'
+      : pathname === '/guangdada'
+        ? 'guangdada'
+        : pathname === '/sensortower'
+          ? 'sensortower'
+          : null;
   const isSelectionView = pathname === '/';
 
   // 未知路径重定向到首页
@@ -35,6 +53,8 @@ function App() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   /** Insightrackr：仅当进入该页后 status 请求返回「已登录」才为 true，用于控制自动请求时机 */
   const [insightrackrStatusConfirmed, setInsightrackrStatusConfirmed] = useState(false);
+  /** Sensor Tower：status 接口返回前不弹登录框、不显示未登录占位 */
+  const [sensortowerStatusChecked, setSensortowerStatusChecked] = useState(false);
   const [downloadDrawerOpen, setDownloadDrawerOpen] = useState(false);
   /** 气泡引导：从开始下载按钮飘向下载列表按钮的起始位置 */
   const [bubbleHintStartRect, setBubbleHintStartRect] = useState(null);
@@ -61,7 +81,7 @@ function App() {
       await clearLogin(platform);
       await refreshStatus(platform);
       setShowLoginModal(true);
-      addLog(`已清除 ${platform === 'insightrackr' ? 'Insightrackr' : '广大大'} 登录状态，请重新登录`, 'info');
+      addLog(`已清除 ${platformDisplayName(platform)} 登录状态，请重新登录`, 'info');
     } catch (e) {
       addLog(`清除登录状态失败: ${e.message}`, 'error');
     }
@@ -70,25 +90,46 @@ function App() {
   // 离开 Insightrackr 时重置「status 已确认」标记，下次进入会重新等 status 返回再发自动请求
   useEffect(() => {
     if (pathname !== '/insightrackr') setInsightrackrStatusConfirmed(false);
+    if (pathname !== '/sensortower') setSensortowerStatusChecked(false);
   }, [pathname]);
 
-  // 在 Insightrackr / 广大大 路由下检查登录状态，未登录则弹出登录框（与 Insightrackr 一致）
+  // 在业务路由下检查登录状态，未登录则弹出登录框
   useEffect(() => {
-    if (pathname !== '/insightrackr' && pathname !== '/guangdada') return;
-    const platform = pathname === '/insightrackr' ? 'insightrackr' : 'guangdada';
+    const routePlatform =
+      pathname === '/insightrackr'
+        ? 'insightrackr'
+        : pathname === '/guangdada'
+          ? 'guangdada'
+          : pathname === '/sensortower'
+            ? 'sensortower'
+            : null;
+    if (!routePlatform) return;
+    const platform = routePlatform;
     let cancelled = false;
+    if (platform === 'sensortower') {
+      setShowLoginModal(false);
+    }
     refreshStatus(platform)
       .then((status) => {
         if (cancelled) return;
         if (platform === 'insightrackr') setInsightrackrStatusConfirmed(status === 'ONLINE');
+        if (platform === 'sensortower') {
+          setSensortowerStatusChecked(true);
+          if (status !== 'ONLINE') {
+            setShowLoginModal(true);
+            addLog(`需要登录 ${platformDisplayName(platform)}，当前状态: ${status}`, 'info');
+          }
+          return;
+        }
         if (status !== 'ONLINE') {
           setShowLoginModal(true);
-          addLog(`需要登录 ${platform === 'insightrackr' ? 'Insightrackr' : '广大大'}，当前状态: ${status}`, 'info');
+          addLog(`需要登录 ${platformDisplayName(platform)}，当前状态: ${status}`, 'info');
         }
       })
       .catch((error) => {
         if (cancelled) return;
         if (platform === 'insightrackr') setInsightrackrStatusConfirmed(false);
+        if (platform === 'sensortower') setSensortowerStatusChecked(true);
         const isNetworkError = !error.message || /fetch|network|failed to fetch/i.test(error.message);
         if (isNetworkError) {
           addLog(`无法连接服务器，请确认后端已启动且使用同一地址访问（当前为 ${window.location.origin}）`, 'error');
@@ -104,11 +145,7 @@ function App() {
     const route = PLATFORM_ROUTES[platform];
     if (!route) return;
     navigate(route);
-    if (platform === 'guangdada') {
-      addLog(`进入广大大查询页面`, 'info');
-    } else {
-      addLog(`进入 Insightrackr 查询页面`, 'info');
-    }
+    addLog(`进入 ${platformDisplayName(platform)} 查询页面`, 'info');
   };
 
   const handleLoginSuccess = async () => {
@@ -119,6 +156,7 @@ function App() {
         if (status === 'ONLINE') {
           addLog(`登录状态已确认: ${status}`, 'success');
           if (selectedPlatform === 'insightrackr') setInsightrackrStatusConfirmed(true);
+          if (selectedPlatform === 'sensortower') setSensortowerStatusChecked(true);
         }
       }).catch((err) => addLog(`登录状态检查失败: ${err.message}`, 'error'));
     }
@@ -182,7 +220,15 @@ function App() {
   return (
     <div className="app">
       <div
-        className={`container${selectedPlatform === 'guangdada' ? ' container--guangdada' : selectedPlatform === 'insightrackr' ? ' container--insightrackr' : ''}`}
+        className={`container${
+          selectedPlatform === 'guangdada'
+            ? ' container--guangdada'
+            : selectedPlatform === 'insightrackr'
+              ? ' container--insightrackr'
+              : selectedPlatform === 'sensortower'
+                ? ' container--sensortower'
+                : ''
+        }`}
         style={selectedPlatform === 'guangdada' ? { backgroundImage: `url(${guangdadaBg})` } : undefined}
       >
         <div className="search-page-header">
@@ -190,12 +236,23 @@ function App() {
             ← 返回平台选择
           </button>
           <div className="search-page-header-logo">
-            <img
-              src={selectedPlatform === 'insightrackr' ? insightrackrLogo : guangdadaLogo}
-              alt={selectedPlatform === 'insightrackr' ? 'Insightrackr' : '广大大'}
-              className="search-page-header-logo-img"
-            />
-            <span className="search-page-header-suffix">数据查询</span>
+            {selectedPlatform === 'sensortower' ? (
+              <>
+                <span className="search-page-header-logo-st" role="img" aria-label="Sensor Tower">
+                  ST
+                </span>
+                <span className="search-page-header-suffix">广告素材库</span>
+              </>
+            ) : (
+              <>
+                <img
+                  src={selectedPlatform === 'insightrackr' ? insightrackrLogo : guangdadaLogo}
+                  alt={selectedPlatform === 'insightrackr' ? 'Insightrackr' : '广大大'}
+                  className="search-page-header-logo-img"
+                />
+                <span className="search-page-header-suffix">数据查询</span>
+              </>
+            )}
           </div>
           <div className="search-page-header-right">
             <span
@@ -294,7 +351,11 @@ function App() {
             platform={selectedPlatform}
             addLog={addLog}
             onRequireLogin={handleRequireLogin}
-            isLoggedIn={getStatus(selectedPlatform) === 'ONLINE'}
+            isLoggedIn={
+              selectedPlatform === 'sensortower'
+                ? sensortowerStatusChecked && getStatus(selectedPlatform) === 'ONLINE'
+                : getStatus(selectedPlatform) === 'ONLINE'
+            }
             insightrackrStatusConfirmed={insightrackrStatusConfirmed}
             onBatchModeEnteredWithHint={handleBatchModeEnteredWithHint}
             refreshPlatformStatus={refreshStatus}

@@ -2,9 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { login, formatRequestError } from '../utils/api';
 import './LoginModal.css';
 
+function platformDisplayName(platform) {
+  if (platform === 'insightrackr') return 'Insightrackr';
+  if (platform === 'guangdada') return '广大大';
+  if (platform === 'sensortower') return 'Sensor Tower';
+  return '平台';
+}
+
 function LoginModal({ platform, isOpen, onClose, onLoginSuccess, addLog }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [authLink, setAuthLink] = useState('');
+  const [showSensorTowerAuthLinkField, setShowSensorTowerAuthLinkField] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
@@ -13,6 +22,8 @@ function LoginModal({ platform, isOpen, onClose, onLoginSuccess, addLog }) {
       // 重置表单
       setEmail('');
       setPassword('');
+      setAuthLink('');
+      setShowSensorTowerAuthLinkField(false);
       setMessage({ text: '', type: '' });
     }
   }, [isOpen]);
@@ -20,20 +31,38 @@ function LoginModal({ platform, isOpen, onClose, onLoginSuccess, addLog }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!email.trim() || !password.trim()) {
+    const isSensorTowerAuthLinkMode =
+      platform === 'sensortower' && showSensorTowerAuthLinkField && !!authLink.trim();
+    if (!isSensorTowerAuthLinkMode && (!email.trim() || !password.trim())) {
       setMessage({ text: '请填写完整的登录信息', type: 'error' });
       addLog('请填写完整的登录信息', 'error');
+      return;
+    }
+    if (platform === 'sensortower' && showSensorTowerAuthLinkField && !authLink.trim()) {
+      setMessage({ text: '请粘贴邮箱授权链接', type: 'error' });
+      addLog('请粘贴邮箱授权链接', 'error');
       return;
     }
 
     setLoading(true);
     setMessage({ text: '', type: '' });
 
-    const platformName = platform === 'insightrackr' ? 'Insightrackr' : '广大大';
-    addLog(`开始登录 ${platformName}，邮箱: ${email}`, 'info');
+    const platformName = platformDisplayName(platform);
+    addLog(
+      isSensorTowerAuthLinkMode
+        ? `开始通过邮箱授权链接登录 ${platformName}`
+        : `开始登录 ${platformName}，邮箱: ${email}`,
+      'info'
+    );
 
     try {
-      const data = await login(platform, email, password);
+      const data = await login(
+        platform,
+        isSensorTowerAuthLinkMode ? '' : email,
+        isSensorTowerAuthLinkMode ? '' : password,
+        undefined,
+        platform === 'sensortower' && showSensorTowerAuthLinkField ? authLink : undefined
+      );
 
       if (data.success) {
         addLog('登录成功', 'success');
@@ -43,6 +72,9 @@ function LoginModal({ platform, isOpen, onClose, onLoginSuccess, addLog }) {
           onLoginSuccess();
         }, 500);
       } else {
+        if (platform === 'sensortower' && data?.code === 'NEW_DEVICE_VERIFICATION') {
+          setShowSensorTowerAuthLinkField(true);
+        }
         addLog(`登录失败: ${data.message}`, 'error');
         setMessage({ text: data.message || '登录失败', type: 'error' });
       }
@@ -56,7 +88,7 @@ function LoginModal({ platform, isOpen, onClose, onLoginSuccess, addLog }) {
 
   if (!isOpen) return null;
 
-  const platformName = platform === 'insightrackr' ? 'Insightrackr' : '广大大';
+  const platformName = platformDisplayName(platform);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -75,7 +107,7 @@ function LoginModal({ platform, isOpen, onClose, onLoginSuccess, addLog }) {
               placeholder="请输入邮箱地址"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
+              required={!(platform === 'sensortower' && showSensorTowerAuthLinkField)}
               autoFocus
             />
           </div>
@@ -88,9 +120,23 @@ function LoginModal({ platform, isOpen, onClose, onLoginSuccess, addLog }) {
               placeholder="请输入密码"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
+              required={!(platform === 'sensortower' && showSensorTowerAuthLinkField)}
             />
           </div>
+          {platform === 'sensortower' && showSensorTowerAuthLinkField && (
+            <div className="form-group">
+              <label htmlFor="modal-auth-link">邮箱授权链接（选填）</label>
+              <input
+                type="text"
+                id="modal-auth-link"
+                name="authLink"
+                placeholder="若出现“授权新浏览器”，请粘贴邮件中的授权链接"
+                value={authLink}
+                onChange={(e) => setAuthLink(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+          )}
           {message.text && (
             <div className={`message ${message.type}`}>{message.text}</div>
           )}

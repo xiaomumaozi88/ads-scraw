@@ -2,14 +2,14 @@ import puppeteerBase, {TimeoutError} from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import {puppeteerOptionsInsightrackr} from '../config.js';
+import { removeChromeUserDataSingletonLocks } from '../utils/removeChromeUserDataSingletonLocks.js';
 import {rm} from 'fs/promises';
 import {dirname, join} from 'path';
 import {fileURLToPath} from 'url';
+import fs from 'fs';
 import {LoginStatus} from '../constants/index.js';
-import log4js from 'log4js';
-
-// 获取 logger 实例
-const logger = global.logger || log4js.getLogger('insightrackr-service');
+import { logger } from '../utils/logger.js';
+import { resolveChromeExecutablePath } from '../utils/resolveChromeExecutablePath.js';
 
 const __filename = fileURLToPath(import.meta.url);
 // 获取当前目录的绝对路径
@@ -137,11 +137,10 @@ async function setupAntiDetection(page) {
  */
 function buildInsightrackrFallbackLaunchOptions() {
     const opt = puppeteerOptionsInsightrackr;
-    const executablePath =
-        opt.executablePath ||
-        (process.platform === 'darwin'
-            ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-            : '/usr/bin/google-chrome');
+    let executablePath = opt.executablePath;
+    if (!executablePath || !fs.existsSync(executablePath)) {
+        executablePath = resolveChromeExecutablePath();
+    }
     const minimalArgs = [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -214,7 +213,12 @@ export const initializeBrowser = async () => {
         }
         browser = null;
     }
-    
+    const profileCloseMs = Math.max(0, parseInt(process.env.BROWSER_PROFILE_CLOSE_DELAY_MS || '800', 10));
+    if (profileCloseMs > 0) {
+        await new Promise((r) => setTimeout(r, profileCloseMs));
+    }
+    removeChromeUserDataSingletonLocks(puppeteerOptionsInsightrackr.userDataDir);
+
     try {
         const launchOpts = { ...puppeteerOptionsInsightrackr };
         const debugPort = process.env.CHROME_REMOTE_DEBUGGING_PORT_INSIGHTRACKR;
@@ -244,6 +248,8 @@ export const initializeBrowser = async () => {
         browser = null;
         // 兜底：系统 Chrome + 与生产一致的 headless/userDataDir（不依赖 Puppeteer 捆绑 Chromium）
         try {
+            removeChromeUserDataSingletonLocks(puppeteerOptionsInsightrackr.userDataDir);
+            await new Promise((r) => setTimeout(r, 400));
             const fallbackOpts = buildInsightrackrFallbackLaunchOptions();
             logger.info('尝试使用兜底配置启动浏览器:', JSON.stringify(fallbackOpts, null, 2));
             browser = await puppeteer.launch(fallbackOpts);

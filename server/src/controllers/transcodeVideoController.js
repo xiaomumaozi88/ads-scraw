@@ -5,9 +5,7 @@
  */
 import { createReadStream } from 'fs';
 import * as transcodeVideoService from '../services/transcodeVideoService.js';
-import log4js from 'log4js';
-
-const logger = log4js.getLogger('transcodeVideo');
+import { logger } from '../utils/logger.js';
 
 /**
  * @param {import('express').Request} req
