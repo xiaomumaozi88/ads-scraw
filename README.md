@@ -219,7 +219,7 @@ INSIGHTRACKR_PASSWORD=your-password
 **1）查看现有容器环境变量（可选，便于对齐旧配置）：**
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123 \
+ssh -i ~/.ssh/id_ed25519_nginx ecs-user@115.29.236.160 \
   "sudo docker inspect ads-scraw --format '{{json .Config.Env}}' | python3 -m json.tool"
 ```
 
@@ -228,7 +228,7 @@ ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123 \
 **2）停止并删除旧容器，用调试端口重新启动：**
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123 'set -e
+ssh -i ~/.ssh/id_ed25519_nginx ecs-user@115.29.236.160 'set -e
 sudo docker stop ads-scraw
 sudo docker rm ads-scraw
 sudo docker run -d \
@@ -248,7 +248,7 @@ sudo docker ps --filter name=ads-scraw --format "table {{.Names}}\t{{.Ports}}\t{
 **3）确认容器内已监听调试端口（应用启动约数秒后再执行）：**
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123 \
+ssh -i ~/.ssh/id_ed25519_nginx ecs-user@115.29.236.160 \
   "sudo docker exec ads-scraw sh -c 'ss -tlnp 2>/dev/null | grep -E \"9222|9223\" || netstat -tlnp 2>/dev/null | grep -E \"9222|9223\" || true'"
 ```
 
@@ -257,7 +257,7 @@ ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123 \
 **4）确认 Web 端口正常（可选）：**
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123 \
+ssh -i ~/.ssh/id_ed25519_nginx ecs-user@115.29.236.160 \
   "curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/"
 ```
 
@@ -273,7 +273,7 @@ ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123 \
 ssh -i ~/.ssh/id_ed25519_nginx \
   -o StrictHostKeyChecking=accept-new \
   -L 9222:127.0.0.1:9222 \
-  ecs-user@120.27.200.123
+  ecs-user@115.29.236.160
 ```
 
 若该私钥路径不存在、改用默认 `~/.ssh/id_*`，可去掉 `-i ...` 一行。
@@ -285,7 +285,7 @@ ssh -f -N -o ExitOnForwardFailure=yes \
   -o StrictHostKeyChecking=accept-new \
   -i ~/.ssh/id_ed25519_nginx \
   -L 9222:127.0.0.1:9222 \
-  ecs-user@120.27.200.123
+  ecs-user@115.29.236.160
 ```
 
 若提示 `Address already in use`，说明本机 `9222` 已被占用（例如已有隧道）。可结束占用进程，或改用其它本地端口转发，例如 `-L 19223:127.0.0.1:9222`，并在 `chrome://inspect` 的 Configure 里填 `localhost:19223`。
@@ -312,13 +312,13 @@ MIT
 ```
 tar --exclude='node_modules' --exclude='.git' --exclude='.env' --exclude='*.log' -czvf /tmp/ads-scraw.tar.gz .
 
-scp -i ~/.ssh/id_ed25519_nginx /tmp/ads-scraw.tar.gz ecs-user@120.27.200.123:~/ads-scraw.tar.gz
+scp -i ~/.ssh/id_ed25519_nginx /tmp/ads-scraw.tar.gz ecs-user@115.29.236.160:~/ads-scraw.tar.gz
 ```
 
 ##在服务器
 
 ```
-ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123
+ssh -i ~/.ssh/id_ed25519_nginx ecs-user@115.29.236.160
 cd ~
 rm -rf ads-scraw
 mkdir -p ads-scraw

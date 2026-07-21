@@ -192,7 +192,7 @@ function normalizeExternalServiceError(platform, serviceResult) {
       errorKind: 'BROWSER_SESSION_INVALID',
       clientCode: 'NO_LOGIN_PAGE',
       message: '浏览器登录会话已失效或页面已关闭，请重新登录该平台',
-      hint: '可尝试健康检查页「退出登录」后重新登录，或重启服务',
+      hint: '请联系管理员重新登录该平台，或在运维侧重启浏览器服务',
     };
   }
   if (topCode === 'BROWSER_NOT_INITIALIZED') {
@@ -722,6 +722,13 @@ export const externalInsightrackrTop50 = async (req, res) => {
 
 /** 外部接口：广大大素材查询（关键词、排序、时间范围；条数由 topN 决定，内部分页每页 60） */
 export const externalGuangdadaTop50 = async (req, res) => {
+  return res.status(503).json({
+    success: false,
+    code: 503,
+    message: '广大大外部查询接口已临时禁用，以避免频繁拉取影响账户健康',
+    data: null,
+  });
+
   let debugSession = null;
   try {
     debugSession = makeDebugSession(req, 'guangdada');

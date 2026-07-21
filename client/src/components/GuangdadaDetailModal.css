@@ -76,6 +76,7 @@
 }
 
 .guangdada-detail-image-wrap {
+  position: relative;
   background: #000;
   display: flex;
   align-items: center;
@@ -102,6 +103,21 @@
 .guangdada-detail-media--empty {
   color: #999;
   font-size: 14px;
+}
+
+.guangdada-detail-media-no-source {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 /* 详情内 HTML iframe：竖屏 9:16，最大高度 340px，居中 */
@@ -890,4 +906,367 @@
 .guangdada-advertiser-drawer-meta {
   font-size: 14px;
   color: #666;
+}
+
+/* 新版创意详情布局 */
+.guangdada-detail-modal .ant-modal-content {
+  border-radius: 8px;
+}
+
+.guangdada-detail-modal .ant-modal-header {
+  padding-right: 48px;
+  margin-bottom: 10px;
+}
+
+.guangdada-detail-modal .ant-modal-body {
+  padding-top: 0;
+}
+
+.guangdada-detail-modal-header {
+  gap: 16px;
+  width: 100%;
+  padding-right: 0;
+}
+
+.guangdada-detail-modal-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.guangdada-detail-body {
+  max-height: calc(100vh - 130px);
+  overflow: hidden;
+}
+
+.guangdada-detail-left {
+  flex: 0 0 400px;
+  max-width: 420px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.guangdada-detail-right {
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.guangdada-detail-advertiser-main {
+  align-items: flex-start;
+}
+
+.guangdada-detail-advertiser-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.guangdada-detail-app-title-line,
+.guangdada-detail-developer-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  min-width: 0;
+}
+
+.guangdada-detail-app-name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guangdada-detail-advertiser-search-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #1677ff;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.guangdada-detail-store-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #999;
+  font-size: 12px;
+}
+
+.guangdada-detail-store-category strong {
+  color: #999;
+  font-weight: 400;
+}
+
+.guangdada-detail-soft-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 130px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: rgba(216, 216, 216, 0.7);
+  color: #333;
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.guangdada-detail-meta-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.guangdada-detail-meta-grid div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.guangdada-detail-meta-grid span {
+  color: #999;
+  flex-shrink: 0;
+}
+
+.guangdada-detail-meta-grid strong {
+  max-width: 220px;
+  overflow: hidden;
+  color: #333;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guangdada-detail-metric-card--rank {
+  background: #f0f6ff;
+}
+
+.guangdada-detail-rank-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.guangdada-detail-rank-badges span {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: #fff;
+  color: #fa8c16;
+  font-size: 12px;
+}
+
+.guangdada-detail-analysis-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.guangdada-detail-analysis-section {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.guangdada-detail-analysis-section-title {
+  flex: 0 0 72px;
+  color: #666;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.guangdada-detail-analysis-section-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.guangdada-detail-analysis-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.guangdada-detail-analysis-group-title {
+  color: #999;
+}
+
+.guangdada-detail-tag-pill--gold {
+  color: #d48806;
+  background: #fff7e6;
+}
+
+.guangdada-detail-tag-pill--purple {
+  color: #722ed1;
+  background: #f9f0ff;
+}
+
+.guangdada-detail-script-block {
+  margin-top: 4px;
+}
+
+.guangdada-detail-script {
+  margin-top: 12px;
+}
+
+.guangdada-detail-script-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  color: #333;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.guangdada-detail-script-summary span {
+  flex-shrink: 0;
+}
+
+.guangdada-detail-script-summary strong {
+  font-weight: 400;
+}
+
+.guangdada-detail-script-timeline {
+  position: relative;
+  height: 148px;
+  margin: 50px 32px 14px 8px;
+}
+
+.guangdada-detail-script-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 66px;
+  height: 4px;
+  border-radius: 999px;
+  background: #eceff3;
+}
+
+.guangdada-detail-script-marker {
+  position: absolute;
+  top: 60px;
+  width: 0;
+  transform: translateX(-50%);
+}
+
+.guangdada-detail-script-marker i {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #d9d9d9;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.guangdada-detail-script-marker small {
+  position: absolute;
+  left: 50%;
+  top: 22px;
+  transform: translateX(-50%);
+  color: #999;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.guangdada-detail-script-marker--top .guangdada-detail-script-tag {
+  bottom: 30px;
+}
+
+.guangdada-detail-script-marker--bottom .guangdada-detail-script-tag {
+  top: 46px;
+}
+
+.guangdada-detail-script-tag {
+  position: absolute;
+  left: 50%;
+  max-width: 190px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guangdada-detail-script-tag--blue {
+  color: #0958d9;
+  background: #e6f4ff;
+}
+
+.guangdada-detail-script-tag--purple {
+  color: #531dab;
+  background: #f9f0ff;
+}
+
+.guangdada-detail-script-tag--orange {
+  color: #d46b08;
+  background: #fff7e6;
+}
+
+.guangdada-detail-script-tag--red {
+  color: #d4380d;
+  background: #fff2e8;
+}
+
+.guangdada-detail-script-end-time {
+  position: absolute;
+  right: -22px;
+  top: 78px;
+  color: #999;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.guangdada-detail-versions {
+  padding: 0 2px;
+}
+
+.guangdada-detail-versions-title {
+  margin-bottom: 8px;
+  color: #333;
+  font-size: 12px;
+}
+
+.guangdada-detail-version-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.guangdada-detail-version-thumb {
+  width: 54px;
+  height: 54px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f0f2f5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  font-size: 12px;
+}
+
+.guangdada-detail-version-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

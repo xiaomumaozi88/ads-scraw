@@ -1,26 +1,34 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   fetchRecentGalleryApps,
+  fetchUnifiedAppDetail,
   formatMetric,
   loadRecentAppsFromStorage,
+  mergeAppSearchWithDetails,
   saveRecentAppToStorage,
   searchGalleryApps,
 } from '../../utils/galleryAppSearch.js';
+import StoreOsIcon from '../shared/StoreOsIcon.jsx';
 import './AddAppModal.css';
 
-function AppSearchRow({ app, onSelect }) {
+function AppSearchRow({ app, onSelect, selecting }) {
   const downloads = formatMetric(app.downloads);
   const revenue = formatMetric(app.revenue);
 
   return (
-    <button type="button" className="st-add-app-row" onClick={() => onSelect(app)}>
+    <button
+      type="button"
+      className={`st-add-app-row${selecting ? ' st-add-app-row--selecting' : ''}`}
+      onClick={() => onSelect(app)}
+      disabled={selecting}
+    >
       <div className="st-add-app-row__stores" aria-hidden>
         <span className="st-add-app-row__store" title="App Store">
-          <span className="st-add-app-row__store-icon"></span>
+          <StoreOsIcon os="ios" className="st-add-app-row__store-icon" />
           {app.iosCount != null ? <span>{app.iosCount}</span> : null}
         </span>
         <span className="st-add-app-row__store" title="Google Play">
-          <span className="st-add-app-row__store-icon st-add-app-row__store-icon--gp">▶</span>
+          <StoreOsIcon os="android" className="st-add-app-row__store-icon st-add-app-row__store-icon--gp" />
           {app.androidCount != null ? <span>{app.androidCount}</span> : null}
         </span>
       </div>
@@ -36,12 +44,15 @@ function AppSearchRow({ app, onSelect }) {
         {app.publisher ? <span className="st-add-app-row__publisher">{app.publisher}</span> : null}
       </div>
       <div className="st-add-app-row__metrics">
-        {downloads ? (
+        {selecting ? (
+          <span className="st-add-app-row__metric st-add-app-row__metric--loading">添加中…</span>
+        ) : null}
+        {!selecting && downloads ? (
           <span className="st-add-app-row__metric" title="下载量">
             ↓ {downloads}
           </span>
         ) : null}
-        {revenue ? (
+        {!selecting && revenue ? (
           <span className="st-add-app-row__metric" title="收入">
             $ {revenue}
           </span>
@@ -58,6 +69,7 @@ function AddAppModal({ open, onClose, onSelectApp }) {
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectingId, setSelectingId] = useState(null);
 
   const loadRecent = useCallback(async () => {
     const stored = loadRecentAppsFromStorage();
@@ -79,6 +91,7 @@ function AddAppModal({ open, onClose, onSelectApp }) {
     setQuery('');
     setSearchResults([]);
     setError('');
+    setSelectingId(null);
     loadRecent();
   }, [open, loadRecent]);
 
@@ -106,11 +119,25 @@ function AddAppModal({ open, onClose, onSelectApp }) {
     return () => clearTimeout(timer);
   }, [query, open]);
 
-  const handleSelect = (app) => {
-    if (!app?.unifiedAppId) return;
-    saveRecentAppToStorage(app);
-    onSelectApp(app);
-    onClose();
+  const handleSelect = async (app) => {
+    if (!app?.unifiedAppId || selectingId) return;
+    setSelectingId(app.unifiedAppId);
+    setError('');
+    try {
+      let enriched = app;
+      try {
+        const detail = await fetchUnifiedAppDetail(app.unifiedAppId);
+        if (detail) enriched = mergeAppSearchWithDetails(app, detail);
+      } catch (detailError) {
+        const detailMsg = detailError?.message || String(detailError);
+        setError(`应用详情加载失败，已使用搜索结果：${detailMsg}`);
+      }
+      saveRecentAppToStorage(enriched);
+      onSelectApp(enriched);
+      onClose();
+    } finally {
+      setSelectingId(null);
+    }
   };
 
   if (!open) return null;
@@ -179,6 +206,7 @@ function AddAppModal({ open, onClose, onSelectApp }) {
                   key={app.unifiedAppId}
                   app={app}
                   onSelect={handleSelect}
+                  selecting={selectingId === app.unifiedAppId}
                 />
               ))}
             </div>

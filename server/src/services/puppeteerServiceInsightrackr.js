@@ -1,8 +1,12 @@
-import puppeteerBase, {TimeoutError} from 'puppeteer';
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import {puppeteerOptionsInsightrackr} from '../config.js';
+import { TimeoutError } from 'puppeteer';
+import { puppeteerOptionsInsightrackr } from '../config.js';
 import { removeChromeUserDataSingletonLocks } from '../utils/removeChromeUserDataSingletonLocks.js';
+import {
+  applyPageAntiDetection,
+  enhanceLaunchOptions,
+  getStealthPuppeteer,
+  resolveStealthHeadless,
+} from '../utils/browserAntiDetection.js';
 import {rm} from 'fs/promises';
 import {dirname, join} from 'path';
 import {fileURLToPath} from 'url';
@@ -15,8 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 // 获取当前目录的绝对路径
 const __dirname = dirname(__filename);
 
-// 使用 Stealth 插件来避免反爬虫检测
-puppeteer.use(StealthPlugin());
+const puppeteer = getStealthPuppeteer();
 
 let browser;
 let loginPage; // 登录页面
@@ -61,71 +64,24 @@ const selectors = {
 // Insightrackr 网站登录地址
 const loginPageUrl = 'https://data.insightrackr.com/login';
 const checkLoginUrl = 'https://data.insightrackr.com/login';
+const creativeMaterialUrl = 'https://data.insightrackr.com/creative/material';
 
-// 配置页面的反检测措施
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// 配置页面的反检测措施（统一模块：stealth + 固定 UA/时区/语言）
 async function setupAntiDetection(page) {
-    // 1. 覆盖 WebDriver 属性
-    await page.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        });
-        
-        // 覆盖 chrome 属性
-        window.chrome = {
-            runtime: {},
-            loadTimes: function() {},
-            csi: function() {},
-            app: {}
-        };
-        
-        // 覆盖 plugins
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [1, 2, 3, 4, 5]
-        });
-        
-        // 覆盖 languages
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['zh-CN', 'zh', 'en']
-        });
-    });
-    
-    // 2. 设置更真实的 User-Agent
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    
-    // 3. 设置视口
-    await page.setViewport({
-        width: 1920,
-        height: 1080,
-        deviceScaleFactor: 1,
-        hasTouch: false,
-        isLandscape: true,
-        isMobile: false
-    });
-    
-    // 4. 添加额外的头部信息
-    await page.setExtraHTTPHeaders({
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-        'Upgrade-Insecure-Requests': '1',
-        'Connection': 'keep-alive',
-        'Cache-Control': 'max-age=0'
-    });
-    
-    // 5. 模拟人类行为：随机延迟和鼠标移动
+    await applyPageAntiDetection(page);
+
     page.on('load', async () => {
-        // 随机延迟
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
-        
-        // 随机鼠标移动
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * 1000 + 500));
         try {
             await page.mouse.move(
                 Math.random() * 800 + 100,
                 Math.random() * 600 + 100,
                 { steps: 10 }
             );
-        } catch (e) {
-            // 忽略鼠标移动错误
+        } catch {
+            /* ignore */
         }
     });
 }
@@ -152,7 +108,7 @@ function buildInsightrackrFallbackLaunchOptions() {
         '--no-default-browser-check',
     ];
     const out = {
-        headless: opt.headless !== undefined ? opt.headless : process.env.NODE_ENV === 'production',
+        headless: opt.headless !== undefined ? opt.headless : resolveStealthHeadless(true),
         userDataDir: opt.userDataDir,
         executablePath,
         args: minimalArgs,
@@ -227,7 +183,7 @@ export const initializeBrowser = async () => {
             logger.info('已启用 Chrome 远程调试端口（Insightrackr）:', debugPort);
         }
         logger.info('尝试启动浏览器，配置:', JSON.stringify(launchOpts, null, 2));
-        browser = await puppeteer.launch(launchOpts);
+        browser = await puppeteer.launch(enhanceLaunchOptions(launchOpts));
         
         // 验证浏览器连接是否正常
         try {
@@ -252,7 +208,7 @@ export const initializeBrowser = async () => {
             await new Promise((r) => setTimeout(r, 400));
             const fallbackOpts = buildInsightrackrFallbackLaunchOptions();
             logger.info('尝试使用兜底配置启动浏览器:', JSON.stringify(fallbackOpts, null, 2));
-            browser = await puppeteer.launch(fallbackOpts);
+            browser = await puppeteer.launch(enhanceLaunchOptions(fallbackOpts));
 
             try {
                 await browser.version();
@@ -374,6 +330,117 @@ const closeOtherPages = async (keepPage) => {
     }
 };
 
+/** 登录流程进行中时，API 请求需等待，避免 evaluate 时 Frame 已分离 */
+let loginSessionBusy = false;
+let loginPageOperationQueue = Promise.resolve();
+
+export async function waitForLoginSessionIdle(timeoutMs = 120000) {
+    const start = Date.now();
+    while (loginSessionBusy) {
+        if (Date.now() - start > timeoutMs) {
+            throw new Error('等待 Insightrackr 登录完成超时');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+}
+
+function setLoginSessionBusy(value) {
+    loginSessionBusy = value;
+}
+
+async function withLoginPageOperation(action) {
+    const previous = loginPageOperationQueue.catch(() => {});
+    let release;
+    loginPageOperationQueue = new Promise((resolve) => {
+        release = resolve;
+    });
+    await previous;
+    try {
+        return await action();
+    } finally {
+        release();
+    }
+}
+
+function isDetachedFrameError(error) {
+    const msg = error?.message || String(error);
+    return msg.includes('detached Frame') || msg.includes('Execution context was destroyed');
+}
+
+async function recreateLoginPageAfterDetachedFrame(stalePage) {
+    logger.warn('热云登录页上下文已失效，正在重建登录页');
+    if (!browser || !(await checkBrowserConnection())) {
+        await initializeBrowser();
+    }
+    if (!browser) {
+        throw new Error('浏览器未初始化，请重新登录');
+    }
+
+    try {
+        if (stalePage && !stalePage.isClosed()) {
+            await stalePage.close().catch(() => {});
+        }
+    } catch {
+        // ignore
+    }
+
+    const page = await browser.newPage();
+    await setupAntiDetection(page);
+    await page.goto(creativeMaterialUrl, {
+        timeout: 120 * 1000,
+        waitUntil: 'domcontentloaded',
+    });
+    await delay(1200);
+    loginPage = page;
+
+    const currentUrl = page.url();
+    if (currentUrl.includes('/login')) {
+        status.update(LoginStatus.LOGGED_OUT);
+        throw new Error('热云登录已失效，请重新登录');
+    }
+
+    status.update(LoginStatus.ONLINE);
+    return page;
+}
+
+async function safeLoginPageEvaluate(pageFn, ...args) {
+    return withLoginPageOperation(async () => {
+        const maxRetries = 4;
+        for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+            await waitForLoginSessionIdle();
+            const page = loginPage;
+            if (!page || page.isClosed()) {
+                throw new Error('登录页面不可用，请重新登录');
+            }
+            try {
+                return await page.evaluate(pageFn, ...args);
+            } catch (error) {
+                if (isDetachedFrameError(error) && attempt < maxRetries - 1) {
+                    logger.warn(`登录页 Frame 已分离，重建页面后重试 ${attempt + 1}/${maxRetries}`);
+                    await recreateLoginPageAfterDetachedFrame(page);
+                    await delay(600 + attempt * 400);
+                    continue;
+                }
+                throw error;
+            }
+        }
+        throw new Error('登录页面 evaluate 失败');
+    });
+}
+
+async function settleLoginPageOnCreativeMaterial(page) {
+    if (!page || page.isClosed()) return;
+    try {
+        const target = creativeMaterialUrl;
+        if (!page.url().includes('/creative/material')) {
+            await page.goto(target, { timeout: 120 * 1000, waitUntil: 'domcontentloaded' });
+        }
+        await delay(1200);
+    } catch (e) {
+        logger.warn('登录后稳定在 creative/material 失败:', e.message);
+    }
+}
+
 // 检查浏览器连接状态
 const checkBrowserConnection = async () => {
     if (!browser) {
@@ -404,7 +471,23 @@ const checkBrowserConnection = async () => {
 export const login = async (email, password) => {
     console.log('Insightrackr 登录');
     logger.info('========== 开始登录流程 ==========');
-    
+    setLoginSessionBusy(true);
+
+    const loginEmail = email || process.env.INSIGHTRACKR_EMAIL || '';
+    const loginPassword = password || process.env.INSIGHTRACKR_PASSWORD || '';
+
+    if (!loginEmail || !loginPassword) {
+        setLoginSessionBusy(false);
+        return {
+            data: null,
+            success: false,
+            code: 'MISSING_CREDENTIALS',
+            message: '缺少登录凭据，请提供邮箱和密码',
+        };
+    }
+
+    let page;
+    try {
     // 检查浏览器连接状态，如果未初始化或连接已断开，则重新初始化
     logger.info('检查浏览器连接状态...');
     const isConnected = await checkBrowserConnection();
@@ -429,10 +512,14 @@ export const login = async (email, password) => {
     
     // 先检查是否已经登录：访问 creative/material 页面
     logger.info('登录前检查：访问 creative/material 页面检查登录状态');
-    let page;
     try {
-        page = await browser.newPage();
-        await setupAntiDetection(page);
+        if (loginPage && !loginPage.isClosed()) {
+            page = loginPage;
+            logger.info('登录前检查：复用已有登录页');
+        } else {
+            page = await browser.newPage();
+            await setupAntiDetection(page);
+        }
         
         // 访问 creative/material 页面
         await page.goto('https://data.insightrackr.com/creative/material', {
@@ -441,7 +528,7 @@ export const login = async (email, password) => {
         });
         
         // 短暂等待重定向完成
-        await page.waitForTimeout(800);
+        await delay(800);
         
         const checkUrl = page.url();
         logger.info('登录前检查 - 当前页面URL:', checkUrl);
@@ -462,6 +549,7 @@ export const login = async (email, password) => {
                 logger.error('保存 cookies 失败:', e.message);
             }
 
+            await settleLoginPageOnCreativeMaterial(page);
             await closeOtherPages(page);
             return {
                 data: {
@@ -481,7 +569,7 @@ export const login = async (email, password) => {
     } catch (error) {
         logger.error('登录前检查失败:', error);
         // 如果检查失败，关闭页面并继续登录流程
-        if (page && !page.isClosed()) {
+        if (page && !page.isClosed() && page !== loginPage) {
             try {
                 await page.close();
             } catch (closeError) {
@@ -490,19 +578,6 @@ export const login = async (email, password) => {
         }
         page = null;
         // 继续登录流程，创建新页面
-    }
-
-    // 使用环境变量或传入的参数
-    const loginEmail = email || process.env.INSIGHTRACKR_EMAIL || '';
-    const loginPassword = password || process.env.INSIGHTRACKR_PASSWORD || '';
-
-    if (!loginEmail || !loginPassword) {
-        return {
-            data: null,
-            success: false,
-            code: 'MISSING_CREDENTIALS',
-            message: '缺少登录凭据，请提供邮箱和密码'
-        };
     }
 
     // 在创建页面前再次检查浏览器连接，最多重试3次
@@ -914,7 +989,8 @@ export const login = async (email, password) => {
             
             // 保存邮箱
             loginInfo.email = loginEmail;
-            
+
+            await settleLoginPageOnCreativeMaterial(page);
             loginPage = page; // 保存登录页面，不关闭
             status.update(LoginStatus.ONLINE);
             await closeOtherPages(page);
@@ -936,7 +1012,7 @@ export const login = async (email, password) => {
                     timeout: 120 * 1000,
                     waitUntil: 'domcontentloaded',
                 });
-                await page.waitForTimeout(1500);
+                await delay(1500);
 
                 const finalUrl = page.url();
                 logger.info('最终确认URL:', finalUrl);
@@ -957,6 +1033,7 @@ export const login = async (email, password) => {
                         logger.error('保存 cookies 失败:', e.message);
                     }
 
+                    await settleLoginPageOnCreativeMaterial(page);
                     await closeOtherPages(page);
                     return {
                         data: {
@@ -989,21 +1066,26 @@ export const login = async (email, password) => {
         }
     } catch (error) {
         logger.error('登录过程发生错误:', error);
-        // 关闭页面，避免资源泄漏
-        if (page && !page.isClosed()) {
+        // 已成功写入 loginPage 时不要关闭页面
+        if (page && !page.isClosed() && loginPage !== page && status.current !== LoginStatus.ONLINE) {
             try {
                 await page.close();
             } catch (closeError) {
                 logger.warn('关闭页面失败:', closeError.message);
             }
         }
-        status.update(LoginStatus.LOGGED_OUT);
+        if (status.current !== LoginStatus.ONLINE) {
+            status.update(LoginStatus.LOGGED_OUT);
+        }
         return {
             data: null,
             success: false,
             code: 'LOGIN_ERROR',
             message: `登录失败: ${error.message}`
         };
+    }
+    } finally {
+        setLoginSessionBusy(false);
     }
 };
 
@@ -1013,32 +1095,34 @@ export const checkLoginStatus = async () => {
         status.update(LoginStatus.LOGGED_OUT);
         return;
     }
-    if (!loginPage || loginPage.isClosed()) {
-        // 无可用登录页时不做校验，不覆盖当前 status（避免误判）
-        return;
-    }
-    const page = loginPage;
-    try {
-        const targetUrl = 'https://data.insightrackr.com/creative/material';
-        logger.info('检查登录状态：使用登录页访问', targetUrl);
-        await page.goto(targetUrl, {
-            timeout: 120 * 1000,
-            waitUntil: 'domcontentloaded',
-        });
-        await page.waitForTimeout(2000);
-        const curPageUrl = page.url();
-        logger.info('当前页面URL:', curPageUrl);
-        if (curPageUrl.includes('/login')) {
-            logger.info('检测到跳转到登录页，状态：未登录');
-            status.update(LoginStatus.LOGGED_OUT);
-        } else {
-            logger.info('未跳转到登录页，状态：已登录');
-            status.update(LoginStatus.ONLINE);
+    return withLoginPageOperation(async () => {
+        if (!loginPage || loginPage.isClosed()) {
+            // 无可用登录页时不做校验，不覆盖当前 status（避免误判）
+            return;
         }
-    } catch (error) {
-        logger.error('检查登录状态失败:', error);
-        // 校验异常时不强制改为 LOGGED_OUT，保持当前状态
-    }
+        const page = loginPage;
+        try {
+            const targetUrl = creativeMaterialUrl;
+            logger.info('检查登录状态：使用登录页访问', targetUrl);
+            await page.goto(targetUrl, {
+                timeout: 120 * 1000,
+                waitUntil: 'domcontentloaded',
+            });
+            await delay(2000);
+            const curPageUrl = page.url();
+            logger.info('当前页面URL:', curPageUrl);
+            if (curPageUrl.includes('/login')) {
+                logger.info('检测到跳转到登录页，状态：未登录');
+                status.update(LoginStatus.LOGGED_OUT);
+            } else {
+                logger.info('未跳转到登录页，状态：已登录');
+                status.update(LoginStatus.ONLINE);
+            }
+        } catch (error) {
+            logger.error('检查登录状态失败:', error);
+            // 校验异常时不强制改为 LOGGED_OUT，保持当前状态
+        }
+    });
 };
 
 // 获取登录信息（cookies 和 authorization）
@@ -1186,6 +1270,7 @@ const buildOrderedRequestBody = (body) => {
 
 // 请求数据接口
 export const fetchSearchData = async (searchParams = {}, isInit = false) => {
+    await waitForLoginSessionIdle();
     // 如果没有登录页面，尝试获取或创建页面
     if (!loginPage || loginPage.isClosed()) {
         logger.info('登录页面不存在或已关闭，尝试创建新页面');
@@ -1207,7 +1292,7 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
                 timeout: 120 * 1000,
                 waitUntil: 'domcontentloaded',
             });
-            await loginPage.waitForTimeout(2000);
+            await delay(2000);
             logger.info('已创建新页面并访问 creative/material');
         } catch (error) {
             logger.error('创建登录页面失败:', error);
@@ -1288,7 +1373,7 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
         if (!authorizationToken) {
             try {
                 // 方法1: 从 localStorage/sessionStorage 获取
-                const storageToken = await loginPage.evaluate(() => {
+                const storageToken = await safeLoginPageEvaluate(() => {
                     // 尝试多种可能的 key
                     const keys = ['authorization', 'token', 'authToken', 'accessToken', 'bearerToken', 'Authorization'];
                     for (const key of keys) {
@@ -1312,11 +1397,18 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
         if (!authorizationToken) {
             try {
                 logger.info('尝试通过导航到搜索页面获取 authorization token');
-                const token = await new Promise((resolve) => {
+                const token = await withLoginPageOperation(async () => {
+                    await waitForLoginSessionIdle();
+                    const page = loginPage;
+                    if (!page || page.isClosed()) {
+                        throw new Error('登录页面不可用，请重新登录');
+                    }
+                    return new Promise((resolve) => {
                     let resolved = false;
                     const timeout = setTimeout(() => {
                         if (!resolved) {
                             resolved = true;
+                            page.off('request', requestHandler);
                             resolve(null);
                         }
                     }, 10000);
@@ -1331,7 +1423,7 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
                             if (url.includes('/cas/api/v2/imagevideo/search') && authHeader) {
                                 resolved = true;
                                 clearTimeout(timeout);
-                                loginPage.off('request', requestHandler);
+                                page.off('request', requestHandler);
                                 
                                 // 同时获取 ECF07FD99F7847C0 header（设备标识符）
                                 const deviceId = headers['ECF07FD99F7847C0'] || headers['ecf07fd99f7847c0'];
@@ -1345,15 +1437,16 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
                         }
                     };
                     
-                    loginPage.on('request', requestHandler);
+                    page.on('request', requestHandler);
                     
                     // 导航到搜索页面，这会触发实际的 API 请求
                     const keyword = requestBody.keyWord;
-                    loginPage.goto(`https://data.insightrackr.com/search/material?keyWord=${encodeURIComponent(keyword)}&gpt=1`, {
+                    page.goto(`https://data.insightrackr.com/search/material?keyWord=${encodeURIComponent(keyword)}&gpt=1`, {
                         waitUntil: 'networkidle2',
                         timeout: 30000
                     }).catch(() => {
                         // 即使导航失败，也继续等待请求
+                    });
                     });
                 });
                 
@@ -1408,7 +1501,7 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
         logger.info('实际请求 Body:', JSON.stringify(bodyToSend, null, 2));
         
         // 使用 Puppeteer 页面发送请求，手动添加 authorization header
-        const response = await loginPage.evaluate(async (body, authToken, isInitRequest, headers, url) => {
+        const response = await safeLoginPageEvaluate(async (body, authToken, isInitRequest, headers, url) => {
             try {
                 // 如果有 authorization token，添加到请求头
                 if (authToken) {
@@ -1480,11 +1573,18 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
             
             // 尝试从页面的实际请求中拦截获取
             try {
-                const newToken = await new Promise((resolve) => {
+                const newToken = await withLoginPageOperation(async () => {
+                    await waitForLoginSessionIdle();
+                    const page = loginPage;
+                    if (!page || page.isClosed()) {
+                        throw new Error('登录页面不可用，请重新登录');
+                    }
+                    return new Promise((resolve) => {
                     let resolved = false;
                     const timeout = setTimeout(() => {
                         if (!resolved) {
                             resolved = true;
+                            page.off('response', responseHandler);
                             resolve(null);
                         }
                     }, 10000);
@@ -1497,19 +1597,20 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
                             if (authHeader) {
                                 resolved = true;
                                 clearTimeout(timeout);
-                                loginPage.off('response', responseHandler);
+                                page.off('response', responseHandler);
                                 resolve(authHeader);
                             }
                         }
                     };
                     
-                    loginPage.on('response', responseHandler);
+                    page.on('response', responseHandler);
                     
                     // 导航到搜索页面，触发实际的 API 请求
-                    loginPage.goto('https://data.insightrackr.com/search/material?keyWord=' + encodeURIComponent(requestBody.keyWord) + '&gpt=1', {
+                    page.goto('https://data.insightrackr.com/search/material?keyWord=' + encodeURIComponent(requestBody.keyWord) + '&gpt=1', {
                         waitUntil: 'networkidle2',
                         timeout: 30000
                     }).catch(() => {});
+                    });
                 });
                 
                 if (newToken) {
@@ -1525,7 +1626,7 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
                     console.log('Body:', JSON.stringify(bodyToSend, null, 2));
                     console.log('===============================================\n');
                     
-                    const retryResponse = await loginPage.evaluate(async (body, authToken, isInitRequest, headers, url) => {
+                    const retryResponse = await safeLoginPageEvaluate(async (body, authToken, isInitRequest, headers, url) => {
                         try {
                             // 如果有 authorization token，添加到请求头
                             if (authToken) {
@@ -1614,6 +1715,7 @@ export const fetchSearchData = async (searchParams = {}, isInit = false) => {
 
 // 获取数据总数（count 接口）
 export const fetchCountData = async (searchParams = {}) => {
+    await waitForLoginSessionIdle();
     // 如果没有登录页面，尝试获取或创建页面
     if (!loginPage || loginPage.isClosed()) {
         logger.info('登录页面不存在或已关闭，尝试创建新页面');
@@ -1635,7 +1737,7 @@ export const fetchCountData = async (searchParams = {}) => {
                 timeout: 120 * 1000,
                 waitUntil: 'domcontentloaded',
             });
-            await loginPage.waitForTimeout(2000);
+            await delay(2000);
             logger.info('已创建新页面并访问 creative/material');
         } catch (error) {
             logger.error('创建登录页面失败:', error);
@@ -1713,7 +1815,7 @@ export const fetchCountData = async (searchParams = {}) => {
         // 如果还没有 token，尝试从页面获取
         if (!authorizationToken) {
             try {
-                const storageToken = await loginPage.evaluate(() => {
+                const storageToken = await safeLoginPageEvaluate(() => {
                     const keys = ['authorization', 'token', 'authToken', 'accessToken', 'bearerToken', 'Authorization'];
                     for (const key of keys) {
                         const value = localStorage.getItem(key) || sessionStorage.getItem(key);
@@ -1769,7 +1871,7 @@ export const fetchCountData = async (searchParams = {}) => {
         logger.info('Count 实际请求 Body:', JSON.stringify(countBodyToSend, null, 2));
         
         // 使用 Puppeteer 页面发送请求
-        const response = await loginPage.evaluate(async (body, authToken, headers, url) => {
+        const response = await safeLoginPageEvaluate(async (body, authToken, headers, url) => {
             try {
                 if (authToken) {
                     headers['Authorization'] = authToken;
@@ -1878,6 +1980,7 @@ function buildDistributeRequestBody(searchParams = {}, ids = []) {
 
 // 请求流量分布渠道（distribute/media）
 export const fetchDistributeMedia = async (searchParams = {}, ids = []) => {
+    await waitForLoginSessionIdle();
     if (!loginPage || loginPage.isClosed()) {
         logger.info('登录页面不存在或已关闭，无法请求 distribute/media');
         return {
@@ -1895,7 +1998,7 @@ export const fetchDistributeMedia = async (searchParams = {}, ids = []) => {
         let authorizationToken = loginInfo.authorization;
         if (!authorizationToken) {
             try {
-                const storageToken = await loginPage.evaluate(() => {
+                const storageToken = await safeLoginPageEvaluate(() => {
                     const keys = ['authorization', 'token', 'authToken', 'accessToken', 'bearerToken', 'Authorization'];
                     for (const key of keys) {
                         const value = localStorage.getItem(key) || sessionStorage.getItem(key);
@@ -1931,7 +2034,7 @@ export const fetchDistributeMedia = async (searchParams = {}, ids = []) => {
         if (authorizationToken) {
             requestHeaders['Authorization'] = authorizationToken;
         }
-        const response = await loginPage.evaluate(async (body, authToken, headers, url) => {
+        const response = await safeLoginPageEvaluate(async (body, authToken, headers, url) => {
             try {
                 if (authToken) headers['Authorization'] = authToken;
                 const res = await fetch(url, {
@@ -1977,6 +2080,7 @@ function getDistributePathAndReferer(searchParams, resource) {
 
 // 请求广告发行商/App 信息（distribute/app）
 export const fetchDistributeApp = async (searchParams = {}, ids = []) => {
+    await waitForLoginSessionIdle();
     if (!loginPage || loginPage.isClosed()) {
         logger.info('登录页面不存在或已关闭，无法请求 distribute/app');
         return {
@@ -1994,7 +2098,7 @@ export const fetchDistributeApp = async (searchParams = {}, ids = []) => {
         let authorizationToken = loginInfo.authorization;
         if (!authorizationToken) {
             try {
-                const storageToken = await loginPage.evaluate(() => {
+                const storageToken = await safeLoginPageEvaluate(() => {
                     const keys = ['authorization', 'token', 'authToken', 'accessToken', 'bearerToken', 'Authorization'];
                     for (const key of keys) {
                         const value = localStorage.getItem(key) || sessionStorage.getItem(key);
@@ -2030,7 +2134,7 @@ export const fetchDistributeApp = async (searchParams = {}, ids = []) => {
         if (authorizationToken) {
             requestHeaders['Authorization'] = authorizationToken;
         }
-        const response = await loginPage.evaluate(async (body, authToken, headers, url) => {
+        const response = await safeLoginPageEvaluate(async (body, authToken, headers, url) => {
             try {
                 if (authToken) headers['Authorization'] = authToken;
                 const res = await fetch(url, {
@@ -2068,6 +2172,7 @@ export const fetchDistributeApp = async (searchParams = {}, ids = []) => {
 
 // 请求行动号召分布（distribute/adfaction）- 试玩广告用 preplay，图片和视频用 imagevideo
 export const fetchDistributeAdfaction = async (searchParams = {}, ids = []) => {
+    await waitForLoginSessionIdle();
     if (!loginPage || loginPage.isClosed()) {
         logger.info('登录页面不存在或已关闭，无法请求 distribute/adfaction');
         return {
@@ -2085,7 +2190,7 @@ export const fetchDistributeAdfaction = async (searchParams = {}, ids = []) => {
         let authorizationToken = loginInfo.authorization;
         if (!authorizationToken) {
             try {
-                const storageToken = await loginPage.evaluate(() => {
+                const storageToken = await safeLoginPageEvaluate(() => {
                     const keys = ['authorization', 'token', 'authToken', 'accessToken', 'bearerToken', 'Authorization'];
                     for (const key of keys) {
                         const value = localStorage.getItem(key) || sessionStorage.getItem(key);
@@ -2120,7 +2225,7 @@ export const fetchDistributeAdfaction = async (searchParams = {}, ids = []) => {
         if (authorizationToken) {
             requestHeaders['Authorization'] = authorizationToken;
         }
-        const response = await loginPage.evaluate(async (body, authToken, headers, url) => {
+        const response = await safeLoginPageEvaluate(async (body, authToken, headers, url) => {
             try {
                 if (authToken) headers['Authorization'] = authToken;
                 const res = await fetch(url, {
@@ -2160,6 +2265,7 @@ export const fetchDistributeAdfaction = async (searchParams = {}, ids = []) => {
 const DEFAULT_SEARCH_GLOBAL_BASE_OPTION = { sortField: '3', sortRule: 'desc', dayMode: 'ALL', gptSearch: false };
 
 export const fetchSearchGlobal = async (keyWord = '', searchType = '1', baseOption) => {
+    await waitForLoginSessionIdle();
     if (!loginPage || loginPage.isClosed()) {
         return {
             data: null,
@@ -2176,7 +2282,7 @@ export const fetchSearchGlobal = async (keyWord = '', searchType = '1', baseOpti
         let authorizationToken = loginInfo.authorization;
         if (!authorizationToken) {
             try {
-                const storageToken = await loginPage.evaluate(() => {
+                const storageToken = await safeLoginPageEvaluate(() => {
                     const keys = ['authorization', 'token', 'authToken', 'accessToken', 'bearerToken', 'Authorization'];
                     for (const key of keys) {
                         const value = localStorage.getItem(key) || sessionStorage.getItem(key);
@@ -2216,7 +2322,7 @@ export const fetchSearchGlobal = async (keyWord = '', searchType = '1', baseOpti
         if (authorizationToken) {
             requestHeaders['Authorization'] = authorizationToken;
         }
-        const response = await loginPage.evaluate(async (body, authToken, headers, url) => {
+        const response = await safeLoginPageEvaluate(async (body, authToken, headers, url) => {
             try {
                 if (authToken) headers['Authorization'] = authToken;
                 const res = await fetch(url, {
@@ -2796,4 +2902,3 @@ export const executeBrowserAction = async (action) => {
         };
     }
 };
-

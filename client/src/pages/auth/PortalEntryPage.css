@@ -1,0 +1,49 @@
+.portal-entry-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f0f2f5;
+}
+
+.portal-entry-page__card {
+  max-width: 440px;
+  width: 100%;
+  background: #fff;
+  border-radius: 12px;
+  padding: 40px 32px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.portal-entry-page__title {
+  margin: 16px 0 12px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.portal-entry-page__desc {
+  margin: 0 0 24px;
+  color: #424242;
+  line-height: 1.6;
+}
+
+.portal-entry-page__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.portal-entry-page__hint {
+  margin-top: 20px;
+  font-size: 13px;
+  color: #616161;
+  line-height: 1.5;
+}
+
+.portal-entry-page__hint a {
+  color: #1565c0;
+  margin-left: 4px;
+}

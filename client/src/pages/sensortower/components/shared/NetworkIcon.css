@@ -1,0 +1,6 @@
+.st-network-icon {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 2px;
+}

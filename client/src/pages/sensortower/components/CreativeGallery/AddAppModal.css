@@ -133,8 +133,17 @@
   cursor: pointer;
 }
 
-.st-add-app-row:hover {
+.st-add-app-row:hover:not(:disabled) {
   background: #f5faf9;
+}
+
+.st-add-app-row--selecting {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.st-add-app-row:disabled {
+  cursor: wait;
 }
 
 .st-add-app-row__stores {
@@ -153,12 +162,11 @@
 }
 
 .st-add-app-row__store-icon {
-  font-size: 0.75rem;
   color: #455a64;
 }
 
 .st-add-app-row__store-icon--gp {
-  font-size: 0.55rem;
+  color: #2e7d32;
 }
 
 .st-add-app-row__icon {
@@ -203,6 +211,11 @@
   font-size: 0.78rem;
   color: #455a64;
   white-space: nowrap;
+}
+
+.st-add-app-row__metric--loading {
+  color: #546e7a;
+  font-style: italic;
 }
 
 .st-add-app-row__metric {

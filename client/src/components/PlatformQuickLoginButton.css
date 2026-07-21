@@ -1,0 +1,27 @@
+.platform-quick-login__btn {
+  min-width: 92px;
+  height: 30px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.platform-quick-login__btn--online {
+  max-width: 220px;
+  color: #1677ff;
+  background: rgba(22, 119, 255, 0.08);
+}
+
+.platform-quick-login__btn--online > span:not(.ant-btn-icon) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.platform-quick-login__btn.ant-btn-primary {
+  color: #fff;
+  font-weight: 500;
+}
+
+.platform-quick-login__btn.ant-btn-primary .ant-btn-icon,
+.platform-quick-login__btn.ant-btn-primary > span:not(.ant-btn-icon) {
+  color: #fff;
+}

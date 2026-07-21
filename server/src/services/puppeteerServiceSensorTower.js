@@ -1,6 +1,10 @@
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { puppeteerOptionsSensorTower, REPO_ROOT, chromeLaunchArgs } from '../config.js';
+import {
+  applyPageAntiDetection,
+  enhanceLaunchOptions,
+  getStealthPuppeteer,
+  resolveStealthHeadless,
+} from '../utils/browserAntiDetection.js';
 import fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import path from 'path';
@@ -12,7 +16,7 @@ import {
     prepareChromeUserDataDirForLaunch,
 } from '../utils/removeChromeUserDataSingletonLocks.js';
 
-puppeteer.use(StealthPlugin());
+const puppeteer = getStealthPuppeteer();
 
 const SENSORTOWER_APP_ORIGIN = 'https://app.sensortower-china.com';
 const SENSOR_TOWER_LOCALE = 'zh-CN';
@@ -50,6 +54,14 @@ const IMPRESSION_SHARE_QUERY_IDS = new Set([
     'impression_share_chart',
     'impression_share_table',
 ]);
+const SENSOR_TOWER_API_FETCH_TIMEOUT_MS = Math.max(
+    5000,
+    parseInt(process.env.SENSORTOWER_API_FETCH_TIMEOUT_MS || '30000', 10) || 30000
+);
+const SENSOR_TOWER_PAGE_PREPARE_TIMEOUT_MS = Math.max(
+    8000,
+    parseInt(process.env.SENSORTOWER_PAGE_PREPARE_TIMEOUT_MS || '30000', 10) || 30000
+);
 
 function isImpressionShareQueryId(queryIdentifier) {
     return IMPRESSION_SHARE_QUERY_IDS.has(String(queryIdentifier || '').trim());
@@ -78,7 +90,6 @@ let loginPage;
 let initializeBrowserPromise = null;
 /** 最近一次启动浏览器失败原因，便于接口返回与排查 */
 let lastSensorTowerLaunchError = null;
-let lastPassiveDetectAt = 0;
 
 const loginInfo = {
     cookies: null,
@@ -99,6 +110,37 @@ function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function withTimeout(promise, timeoutMs, message) {
+    let timer;
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+        }),
+    ]).finally(() => {
+        if (timer) clearTimeout(timer);
+    });
+}
+
+/** 串行化 Puppeteer 页面跳转，避免并行 search 互抢导航触发 ERR_ABORTED */
+let sensorTowerNavigationChain = Promise.resolve();
+
+function runSerializedSensorTowerNavigation(task) {
+    const next = sensorTowerNavigationChain.then(() => task());
+    sensorTowerNavigationChain = next.catch(() => {});
+    return next;
+}
+
+function isErrAbortedError(err) {
+    return /ERR_ABORTED/i.test(String(err?.message || err));
+}
+
+function isSameSensorTowerPathname(urlA, urlB) {
+    const a = parseUrlSafe(urlA);
+    const b = parseUrlSafe(urlB);
+    return !!(a && b && isSensorTowerAppHostname(a.hostname) && a.pathname === b.pathname);
+}
+
 const SESSION_SNAPSHOT_DIR = path.join(REPO_ROOT, 'tmp', 'sensortower');
 const SESSION_SNAPSHOT_FILE = path.join(SESSION_SNAPSHOT_DIR, 'session-snapshot.json');
 
@@ -111,6 +153,7 @@ function attachSensorTowerLocaleGuard(page) {
 
     page.on('framenavigated', async (frame) => {
         if (frame !== page.mainFrame() || fixing || page.isClosed()) return;
+        if (page._stNavigating) return;
         if (localeFixCount >= MAX_LOCALE_FIX) return;
         try {
             const raw = frame.url();
@@ -132,30 +175,39 @@ async function gotoSensorTowerPage(page, url, options = {}) {
     const target = withSensorTowerLocale(url);
     const timeout = options.timeout ?? 120000;
     const waitUntil = options.waitUntil ?? 'domcontentloaded';
+
+    const attemptGoto = async (waitMode) => {
+        page._stNavigating = true;
+        try {
+            await page.goto(target, { timeout, waitUntil: waitMode });
+        } finally {
+            page._stNavigating = false;
+        }
+        return page.url();
+    };
+
     try {
-        await page.goto(target, { timeout, waitUntil });
+        return await attemptGoto(waitUntil);
     } catch (e) {
+        const cur = page.url();
+        if (isErrAbortedError(e) && isSameSensorTowerPathname(cur, target)) {
+            return cur;
+        }
         if (!options.fallbackWaitUntil) throw e;
-        await page.goto(target, { timeout, waitUntil: options.fallbackWaitUntil });
+        try {
+            return await attemptGoto(options.fallbackWaitUntil);
+        } catch (e2) {
+            const cur2 = page.url();
+            if (isErrAbortedError(e2) && isSameSensorTowerPathname(cur2, target)) {
+                return cur2;
+            }
+            throw e2;
+        }
     }
-    return page.url();
 }
 
 async function setupAntiDetection(page) {
-    await page.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        window.chrome = { runtime: {}, loadTimes: function () {}, csi: function () {}, app: {} };
-        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-        Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] });
-    });
-    await page.setUserAgent(
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
-    await page.setViewport({ width: 1920, height: 1080, deviceScaleFactor: 1 });
-    await page.setExtraHTTPHeaders({
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Upgrade-Insecure-Requests': '1',
-    });
+    await applyPageAntiDetection(page);
     attachSensorTowerLocaleGuard(page);
     attachCsrfCapture(page);
 }
@@ -219,7 +271,7 @@ function buildSensorTowerFallbackLaunchOptions() {
         executablePath = resolveChromeExecutablePath();
     }
     const out = {
-        headless: opt.headless !== undefined ? opt.headless : process.env.NODE_ENV === 'production',
+        headless: opt.headless !== undefined ? opt.headless : resolveStealthHeadless(true),
         userDataDir: opt.userDataDir,
         executablePath,
         args: chromeLaunchArgs([
@@ -327,7 +379,7 @@ async function doInitializeSensorTowerBrowser() {
             }
             let launchOpts = attempts[i].build();
             launchOpts = attachSensorTowerDebugPort(launchOpts);
-            browser = await puppeteer.launch(launchOpts);
+            browser = await puppeteer.launch(enhanceLaunchOptions(launchOpts));
             await browser.version();
             await afterSensorTowerBrowserLaunched();
             logger.info(`[Sensor Tower] 浏览器已启动（${attempts[i].name}，第 ${i + 1}/${attempts.length} 种配置）`);
@@ -748,6 +800,36 @@ async function ensureCsrfTokenOnPage(page) {
     return resolveCsrfToken(page);
 }
 
+async function ensureCsrfTokenForImpressionShare(page) {
+    return withTimeout(
+        (async () => {
+            let token = await resolveCsrfToken(page);
+            if (token) return token;
+
+            if (!isTargetImpressionShareUrl(page.url())) {
+                await runSerializedSensorTowerNavigation(async () => {
+                    await gotoImpressionSharePage(page);
+                });
+            } else {
+                await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+                await delay(600);
+            }
+
+            token = await resolveCsrfToken(page);
+            if (token) return token;
+
+            await fetchSensorTowerApi(page, {
+                method: 'GET',
+                endpoint: '/api/unified/recently_used_applications',
+                skipCsrfEnsure: true,
+            });
+            return resolveCsrfToken(page);
+        })(),
+        SENSOR_TOWER_PAGE_PREPARE_TIMEOUT_MS,
+        'Sensor Tower 展示份额页面准备超时，未能获取 x-csrf-token'
+    );
+}
+
 /**
  * 进入创意库并等待页面注入 CSRF（官方 POST /api/creatives/facets 须带 x-csrf-token）
  */
@@ -790,12 +872,18 @@ async function ensureCsrfTokenReady(page) {
 const UNIFIED_APP_ID_RE = /^[a-f0-9]{24}$/i;
 
 async function evaluateSensorTowerFetch(page, { method, endpoint, body, csrfToken }) {
-    return page.evaluate(
-        async ({ methodArg, endpointArg, bodyArg, csrfTokenArg }) => {
+    const referer = page.url();
+    return withTimeout(
+        page.evaluate(
+        async ({ methodArg, endpointArg, bodyArg, csrfTokenArg, refererArg, timeoutMsArg }) => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMsArg);
             try {
                 const headers = {
-                    accept: '*/*',
+                    accept: 'application/json, text/plain, */*',
                     'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                    'x-requested-with': 'XMLHttpRequest',
+                    referer: refererArg,
                 };
                 if (bodyArg) headers['content-type'] = 'application/json';
                 if (csrfTokenArg) headers['x-csrf-token'] = csrfTokenArg;
@@ -804,6 +892,7 @@ async function evaluateSensorTowerFetch(page, { method, endpoint, body, csrfToke
                     credentials: 'include',
                     headers,
                     body: bodyArg ? JSON.stringify(bodyArg) : undefined,
+                    signal: controller.signal,
                 });
                 const text = await r.text();
                 let json = null;
@@ -829,6 +918,8 @@ async function evaluateSensorTowerFetch(page, { method, endpoint, body, csrfToke
                     endpoint: endpointArg,
                     responseCsrf: '',
                 };
+            } finally {
+                clearTimeout(timer);
             }
         },
         {
@@ -836,7 +927,12 @@ async function evaluateSensorTowerFetch(page, { method, endpoint, body, csrfToke
             endpointArg: endpoint,
             bodyArg: body,
             csrfTokenArg: csrfToken,
+            refererArg: referer,
+            timeoutMsArg: SENSOR_TOWER_API_FETCH_TIMEOUT_MS,
         }
+        ),
+        SENSOR_TOWER_API_FETCH_TIMEOUT_MS + 5000,
+        `Sensor Tower API 请求超时: ${endpoint}`
     );
 }
 
@@ -880,26 +976,186 @@ async function fetchSensorTowerApi(
 
 function normalizeAppSearchItem(raw) {
     if (!raw || typeof raw !== 'object') return null;
+    const item =
+        raw.entity && typeof raw.entity === 'object'
+            ? raw.entity
+            : raw.app && typeof raw.app === 'object'
+              ? raw.app
+              : raw;
+    const attrs =
+        item.attributes && typeof item.attributes === 'object' ? item.attributes : item;
     const unifiedAppId = String(
-        raw.unified_app_id ?? raw.app_id ?? raw.id ?? raw.entity_id ?? ''
+        attrs.unified_app_id ??
+            attrs.app_id ??
+            item.unified_app_id ??
+            item.app_id ??
+            item.id ??
+            item.entity_id ??
+            raw.unified_app_id ??
+            raw.id ??
+            raw.entity_id ??
+            ''
     ).trim();
     if (!UNIFIED_APP_ID_RE.test(unifiedAppId)) return null;
-    const iconRaw = raw.icon_url ?? raw.icon ?? raw.artwork_url ?? raw.app_icon_url ?? '';
+    const iconRaw =
+        attrs.icon_url ??
+        attrs.icon ??
+        item.icon_url ??
+        item.icon ??
+        item.artwork_url ??
+        item.app_icon_url ??
+        raw.icon_url ??
+        raw.icon ??
+        '';
     let iconUrl = typeof iconRaw === 'string' ? iconRaw : '';
     if (iconUrl && iconUrl.startsWith('/')) {
         iconUrl = `${SENSORTOWER_APP_ORIGIN}${iconUrl}`;
     }
     return {
         unifiedAppId,
-        name: String(raw.name ?? raw.unified_app_name ?? raw.app_name ?? raw.title ?? '').trim(),
+        name: String(
+            attrs.name ??
+                attrs.unified_app_name ??
+                item.name ??
+                item.unified_app_name ??
+                item.app_name ??
+                item.title ??
+                raw.name ??
+                ''
+        ).trim(),
         publisher: String(
-            raw.publisher_name ?? raw.publisher ?? raw.developer ?? raw.company ?? ''
+            attrs.publisher_name ??
+                attrs.publisher ??
+                item.publisher_name ??
+                item.publisher ??
+                item.developer ??
+                item.company ??
+                raw.publisher_name ??
+                ''
         ).trim(),
         iconUrl,
-        iosCount: raw.ios_app_count ?? raw.apple_app_count ?? raw.ios_count ?? null,
-        androidCount: raw.android_app_count ?? raw.google_play_app_count ?? raw.android_count ?? null,
-        downloads: raw.downloads ?? raw.downloads_humanized ?? raw.downloads_label ?? null,
-        revenue: raw.revenue ?? raw.revenue_humanized ?? raw.revenue_label ?? null,
+        iosCount: attrs.ios_app_count ?? item.ios_app_count ?? item.apple_app_count ?? item.ios_count ?? raw.ios_app_count ?? null,
+        androidCount:
+            attrs.android_app_count ??
+            item.android_app_count ??
+            item.google_play_app_count ??
+            item.android_count ??
+            raw.android_app_count ??
+            null,
+        downloads: attrs.downloads ?? item.downloads ?? item.downloads_humanized ?? item.downloads_label ?? null,
+        revenue: attrs.revenue ?? item.revenue ?? item.revenue_humanized ?? item.revenue_label ?? null,
+    };
+}
+
+function normalizeStoreVersionOnServer(raw, os) {
+    if (!raw || typeof raw !== 'object') return null;
+    const id = String(raw.id ?? raw.app_id ?? '').trim();
+    if (!id) return null;
+
+    const downloads =
+        raw.humanized_worldwide_last_month_downloads?.string ??
+        raw.humanized_worldwide_last_month_downloads?.downloads ??
+        null;
+    const revenue =
+        raw.humanized_worldwide_last_month_revenue?.string ??
+        raw.humanized_worldwide_last_month_revenue?.revenue ??
+        null;
+
+    let iconUrl = String(raw.icon_url ?? '').trim();
+    if (iconUrl && iconUrl.startsWith('/')) {
+        iconUrl = `${SENSORTOWER_APP_ORIGIN}${iconUrl}`;
+    }
+
+    return {
+        id,
+        os,
+        name: String(raw.name ?? raw.humanized_name ?? '').trim(),
+        publisher: String(raw.publisher_name ?? '').trim(),
+        iconUrl,
+        downloads,
+        revenue,
+    };
+}
+
+function normalizeInternalEntityApp(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const unifiedAppId = String(raw.id ?? raw.app_id ?? '').trim();
+    if (!UNIFIED_APP_ID_RE.test(unifiedAppId)) return null;
+
+    let iconUrl = String(raw.icon_url ?? '').trim();
+    if (iconUrl && iconUrl.startsWith('/')) {
+        iconUrl = `${SENSORTOWER_APP_ORIGIN}${iconUrl}`;
+    }
+
+    const downloads =
+        raw.humanized_worldwide_last_month_downloads?.string ??
+        raw.humanized_worldwide_last_month_downloads?.downloads ??
+        null;
+    const revenue =
+        raw.humanized_worldwide_last_month_revenue?.string ??
+        raw.humanized_worldwide_last_month_revenue?.revenue ??
+        null;
+
+    return {
+        unifiedAppId,
+        name: String(raw.name ?? raw.humanized_name ?? '').trim(),
+        publisher: String(raw.publisher_name ?? '').trim(),
+        iconUrl,
+        iosCount: Array.isArray(raw.ios_apps) ? raw.ios_apps.length : 0,
+        androidCount: Array.isArray(raw.android_apps) ? raw.android_apps.length : 0,
+        iosApps: Array.isArray(raw.ios_apps)
+            ? raw.ios_apps.map((item) => normalizeStoreVersionOnServer(item, 'ios')).filter(Boolean)
+            : [],
+        androidApps: Array.isArray(raw.android_apps)
+            ? raw.android_apps.map((item) => normalizeStoreVersionOnServer(item, 'android')).filter(Boolean)
+            : [],
+        downloads,
+        revenue,
+    };
+}
+
+async function fetchUnifiedInternalEntitiesOnPage(page, appIds = []) {
+    const ids = (Array.isArray(appIds) ? appIds : [appIds])
+        .map((id) => String(id || '').trim())
+        .filter((id) => UNIFIED_APP_ID_RE.test(id));
+    if (!ids.length) {
+        return {
+            ok: false,
+            status: 400,
+            json: null,
+            apps: [],
+            message: '缺少有效 unified_app_id',
+        };
+    }
+
+    await ensureCsrfTokenOnPage(page);
+    const res = await fetchSensorTowerApi(page, {
+        method: 'POST',
+        endpoint: '/api/unified/internal_entities',
+        body: {
+            app_ids: ids,
+            load_launch_date: true,
+        },
+    });
+
+    if (!res.ok) {
+        return {
+            ok: false,
+            status: res.status,
+            json: res.json ?? null,
+            apps: [],
+            message: `internal_entities 请求失败: HTTP ${res.status}`,
+        };
+    }
+
+    const rawApps = Array.isArray(res.json?.apps) ? res.json.apps : [];
+    const apps = rawApps.map(normalizeInternalEntityApp).filter(Boolean);
+    return {
+        ok: true,
+        status: res.status,
+        json: res.json ?? null,
+        apps,
+        message: 'ok',
     };
 }
 
@@ -907,10 +1163,14 @@ function extractAppsFromSearchResponse(json) {
     if (!json) return [];
     const buckets = [];
     if (Array.isArray(json)) buckets.push(json);
-    if (Array.isArray(json.data)) buckets.push(json.data);
-    if (Array.isArray(json.apps)) buckets.push(json.apps);
-    if (Array.isArray(json.entities)) buckets.push(json.entities);
-    if (Array.isArray(json.results)) buckets.push(json.results);
+    for (const key of ['data', 'apps', 'entities', 'results', 'search_entities', 'autocomplete', 'items']) {
+        if (Array.isArray(json[key])) buckets.push(json[key]);
+    }
+    if (json.data && typeof json.data === 'object' && !Array.isArray(json.data)) {
+        for (const value of Object.values(json.data)) {
+            if (Array.isArray(value)) buckets.push(value);
+        }
+    }
     const out = [];
     const seen = new Set();
     for (const bucket of buckets) {
@@ -922,6 +1182,49 @@ function extractAppsFromSearchResponse(json) {
         }
     }
     return out;
+}
+
+function summarizeSensorTowerResponseBody(res) {
+    const text = String(res?.text || '').trim();
+    if (!text) return '';
+    return text.length > 160 ? `${text.slice(0, 160)}…` : text;
+}
+
+function isSensorTowerAuthChallenge(res) {
+    if (!res) return false;
+    if (res.status === 401 || res.status === 403) return true;
+    const text = String(res.text || '').toLowerCase();
+    return text.includes('/users/sign_in') || text.includes('sign_in') && text.includes('<html');
+}
+
+async function preparePageForSensorTowerSearch(page) {
+    const cur = page.url();
+    if (!isTargetCreativeGalleryUrl(cur)) {
+        await gotoCreativeGallery(page);
+    }
+    await ensureCsrfTokenReady(page);
+}
+
+async function fetchSearchEndpoint(page, path) {
+    const maxAttempts = 4;
+    let lastRes = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const res = await fetchSensorTowerApi(page, { method: 'GET', endpoint: path });
+        lastRes = res;
+        if (isSensorTowerAuthChallenge(res)) {
+            return { res, apps: [], authChallenge: true };
+        }
+        const apps = extractAppsFromSearchResponse(res.json);
+        if (apps.length) {
+            return { res, apps, authChallenge: false };
+        }
+        // ST 搜索偶发 202 Accepted（空 body），短暂重试
+        if (res.status !== 202 || attempt >= maxAttempts - 1) {
+            return { res, apps: [], authChallenge: false };
+        }
+        await delay(300 * (attempt + 1));
+    }
+    return { res: lastRes, apps: [], authChallenge: false };
 }
 
 /**
@@ -947,10 +1250,18 @@ async function searchAppsOnPage(page, { term = '', limit = 20, mode = 'search' }
 
     const attempts = [];
     for (const path of candidates) {
-        const res = await fetchSensorTowerApi(page, { method: 'GET', endpoint: path });
-        attempts.push({ path, status: res.status, ok: res.ok });
-        if (!res.ok) continue;
-        const apps = extractAppsFromSearchResponse(res.json);
+        const { res, apps, authChallenge } = await fetchSearchEndpoint(page, path);
+        attempts.push({
+            path,
+            status: res?.status ?? 0,
+            ok: !!(res?.ok && apps.length),
+            appCount: apps.length,
+            bodyPreview: apps.length ? undefined : summarizeSensorTowerResponseBody(res),
+            authChallenge: authChallenge || undefined,
+        });
+        if (authChallenge) {
+            return { apps: [], endpoint: null, attempts, authChallenge: true };
+        }
         if (apps.length) {
             return { apps, endpoint: path, attempts };
         }
@@ -1032,13 +1343,22 @@ async function requestAppsFacets(page, queryIdentifier, payload) {
         };
     }
 
-    await ensureCsrfTokenOnPage(page);
+    const csrfToken = await ensureCsrfTokenForImpressionShare(page);
+    if (!csrfToken) {
+        return {
+            success: false,
+            code: 'CSRF_TOKEN_MISSING',
+            message: '无法获取 x-csrf-token，请在浏览器中打开展示份额页面后重试',
+            data: { endpoint: '/api/v2/apps/facets', status: 0 },
+        };
+    }
 
     const endpoint = `/api/v2/apps/facets?query_identifier=${encodeURIComponent(q)}`;
     const res = await fetchSensorTowerApi(page, {
         method: 'POST',
         endpoint,
         body: payload || {},
+        skipCsrfEnsure: true,
     });
 
     if (!res.csrfTokenPresent) {
@@ -1078,10 +1398,11 @@ async function requestAppsFacets(page, queryIdentifier, payload) {
 async function gotoImpressionSharePage(page) {
     const target = DEFAULT_IMPRESSION_SHARE_URL;
     await gotoSensorTowerPage(page, target, {
+        timeout: 30000,
         waitUntil: 'domcontentloaded',
         fallbackWaitUntil: 'domcontentloaded',
     }).catch(async () => {
-        await gotoSensorTowerPage(page, target);
+        await gotoSensorTowerPage(page, target, { timeout: 30000 });
     });
     await delay(500);
 }
@@ -1202,23 +1523,27 @@ export const getStatus = async () => {
         }
         if (loginPage && !loginPage.isClosed()) {
             await checkLoginStatus();
-        } else if (status.current !== LoginStatus.ONLINE) {
-            // 状态轮询时，若 page 引用丢失但 profile 中可能仍有有效会话，则做一次低频被动探测
-            const now = Date.now();
-            if (now - lastPassiveDetectAt > 10000) {
-                lastPassiveDetectAt = now;
-                // 低频探测命中已登录时，保留该标签页作为 loginPage（默认停留 creative-gallery）；
-                // 不关闭其它页，避免影响用户当前窗口。
-                await tryDetectAlreadyLoggedIn(loginInfo.email || process.env.SENSORTOWER_EMAIL || null, {
-                    adoptPage: true,
-                    closeOthers: false,
-                });
+            const currentUrl = loginPage.url();
+            if (isNewDeviceUrl(currentUrl)) {
+                return {
+                    status: LoginStatus.LOGGED_OUT,
+                    email: null,
+                    code: 'NEW_DEVICE_VERIFICATION',
+                    authLinkRequired: true,
+                    message: '检测到 Sensor Tower 授权新浏览器页面，请粘贴邮件中的确认链接继续登录。',
+                    url: currentUrl,
+                };
             }
+            return {
+                status: status.current,
+                email: status.current === LoginStatus.ONLINE ? loginInfo.email : null,
+            };
         }
-        return {
-            status: status.current,
-            email: status.current === LoginStatus.ONLINE ? loginInfo.email : null,
-        };
+        // 无 loginPage 时不做被动探测，避免未登录误判；内存态一并清零
+        if (status.current === LoginStatus.ONLINE) {
+            status.update(LoginStatus.LOGGED_OUT);
+        }
+        return { status: LoginStatus.LOGGED_OUT, email: null };
     } catch (e) {
         logger.error('[Sensor Tower] getStatus:', e);
         return { status: LoginStatus.LOGGED_OUT, email: null };
@@ -1550,19 +1875,37 @@ export const search = async (body) => {
         }
         try {
             const mode = body.mode === 'recent' ? 'recent' : 'search';
-            const result = await searchAppsOnPage(loginPage, {
-                term: body.term,
-                limit: body.limit,
-                mode,
+            const result = await runSerializedSensorTowerNavigation(async () => {
+                await preparePageForSensorTowerSearch(loginPage);
+                return searchAppsOnPage(loginPage, {
+                    term: body.term,
+                    limit: body.limit,
+                    mode,
+                });
             });
+            if (result.authChallenge) {
+                status.update(LoginStatus.LOGGED_OUT);
+                return {
+                    success: false,
+                    code: 'NOT_LOGGED_IN',
+                    message: 'Sensor Tower 会话已失效，请重新登录',
+                    data: { attempts: result.attempts, currentUrl: loginPage.url() },
+                };
+            }
+            const emptyHint =
+                result.apps.length === 0
+                    ? 'Sensor Tower 搜索 API 未返回应用（常见为 202 空响应）。请在运维页「重新打开浏览器」后重试登录。'
+                    : undefined;
             return {
                 success: true,
                 code: 200,
-                message: 'ok',
+                message: emptyHint || 'ok',
                 data: {
                     apps: result.apps,
                     endpoint: result.endpoint,
                     attempts: result.attempts,
+                    currentUrl: loginPage.url(),
+                    hint: emptyHint,
                 },
             };
         } catch (e) {
@@ -1570,6 +1913,52 @@ export const search = async (body) => {
             return {
                 success: false,
                 code: 'SEARCH_APPS_ERROR',
+                message: e.message || String(e),
+                data: null,
+            };
+        }
+    }
+
+    if (action === 'fetchAppDetails') {
+        if (status.current !== LoginStatus.ONLINE || !loginPage || loginPage.isClosed()) {
+            await tryDetectAlreadyLoggedIn(loginInfo.email || process.env.SENSORTOWER_EMAIL || null, {
+                adoptPage: true,
+                closeOthers: false,
+            });
+        }
+        if (status.current !== LoginStatus.ONLINE || !loginPage || loginPage.isClosed()) {
+            return {
+                success: false,
+                code: 'NOT_LOGGED_IN',
+                message: '未登录 Sensor Tower',
+                data: null,
+            };
+        }
+        try {
+            const appIds = body.appIds ?? body.app_ids ?? [];
+            const result = await fetchUnifiedInternalEntitiesOnPage(loginPage, appIds);
+            if (!result.ok) {
+                return {
+                    success: false,
+                    code: 'FETCH_APP_DETAILS_ERROR',
+                    message: result.message || '加载应用详情失败',
+                    data: { status: result.status, body: result.json },
+                };
+            }
+            return {
+                success: true,
+                code: 200,
+                message: 'ok',
+                data: {
+                    apps: result.apps,
+                    response: result.json,
+                },
+            };
+        } catch (e) {
+            logger.error('[Sensor Tower] fetchAppDetails:', e);
+            return {
+                success: false,
+                code: 'FETCH_APP_DETAILS_ERROR',
                 message: e.message || String(e),
                 data: null,
             };
@@ -1601,25 +1990,16 @@ export const search = async (body) => {
         let u = loginPage.url();
         if (hasFacetsQuery) {
             if (isImpressionShareFacets) {
-                if (!isTargetImpressionShareUrl(u)) {
-                    try {
-                        await gotoImpressionSharePage(loginPage);
-                        await delay(300);
-                    } catch (e) {
-                        const msg = String(e?.message || e);
-                        const curAfterErr = loginPage.url();
-                        if (!/ERR_ABORTED/i.test(msg) || !isTargetImpressionShareUrl(curAfterErr)) {
-                            throw e;
-                        }
-                    }
-                }
+                await ensureCsrfTokenForImpressionShare(loginPage);
                 u = loginPage.url();
             } else {
                 // 取数模式：避免每次强制 goto 触发 net::ERR_ABORTED；仅在不在 creative-gallery 时才跳转一次
                 if (!isTargetCreativeGalleryUrl(u)) {
                     try {
-                        await gotoSensorTowerPage(loginPage, target);
-                        await delay(500);
+                        await runSerializedSensorTowerNavigation(async () => {
+                            await gotoSensorTowerPage(loginPage, target);
+                            await delay(500);
+                        });
                     } catch (e) {
                         const msg = String(e?.message || e);
                         const curAfterErr = loginPage.url();

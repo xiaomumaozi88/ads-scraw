@@ -3,53 +3,104 @@ export {
   getAllGalleryRegionCodes,
   getRegionByCode,
   getRegionFlagUrl,
+  getRegionFlagIconClass,
   GALLERY_REGION_CODES,
   GALLERY_REGIONS,
 } from './galleryRegionCodes.js';
 
-export const GALLERY_NETWORKS = [
-  'Admob', 'Applovin', 'BidMachine', 'Chartboost', 'Digital Turbine', 'Facebook', 'InMobi',
-  'Instagram', 'Supersonic', 'Line', 'Meta Audience Network', 'Mintegral', 'Moloco', 'Pangle',
-  'Pinterest', 'Smaato', 'Snapchat', 'TikTok', 'Twitter', 'Unity', 'Verve', 'Vungle', 'Youtube',
+export const GALLERY_MOBILE_AD_NETWORKS = [
+  'Admob',
+  'Applovin',
+  'BidMachine',
+  'Chartboost',
+  'Digital Turbine',
+  'Supersonic',
+  'InMobi',
+  'Meta Audience Network',
+  'Mintegral',
+  'Moloco',
+  'Pangle',
+  'Smaato',
+  'Unity',
+  'Verve',
+  'Vungle',
 ];
 
-/** 社交网络（仅 Youtube）；其余为移动应用广告网络 */
-export const GALLERY_SOCIAL_NETWORKS = ['Youtube'];
+/** 社交网络：Facebook、Instagram、LINE 等；其余见移动应用广告网络 */
+export const GALLERY_SOCIAL_NETWORKS = [
+  'Facebook',
+  'Instagram',
+  'Line',
+  'Pinterest',
+  'Snapchat',
+  'TikTok',
+  'Twitter',
+  'Youtube',
+];
 
-export const GALLERY_MOBILE_AD_NETWORKS = GALLERY_NETWORKS.filter(
-  (n) => !GALLERY_SOCIAL_NETWORKS.includes(n)
-);
+export const GALLERY_NETWORKS = [
+  ...GALLERY_MOBILE_AD_NETWORKS,
+  ...GALLERY_SOCIAL_NETWORKS,
+];
+
+const GALLERY_NETWORK_DISPLAY_LABELS = {
+  Admob: 'AdMob',
+  Applovin: 'AppLovin',
+  Supersonic: 'ironSource',
+  Vungle: 'Liftoff',
+  Line: 'LINE',
+  Twitter: 'X (formerly Twitter)',
+  Youtube: 'YouTube',
+};
+
+function toGalleryNetworkOption(value) {
+  return { value, label: GALLERY_NETWORK_DISPLAY_LABELS[value] ?? value };
+}
 
 export const GALLERY_NETWORK_OPTION_GROUPS = [
   {
     id: 'mobile',
     label: '移动应用广告网络',
-    options: GALLERY_MOBILE_AD_NETWORKS.map((n) => ({ value: n, label: n })),
+    options: GALLERY_MOBILE_AD_NETWORKS.map(toGalleryNetworkOption),
   },
   {
     id: 'social',
     label: '社交网络',
-    options: GALLERY_SOCIAL_NETWORKS.map((n) => ({ value: n, label: n })),
+    options: GALLERY_SOCIAL_NETWORKS.map(toGalleryNetworkOption),
   },
 ];
 
-/** ad_types 分组（视频 / 图片 / 试玩） */
-export const GALLERY_AD_TYPE_OPTION_GROUPS = [
+/** 不含 Google Play（App Store / ios 平台） */
+export const GALLERY_AD_TYPE_OPTION_GROUPS_APPLE = [
   {
     id: 'video',
     label: '视频',
     options: [
-      { value: 'video-other', label: '其他' },
       { value: 'video-interstitial', label: '插页' },
+      { value: 'video-rewarded', label: '奖励' },
+      { value: 'video-other', label: '其他' },
     ],
   },
   {
     id: 'image',
     label: '图片',
     options: [
-      { value: 'image-banner', label: '横幅' },
       { value: 'image-interstitial', label: '插页广告' },
+      { value: 'image-banner', label: '横幅' },
       { value: 'image-other', label: '其他' },
+    ],
+  },
+];
+
+/** 含 Google Play（android / 双平台） */
+export const GALLERY_AD_TYPE_OPTION_GROUPS_GOOGLE = [
+  {
+    id: 'video',
+    label: '视频',
+    options: [
+      { value: 'video-interstitial', label: '插页广告' },
+      { value: 'video-rewarded', label: '奖励' },
+      { value: 'video-other', label: '其他' },
     ],
   },
   {
@@ -60,10 +111,42 @@ export const GALLERY_AD_TYPE_OPTION_GROUPS = [
       { value: 'interactive-playable-other', label: '其他' },
     ],
   },
+  {
+    id: 'image',
+    label: '图片',
+    options: [
+      { value: 'image-banner', label: '横幅' },
+      { value: 'image-other', label: '其他' },
+    ],
+  },
 ];
 
-/** 扁平列表（兼容引用） */
-export const GALLERY_AD_TYPES = GALLERY_AD_TYPE_OPTION_GROUPS.flatMap((g) => g.options);
+/** @deprecated 请用 getGalleryAdTypeOptionGroups(platformId) */
+export const GALLERY_AD_TYPE_OPTION_GROUPS = GALLERY_AD_TYPE_OPTION_GROUPS_GOOGLE;
+
+export function galleryPlatformIncludesGoogle(platformId) {
+  return platformId === 'android' || platformId === 'unified';
+}
+
+export function getGalleryAdTypeOptionGroups(platformId) {
+  return galleryPlatformIncludesGoogle(platformId)
+    ? GALLERY_AD_TYPE_OPTION_GROUPS_GOOGLE
+    : GALLERY_AD_TYPE_OPTION_GROUPS_APPLE;
+}
+
+/** 扁平列表（标签查找；同 value 以含 Google 模板为准） */
+export const GALLERY_AD_TYPES = (() => {
+  const byValue = new Map();
+  for (const group of [
+    ...GALLERY_AD_TYPE_OPTION_GROUPS_APPLE,
+    ...GALLERY_AD_TYPE_OPTION_GROUPS_GOOGLE,
+  ]) {
+    for (const opt of group.options) {
+      byValue.set(opt.value, opt);
+    }
+  }
+  return [...byValue.values()];
+})();
 
 /** ad_objectives */
 export const GALLERY_AD_OBJECTIVES = [
@@ -111,6 +194,7 @@ export const GALLERY_PLACEMENTS = [
   { value: 'search', label: '搜索' },
   { value: 'feed', label: '信息流' },
   { value: 'in-stream', label: 'In-Stream (信息流)' },
+  { value: 'player', label: 'In-Stream (信息流)' },
   { value: 'reels', label: 'Reels (短视频)' },
   { value: 'stories', label: 'Stories (故事)' },
 ];

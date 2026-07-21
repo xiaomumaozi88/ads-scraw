@@ -1,6 +1,13 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Modal, Tabs, Button, Spin, Dropdown, Drawer, Tooltip as AntdTooltip } from 'antd';
-import { FileTextOutlined, SearchOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import {
+  ExportOutlined,
+  FileTextOutlined,
+  SearchOutlined,
+  QuestionCircleOutlined,
+  ShareAltOutlined,
+  StarOutlined,
+} from '@ant-design/icons';
 import {
   LineChart,
   Line,
@@ -14,8 +21,11 @@ import {
 } from 'recharts';
 import {
   getGuangdadaCreativeDetail,
+  getGuangdadaMaterialScriptAnalysis,
+  getGuangdadaRankStatus,
   getGuangdadaRelatedAdvertisers,
   getGuangdadaRelatedAds,
+  getGuangdadaRelatedDynamic,
   getGuangdadaSimilarAds,
   getGuangdadaDailyPopularity,
   getGuangdadaAdvRecList,
@@ -23,8 +33,14 @@ import {
   getProxiedMediaUrl,
 } from '../utils/api';
 import { GUANGDADA_COUNTRY_CODE_TO_CN } from '../data/guangdadaCountries';
-import { GUANGDADA_GAME_CATEGORIES_TREE, GUANGDADA_GAME_CODE_TO_LABEL } from '../data/guangdadaGameCategoriesTree';
-import { GUANGDADA_CORE_TRACK_CODE_TO_LABEL, GUANGDADA_CATEGORY_TAG_KEY_TO_LABEL } from '../data/guangdadaCoreTrack';
+import {
+  formatGuangdadaChannel,
+  formatGuangdadaLanguage,
+  getGuangdadaAnalysisTagMeta,
+  getGuangdadaAppCategoryLabel,
+  getGuangdadaCategoryTagGroupLabel,
+  getGuangdadaTagLabel,
+} from '../data/guangdadaReferenceDictionaries';
 import CopyTranslationModal from './CopyTranslationModal';
 import './GuangdadaDetailModal.css';
 
@@ -35,17 +51,19 @@ function getMediaUrls(item) {
   let thumbnailUrl = '';
   let videoUrl = '';
   let htmlUrl = '';
+  const resource = Array.isArray(item?.resource_urls) && item.resource_urls.length > 0 ? item.resource_urls[0] : null;
+  const rawVideoUrl = resource?.video_url != null ? String(resource.video_url).trim() : '';
   const isVideo =
-    item.ads_type === 2 ||
-    (item.resource_urls?.[0]?.type === 2) ||
-    !!(item.resource_urls?.[0]?.video_url?.trim?.());
-  if (item.resource_urls?.length) {
-    const r = item.resource_urls[0];
+    Number(item?.ads_type) === 2 ||
+    Number(resource?.type) === 2 ||
+    rawVideoUrl !== '';
+  if (resource) {
+    const r = resource;
     if (r.type === 4 && r.html_url && String(r.html_url).trim() !== '') {
       htmlUrl = r.html_url.trim();
     }
     if (isVideo) {
-      videoUrl = r.video_url || '';
+      videoUrl = rawVideoUrl;
       thumbnailUrl = item.preview_img_url || r.image_url || '';
     } else {
       thumbnailUrl = r.image_url || item.preview_img_url || '';
@@ -53,28 +71,71 @@ function getMediaUrls(item) {
   } else {
     thumbnailUrl = item.preview_img_url || '';
   }
-  return { thumbnailUrl, videoUrl, isVideo, htmlUrl };
+  return { thumbnailUrl, videoUrl, isVideo, hasPlayableVideo: Boolean(videoUrl), htmlUrl };
 }
 
-/** AppStore 分类 ID -> 中文名（常见，可扩展） */
-const APPSTORE_CATEGORY_NAMES = {
-  5009: '娱乐场',
-  6014: '娱乐',
-  6001: '商业',
-  6016: '教育',
-  6022: '财务',
-  6018: '游戏',
-  7006: '赌场',
-};
+function toValueList(value) {
+  if (Array.isArray(value)) return value;
+  if (value == null || value === '') return [];
+  if (typeof value === 'object') return Object.values(value).flatMap(toValueList);
+  if (typeof value === 'string' && value.includes(',')) {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  return [value];
+}
+
+function uniqueStrings(values) {
+  const seen = new Set();
+  const result = [];
+  values.forEach((value) => {
+    const str = String(value ?? '').trim();
+    if (!str || seen.has(str)) return;
+    seen.add(str);
+    result.push(str);
+  });
+  return result;
+}
+
+function getStoreCategoryLabels(raw, os) {
+  const categoryIds = uniqueStrings([
+    ...toValueList(raw?.category),
+    ...toValueList(raw?.original_categories),
+  ]);
+  return categoryIds
+    .map((id) => getGuangdadaAppCategoryLabel(id, os))
+    .filter(Boolean);
+}
+
+function buildDetailTagGroups(raw) {
+  if (!raw) return [];
+  const groups = [];
+  const pushGroup = (key, label, ids) => {
+    const tags = uniqueStrings(toValueList(ids).map((id) => getGuangdadaTagLabel(id)));
+    if (!tags.length) return;
+    groups.push({ key, label, tags });
+  };
+
+  if (raw.category_tag && typeof raw.category_tag === 'object') {
+    Object.entries(raw.category_tag).forEach(([catKey, ids]) => {
+      const groupLabel = getGuangdadaCategoryTagGroupLabel(catKey);
+      pushGroup(`category-${catKey}`, groupLabel, ids);
+    });
+  }
+  pushGroup('game_core_track', '核心赛道', raw.game_core_track);
+  pushGroup('game_play', '游戏玩法', raw.game_play);
+  pushGroup('game_theme', '游戏主题', raw.game_theme);
+  pushGroup('game_ip', 'IP', raw.game_ip ?? raw.ip);
+
+  return groups;
+}
 
 /** 从详情接口返回中解析文案语言、地区、素材尺寸、material_id，并保留 raw 供标签/分类展示 */
 function parseDetailData(detailRes) {
   const payload = detailRes?.data;
   const raw = payload?.data ?? payload ?? {};
-  let language = raw.language ?? raw.copy_language ?? raw.copy_lang ?? (Array.isArray(raw.languages) ? raw.languages[0] : null);
-  if (language == null || String(language).trim() === '') {
-    language = '其他';
-  }
+  const language = formatGuangdadaLanguage(
+    raw.language ?? raw.copy_language ?? raw.copy_lang ?? raw.languages
+  );
   // 地区仅来自 countries 字段，转为中文展示
   let region = null;
   if (Array.isArray(raw.countries) && raw.countries.length) {
@@ -93,18 +154,180 @@ function parseDetailData(detailRes) {
   return { language, region, materialSize, materialId, raw };
 }
 
+function formatCompactNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  if (Math.abs(n) >= 100000000) return `${(n / 100000000).toFixed(1).replace(/\.0$/, '')}亿`;
+  if (Math.abs(n) >= 10000) return `${(n / 10000).toFixed(1).replace(/\.0$/, '')}万`;
+  return String(Math.round(n));
+}
+
+function formatCurrencyNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return Math.round(n).toLocaleString('zh-CN');
+}
+
+function formatFullDate(ts) {
+  if (!ts) return '—';
+  const d = new Date(Number(ts) * 1000);
+  if (Number.isNaN(d.getTime())) return '—';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatTimeOffset(seconds) {
+  const n = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = Math.floor(n / 60);
+  const secs = String(n % 60).padStart(2, '0');
+  return `${minutes}:${secs}`;
+}
+
+function normalizeDetailList(res) {
+  const payload = res?.data?.data ?? res?.data ?? [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.creative_list)) return payload.creative_list;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+function getScriptAnalysisPayload(res) {
+  const payload = res?.data?.data ?? res?.data ?? {};
+  return payload?.material_script_analysis ?? payload ?? null;
+}
+
+function normalizeRelatedAd(ad) {
+  if (!ad || typeof ad !== 'object') return ad;
+  return {
+    ...ad,
+    first_seen: ad.first_seen ?? ad.frst_seen,
+  };
+}
+
+function firstNonEmptyValue(value) {
+  const values = toValueList(value);
+  return values.find((item) => item != null && String(item).trim() !== '');
+}
+
+const STRATEGY_PARENT_KEYWORDS = [
+  '受众',
+  '功能',
+  '痛点',
+  '收益',
+  '卖点',
+  '诉求',
+  '动机',
+  '价值',
+  '策略',
+];
+
+function buildAnalysisSections(raw) {
+  const sourceTags = [
+    ...(Array.isArray(raw?.material_ai_tag) ? raw.material_ai_tag : []),
+    ...(Array.isArray(raw?.material_ai_search_word) ? raw.material_ai_search_word : []),
+    ...(Array.isArray(raw?.material_ai_search_word_new) ? raw.material_ai_search_word_new : []),
+    ...(Array.isArray(raw?.video_hook_type) ? raw.video_hook_type : []),
+    ...(Array.isArray(raw?.video_ending) ? raw.video_ending : []),
+  ];
+  const sections = {
+    content: { title: '创意内容', groups: new Map() },
+    strategy: { title: '创意策略', groups: new Map() },
+  };
+  sourceTags.forEach((tag) => {
+    const meta = getGuangdadaAnalysisTagMeta(tag);
+    if (!meta.label) return;
+    const parentLabel = meta.parentLabel || '其他';
+    const target = STRATEGY_PARENT_KEYWORDS.some((keyword) => parentLabel.includes(keyword))
+      ? sections.strategy
+      : sections.content;
+    if (!target.groups.has(parentLabel)) target.groups.set(parentLabel, []);
+    const list = target.groups.get(parentLabel);
+    if (!list.includes(meta.label)) list.push(meta.label);
+  });
+  return Object.values(sections)
+    .map((section) => ({
+      title: section.title,
+      groups: Array.from(section.groups.entries()).map(([parentLabel, tags]) => ({ parentLabel, tags })),
+    }))
+    .filter((section) => section.groups.length > 0);
+}
+
+function ScriptAnalysisTimeline({ script, raw }) {
+  if (!script) return <div className="guangdada-detail-placeholder">暂无素材脚本分析</div>;
+  const totalDuration = Number(script.total_duration_sec) || Number(raw?.video_duration) || 0;
+  const timeline = Array.isArray(script.timeline) ? script.timeline : [];
+  const markers = [];
+  const hook = Array.isArray(raw?.video_hook_type) ? raw.video_hook_type[0] : null;
+  const ending = Array.isArray(raw?.video_ending) ? raw.video_ending[0] : null;
+  if (hook?.cn_name) {
+    markers.push({ key: 'hook', time: 0, label: `hook：${hook.cn_name}`, tone: 'blue', position: 'top' });
+  }
+  timeline.forEach((segment, index) => {
+    if (!segment?.segment_type) return;
+    markers.push({
+      key: `segment-${index}`,
+      time: Number(segment.start) || 0,
+      label: segment.segment_type,
+      tone: index % 2 === 0 ? 'purple' : 'orange',
+      position: 'bottom',
+      description: segment.segment_observations || '',
+    });
+  });
+  if (ending?.cn_name) {
+    markers.push({ key: 'ending', time: totalDuration || timeline[timeline.length - 1]?.end || 0, label: `ending：${ending.cn_name}`, tone: 'red', position: 'top' });
+  }
+  const duration = Math.max(totalDuration, ...markers.map((item) => item.time), 1);
+
+  return (
+    <div className="guangdada-detail-script">
+      <div className="guangdada-detail-script-summary">
+        <span>视频内容：</span>
+        <strong>{script.video_summary || script.video_content || '—'}</strong>
+      </div>
+      {markers.length > 0 ? (
+        <div className="guangdada-detail-script-timeline">
+          <div className="guangdada-detail-script-rail" />
+          {markers.map((marker) => {
+            const left = Math.max(0, Math.min(100, (marker.time / duration) * 100));
+            return (
+              <AntdTooltip key={marker.key} title={marker.description || marker.label}>
+                <div
+                  className={`guangdada-detail-script-marker guangdada-detail-script-marker--${marker.position}`}
+                  style={{ left: `${left}%` }}
+                >
+                  <span className={`guangdada-detail-script-tag guangdada-detail-script-tag--${marker.tone}`}>{marker.label}</span>
+                  <i />
+                  <small>{formatTimeOffset(marker.time)}</small>
+                </div>
+              </AntdTooltip>
+            );
+          })}
+          <span className="guangdada-detail-script-end-time">{formatTimeOffset(duration)}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * 广大大创意详情弹窗：打开时请求详情接口与相似广告主/关联广告
  */
-function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
+function GuangdadaDetailModal({ item, open, onClose, onRequestDownload, onQuotaChanged }) {
   const [activeTab, setActiveTab] = useState('1');
   const [detailData, setDetailData] = useState(null);
   const [relatedAdvertisers, setRelatedAdvertisers] = useState([]);
   const [relatedAds, setRelatedAds] = useState([]);
   const [similarAds, setSimilarAds] = useState([]);
+  const [creativeVersions, setCreativeVersions] = useState([]);
+  const [rankStatus, setRankStatus] = useState(null);
+  const [scriptAnalysis, setScriptAnalysis] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [loadingSimilarAds, setLoadingSimilarAds] = useState(false);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [loadingScriptAnalysis, setLoadingScriptAnalysis] = useState(false);
   const [detailError, setDetailError] = useState(null);
   const [trendData, setTrendData] = useState(null);
   const [loadingTrend, setLoadingTrend] = useState(false);
@@ -120,10 +343,21 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
   const [translateModalText, setTranslateModalText] = useState('');
   const [translateModalType, setTranslateModalType] = useState(''); // 'title' | 'description'
+  const onQuotaChangedRef = useRef(onQuotaChanged);
 
-  const { thumbnailUrl, videoUrl, isVideo, htmlUrl } = useMemo(
-    () => (item ? getMediaUrls(item) : { thumbnailUrl: '', videoUrl: '', isVideo: false, htmlUrl: '' }),
-    [item]
+  useEffect(() => {
+    onQuotaChangedRef.current = onQuotaChanged;
+  }, [onQuotaChanged]);
+
+  const mergedItem = useMemo(() => {
+    if (!item) return null;
+    const raw = detailData?.raw;
+    return raw ? { ...item, ...raw } : item;
+  }, [detailData?.raw, item]);
+
+  const { thumbnailUrl, videoUrl, isVideo, hasPlayableVideo, htmlUrl } = useMemo(
+    () => (mergedItem ? getMediaUrls(mergedItem) : { thumbnailUrl: '', videoUrl: '', isVideo: false, hasPlayableVideo: false, htmlUrl: '' }),
+    [mergedItem]
   );
 
   // 广告主详情 Drawer：打开时按 domain 拉取 agg-advertiser
@@ -163,58 +397,160 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
       setRelatedAdvertisers([]);
       setRelatedAds([]);
       setSimilarAds([]);
+      setCreativeVersions([]);
+      setRankStatus(null);
+      setScriptAnalysis(null);
       setTrendData(null);
       setAdvRecList([]);
       setDetailError(null);
       setTrendError(null);
+      setActiveTab('1');
+      setLoadingDetail(false);
+      setLoadingRelated(false);
+      setLoadingSimilarAds(false);
+      setLoadingVersions(false);
+      setLoadingScriptAnalysis(false);
+      setLoadingTrend(false);
+      setLoadingAdvRec(false);
       return;
     }
     let cancelled = false;
+    setActiveTab('1');
     setLoadingDetail(true);
+    setLoadingRelated(false);
+    setLoadingSimilarAds(false);
+    setLoadingAdvRec(false);
     setDetailError(null);
     setTrendError(null);
     setTrendData(null);
-    setLoadingTrend(true);
+    setRelatedAdvertisers([]);
+    setRelatedAds([]);
+    setSimilarAds([]);
+    setAdvRecList([]);
+    setCreativeVersions([]);
+    setRankStatus(null);
+    setScriptAnalysis(null);
+    setLoadingVersions(false);
+    setLoadingScriptAnalysis(false);
+    setLoadingTrend(false);
     const platformStr = typeof item.platform === 'string' ? item.platform : (item.platform != null ? String(item.platform) : 'admob');
-    getGuangdadaDailyPopularity({
-      creative_key: item.ad_key,
-      first_seen: item.first_seen,
-      last_seen: item.last_seen,
+    getGuangdadaRankStatus({
+      ad_key: item.ad_key,
       app_type: item.app_type ?? item.ads_type ?? 1,
-      platform: platformStr,
-      category: item.category ?? item.category_id,
     })
       .then((res) => {
         if (cancelled) return;
-        setLoadingTrend(false);
-        if (res.success && res.data?.data) {
-          setTrendData(res.data.data);
-        } else {
-          setTrendData(null);
-        }
+        setRankStatus(res?.success ? (res.data || null) : null);
       })
-      .catch((err) => {
-        if (!cancelled) {
-          setLoadingTrend(false);
-          setTrendError(err?.message || '加载数据趋势失败');
-          setTrendData(null);
-        }
+      .catch(() => {
+        if (!cancelled) setRankStatus(null);
       });
     getGuangdadaCreativeDetail({
       ad_key: item.ad_key,
       app_type: item.app_type ?? item.ads_type ?? 1,
-      search_flag: item.search_flag,
+      search_flag: item.search_flag ?? item.search_fag,
     })
       .then((res) => {
         if (cancelled) return;
         setLoadingDetail(false);
         if (!res.success || !res.data) {
           setDetailData(null);
+          setDetailError(res?.message || '加载详情失败');
+          setLoadingRelated(false);
+          setLoadingSimilarAds(false);
+          setLoadingVersions(false);
+          setLoadingScriptAnalysis(false);
+          setLoadingTrend(false);
+          setLoadingAdvRec(false);
           return;
         }
         const parsed = parseDetailData(res);
         setDetailData(parsed);
         const raw = res.data?.data ?? res.data ?? {};
+        const effectiveItem = { ...item, ...raw };
+        const embeddedDailyPopularity = Array.isArray(raw.daily_popularity) ? raw.daily_popularity : null;
+        const embeddedTopLine = raw.top_line && typeof raw.top_line === 'object' ? raw.top_line : null;
+        if (embeddedDailyPopularity || embeddedTopLine) {
+          setTrendData({
+            daily_popularity: embeddedDailyPopularity || [],
+            top_line: embeddedTopLine || {},
+            top_line_category: raw.top_line_category,
+            top_line_platform: raw.top_line_platform,
+          });
+          setLoadingTrend(false);
+        } else {
+          setLoadingTrend(true);
+          getGuangdadaDailyPopularity({
+            creative_key: effectiveItem.ad_key,
+            first_seen: effectiveItem.first_seen,
+            last_seen: effectiveItem.last_seen,
+            app_type: effectiveItem.app_type ?? effectiveItem.ads_type ?? 1,
+            platform: platformStr,
+            category: effectiveItem.category ?? effectiveItem.category_id,
+          })
+            .then((trendRes) => {
+              if (cancelled) return;
+              setLoadingTrend(false);
+              if (trendRes.success && trendRes.data?.data) {
+                setTrendData(trendRes.data.data);
+              } else {
+                setTrendData(null);
+              }
+            })
+            .catch((err) => {
+              if (!cancelled) {
+                setLoadingTrend(false);
+                setTrendError(err?.message || '加载数据趋势失败');
+                setTrendData(null);
+              }
+            });
+        }
+        if (raw.material_script_analysis) {
+          setScriptAnalysis(raw.material_script_analysis);
+        } else if (Number(effectiveItem.ads_type) === 2 || effectiveItem.resource_urls?.[0]?.video_url) {
+          setLoadingScriptAnalysis(true);
+          getGuangdadaMaterialScriptAnalysis({
+            ad_key: effectiveItem.ad_key,
+            app_type: effectiveItem.app_type ?? 1,
+            search_flag: effectiveItem.search_flag,
+            ads_type: effectiveItem.ads_type,
+          })
+            .then((scriptRes) => {
+              if (cancelled) return;
+              setScriptAnalysis(scriptRes?.success ? getScriptAnalysisPayload(scriptRes) : null);
+            })
+            .catch(() => {
+              if (!cancelled) setScriptAnalysis(null);
+            })
+            .finally(() => {
+              if (!cancelled) setLoadingScriptAnalysis(false);
+            });
+        } else {
+          setLoadingScriptAnalysis(false);
+        }
+        const dynamicNumber = firstNonEmptyValue(raw.dynamic_number);
+        if (dynamicNumber) {
+          setLoadingVersions(true);
+          getGuangdadaRelatedDynamic({
+            dynamic_number: dynamicNumber,
+            app_type: effectiveItem.app_type ?? 1,
+            creative_key: effectiveItem.ad_key,
+            platform: effectiveItem.platform,
+            created_at: effectiveItem.created_at,
+          })
+            .then((versionRes) => {
+              if (cancelled) return;
+              setCreativeVersions(versionRes?.success ? normalizeDetailList(versionRes) : []);
+            })
+            .catch(() => {
+              if (!cancelled) setCreativeVersions([]);
+            })
+            .finally(() => {
+              if (!cancelled) setLoadingVersions(false);
+            });
+        } else {
+          setLoadingVersions(false);
+        }
         const domain = raw.advertiser_id ?? item.advertiser_id ?? item.domain;
         const country = (Array.isArray(raw.countries) && raw.countries[0]) ? raw.countries[0] : (item.countries?.[0] ?? 'USA');
         if (domain) {
@@ -238,49 +574,73 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
                 setAdvRecList([]);
               }
             });
+        } else {
+          setLoadingAdvRec(false);
+          setAdvRecList([]);
         }
-        const resourceUrl = item.preview_img_url || item.resource_urls?.[0]?.image_url || '';
-        setLoadingSimilarAds(true);
-        getGuangdadaSimilarAds({
-          resource_url: resourceUrl,
-          ad_key: item.ad_key,
-          app_type: item.app_type ?? item.ads_type ?? 1,
-          created_at: item.created_at,
-          similar_ads_count: 8,
-        })
-          .then((res) => {
-            if (cancelled) return;
-            setSimilarAds(Array.isArray(res?.data) ? res.data : []);
+        const resourceUrl = effectiveItem.preview_img_url || effectiveItem.resource_urls?.[0]?.image_url || '';
+        if (resourceUrl && effectiveItem.ad_key) {
+          setLoadingSimilarAds(true);
+          getGuangdadaSimilarAds({
+            resource_url: resourceUrl,
+            ad_key: effectiveItem.ad_key,
+            app_type: effectiveItem.app_type ?? effectiveItem.ads_type ?? 1,
+            created_at: effectiveItem.created_at,
+            similar_ads_count: 8,
           })
-          .catch(() => { if (!cancelled) setSimilarAds([]); })
-          .finally(() => { if (!cancelled) setLoadingSimilarAds(false); });
-
-        const materialId = parsed.materialId ?? item.image_ahash_md5;
-        if (materialId) {
-          setLoadingRelated(true);
-          Promise.all([
-            getGuangdadaRelatedAdvertisers({
-              app_type: item.app_type ?? item.ads_type ?? 1,
-              material_id: materialId,
-              page: 1,
-              created_at: item.created_at != null ? String(item.created_at) : undefined,
-              page_size: 20,
-            }),
-            getGuangdadaRelatedAds({
-              app_type: item.app_type ?? item.ads_type ?? 1,
-              material_id: materialId,
-              page: 1,
-              created_at: item.created_at != null ? String(item.created_at) : undefined,
-              page_size: 5,
-            }),
-          ])
-            .then(([advRes, adsRes]) => {
+            .then((similarRes) => {
               if (cancelled) return;
-              setRelatedAdvertisers(Array.isArray(advRes?.data) ? advRes.data : []);
-              setRelatedAds(Array.isArray(adsRes?.data) ? adsRes.data : []);
+              setSimilarAds(Array.isArray(similarRes?.data) ? similarRes.data : []);
             })
-            .catch(() => {
-              if (!cancelled) setRelatedAdvertisers([]);
+            .catch(() => { if (!cancelled) setSimilarAds([]); })
+            .finally(() => { if (!cancelled) setLoadingSimilarAds(false); });
+        } else {
+          setLoadingSimilarAds(false);
+          setSimilarAds([]);
+        }
+
+        const materialId = parsed.materialId ?? effectiveItem.image_ahash_md5;
+        const hasEmbeddedRelatedAdvertisers = Array.isArray(raw.related_advertisers);
+        const hasEmbeddedRelatedAds = Array.isArray(raw.related_ads);
+        if (hasEmbeddedRelatedAdvertisers) {
+          setRelatedAdvertisers(raw.related_advertisers);
+        }
+        if (hasEmbeddedRelatedAds) {
+          setRelatedAds(raw.related_ads.map(normalizeRelatedAd));
+        }
+        if (materialId && (!hasEmbeddedRelatedAdvertisers || !hasEmbeddedRelatedAds)) {
+          setLoadingRelated(true);
+          const relatedRequests = [
+            hasEmbeddedRelatedAdvertisers
+              ? Promise.resolve({ skipped: true, kind: 'advertisers' })
+              : getGuangdadaRelatedAdvertisers({
+                app_type: effectiveItem.app_type ?? effectiveItem.ads_type ?? 1,
+                material_id: materialId,
+                page: 1,
+                created_at: effectiveItem.created_at != null ? String(effectiveItem.created_at) : undefined,
+                page_size: 20,
+              }),
+            hasEmbeddedRelatedAds
+              ? Promise.resolve({ skipped: true, kind: 'ads' })
+              : getGuangdadaRelatedAds({
+                app_type: effectiveItem.app_type ?? effectiveItem.ads_type ?? 1,
+                material_id: materialId,
+                page: 1,
+                created_at: effectiveItem.created_at != null ? String(effectiveItem.created_at) : undefined,
+                page_size: 5,
+              }),
+          ];
+          Promise.allSettled(relatedRequests)
+            .then(([advResult, adsResult]) => {
+              if (cancelled) return;
+              if (!hasEmbeddedRelatedAdvertisers) {
+                const advRes = advResult.status === 'fulfilled' ? advResult.value : null;
+                setRelatedAdvertisers(Array.isArray(advRes?.data) ? advRes.data : []);
+              }
+              if (!hasEmbeddedRelatedAds) {
+                const adsRes = adsResult.status === 'fulfilled' ? adsResult.value : null;
+                setRelatedAds(Array.isArray(adsRes?.data) ? adsRes.data.map(normalizeRelatedAd) : []);
+              }
             })
             .finally(() => {
               if (!cancelled) setLoadingRelated(false);
@@ -293,52 +653,58 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
         if (!cancelled) {
           setLoadingDetail(false);
           setLoadingRelated(false);
+          setLoadingSimilarAds(false);
+          setLoadingVersions(false);
+          setLoadingScriptAnalysis(false);
           setLoadingTrend(false);
+          setLoadingAdvRec(false);
           setDetailError(err?.message || '加载详情失败');
           setDetailData(null);
           setRelatedAdvertisers([]);
           setRelatedAds([]);
+          setSimilarAds([]);
           setTrendData(null);
           setAdvRecList([]);
+          setCreativeVersions([]);
+          setRankStatus(null);
+          setScriptAnalysis(null);
         }
+      })
+      .finally(() => {
+        if (!cancelled) onQuotaChangedRef.current?.();
       });
     return () => { cancelled = true; };
-  }, [open, item?.ad_key, item?.app_type, item?.ads_type, item?.search_flag, item?.created_at, item?.first_seen, item?.last_seen, item?.platform, item?.category, item?.category_id]);
+  }, [open, item?.ad_key, item?.app_type, item?.ads_type, item?.search_flag, item?.search_fag, item?.created_at, item?.first_seen, item?.last_seen, item?.platform, item?.category, item?.category_id]);
 
   if (!item) return null;
 
-  const appName = item.advertiser_name || '—';
-  const developerName = item.app_developer || item.advertiser_id || '—';
-  const title = item.title || item.message || item.body || '';
-  const body = item.body || item.message || '';
-  const callToAction = item.call_to_action || '';
-  const platform = item.platform != null ? (Array.isArray(item.platform) ? item.platform.join(', ') : String(item.platform)) : '—';
-  const impressionEstimate = item.impression != null ? String(item.impression) : 'N/A';
+  const displayItem = mergedItem || item;
+  const rawDetail = detailData?.raw ?? null;
+  const appName = displayItem.advertiser_name || displayItem.page_name || '—';
+  const developerName = displayItem.app_developer || displayItem.advertiser_id || '—';
+  const title = displayItem.title || displayItem.message || displayItem.body || '';
+  const body = displayItem.body || displayItem.message || '';
+  const platform = formatGuangdadaChannel(displayItem.platform);
+  const impressionEstimate = displayItem.impression != null ? formatCompactNumber(displayItem.impression) : 'N/A';
   const exposureValue =
-    item.all_exposure_value != null
-      ? item.all_exposure_value >= 10000
-        ? `${(item.all_exposure_value / 10000).toFixed(1)}万`
-        : item.all_exposure_value
+    displayItem.new_week_exposure_value != null || displayItem.all_exposure_value != null
+      ? formatCompactNumber(displayItem.new_week_exposure_value ?? displayItem.all_exposure_value)
       : null;
-  const daysCount = item.days_count != null ? `${item.days_count}天` : 'N/A';
-  const formatDate = (ts) => {
-    if (!ts) return 'N/A';
-    const d = new Date(ts * 1000);
-    const y = d.getFullYear().toString().slice(-2);
-    const m = (d.getMonth() + 1).toString().padStart(2, '0');
-    const day = d.getDate().toString().padStart(2, '0');
-    return `${y}/${m}/${day}`;
-  };
+  const daysCount = displayItem.days_count != null ? `${displayItem.days_count}天` : 'N/A';
   const dateRange =
-    item.first_seen != null && item.last_seen != null
-      ? `${formatDate(item.first_seen)}-${formatDate(item.last_seen)}`
+    displayItem.first_seen != null && displayItem.last_seen != null
+      ? `${formatFullDate(displayItem.first_seen)}~${formatFullDate(displayItem.last_seen)}`
       : 'N/A';
+  const storeCategoryLabels = rawDetail ? getStoreCategoryLabels(rawDetail, displayItem?.os) : [];
+  const detailTagGroups = rawDetail ? buildDetailTagGroups(rawDetail) : [];
+  const analysisSections = rawDetail ? buildAnalysisSections(rawDetail) : [];
+  const versionItems = creativeVersions.length > 0 ? creativeVersions : (displayItem ? [displayItem] : []);
 
-  const detailPageUrl = `https://guangdada.net/modules/creative/display-ads/detail?channel=${encodeURIComponent(item.platform || 'admob')}&id=${encodeURIComponent(item.ad_key || '')}&type=${item.app_type ?? item.ads_type ?? 1}&created_at=${item.created_at ?? ''}&fb_merge=false&search_flag=${item.search_flag ?? ''}`;
+  const detailPageUrl = `https://guangdada.net/modules/creative/display-ads/detail?channel=${encodeURIComponent(displayItem.platform || 'admob')}&id=${encodeURIComponent(displayItem.ad_key || '')}&type=${displayItem.app_type ?? displayItem.ads_type ?? 1}&created_at=${displayItem.created_at ?? ''}&fb_merge=false&search_flag=${displayItem.search_flag ?? displayItem.search_fag ?? ''}`;
 
   const handleDownload = (e) => {
     e.stopPropagation();
-    const name = (title || appName || item.ad_key || 'creative').replace(/[\\/:*?"<>|]/g, '').slice(0, 80) || 'creative';
+    const name = (title || appName || displayItem.ad_key || 'creative').replace(/[\\/:*?"<>|]/g, '').slice(0, 80) || 'creative';
     // HTML 类型：直接下载 .html，不走尺寸弹窗
     if (htmlUrl) {
       fetch(htmlUrl, { mode: 'cors', referrerPolicy: 'no-referrer' })
@@ -354,9 +720,9 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
         .catch(() => window.open(htmlUrl, '_blank', 'noopener'));
       return;
     }
-    const url = isVideo ? videoUrl : thumbnailUrl;
+    const url = hasPlayableVideo ? videoUrl : thumbnailUrl;
     if (!url) return;
-    const ext = url.split('?')[0].match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase() || (isVideo ? 'mp4' : 'jpg');
+    const ext = url.split('?')[0].match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase() || (hasPlayableVideo ? 'mp4' : 'jpg');
     fetch(url, { mode: 'cors', referrerPolicy: 'no-referrer' })
       .then((r) => r.blob())
       .then((blob) => {
@@ -373,9 +739,9 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
     <div className="guangdada-detail-overview">
       <div className="guangdada-detail-advertiser">
         <div className="guangdada-detail-advertiser-main">
-          {item.logo_url && (
+          {displayItem.logo_url && (
             <img
-              src={item.logo_url}
+              src={getProxiedMediaUrl(displayItem.logo_url)}
               alt=""
               className="guangdada-detail-app-icon"
               referrerPolicy="no-referrer"
@@ -383,131 +749,85 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
             />
           )}
           <div className="guangdada-detail-advertiser-info">
-            <div className="guangdada-detail-app-name">{appName}</div>
-            <div className="guangdada-detail-developer">{developerName}</div>
-          </div>
-        </div>
-        <div className="guangdada-detail-meta-row">
-          <span className="guangdada-detail-meta-label">投放渠道</span>
-          <span className="guangdada-detail-meta-value">{platform}</span>
-        </div>
-        <div className="guangdada-detail-meta-row">
-          <span className="guangdada-detail-meta-label">文案语言</span>
-          <span className="guangdada-detail-meta-value">{loadingDetail ? '加载中…' : (detailData?.language ?? '—')}</span>
-        </div>
-        <div className="guangdada-detail-meta-row">
-          <span className="guangdada-detail-meta-label">地区</span>
-          <span className="guangdada-detail-meta-value">{loadingDetail ? '加载中…' : (detailData?.region ?? '—')}</span>
-        </div>
-        <div className="guangdada-detail-meta-row">
-          <span className="guangdada-detail-meta-label">素材尺寸</span>
-          <span className="guangdada-detail-meta-value">{loadingDetail ? '加载中…' : (detailData?.materialSize ?? '—')}</span>
-        </div>
-        {/* {detailData?.raw && (detailData.raw.category?.length || detailData.raw.original_categories?.length) && (
-          <div className="guangdada-detail-meta-row">
-            <span className="guangdada-detail-meta-label">
-              {Number(item?.os) === 2 ? 'Google Play上架分类' : Number(item?.os) === 1 ? 'AppStore上架分类' : '上架分类'}
-            </span>
-            <span className="guangdada-detail-meta-value">
-              {[
-                ...(detailData.raw.category || []),
-                ...(detailData.raw.original_categories || []),
-              ]
-                .filter((id, i, arr) => arr.indexOf(id) === i)
-                .map((id) => APPSTORE_CATEGORY_NAMES[id] ?? `分类 ${id}`)
-                .join('、') || '—'}
-            </span>
-          </div>
-        )} */}
-        {detailData?.raw && (detailData.raw.category_tag && Object.keys(detailData.raw.category_tag).length || (detailData.raw.game_play?.length || detailData.raw.game_core_track?.length) || (detailData.raw.game_theme?.length)) && (
-          <div className="guangdada-detail-tags-block">
-            <div className="guangdada-detail-tag-list">
-              {detailData.raw.category_tag && typeof detailData.raw.category_tag === 'object' && Object.entries(detailData.raw.category_tag).flatMap(([catKey, ids]) =>
-                (Array.isArray(ids) ? ids : []).map((tid) => {
-                  const tidLabel = GUANGDADA_CORE_TRACK_CODE_TO_LABEL[String(tid)] ?? GUANGDADA_GAME_CODE_TO_LABEL[String(tid)] ?? tid;
-                  const catLabel = GUANGDADA_GAME_CATEGORIES_TREE.find(item => item.children.find(child => child.label === tidLabel))?.name || '';
-                  return (
-                    <span key={`ct-${catKey}-${tid}`} className="guangdada-detail-tag-pill">{catLabel}:{tidLabel}</span>
-                  );
-                })
-              )}
-              {(detailData.raw.game_core_track || []).map((id) => {
-                const label = GUANGDADA_CORE_TRACK_CODE_TO_LABEL[String(id)] ?? GUANGDADA_GAME_CODE_TO_LABEL[String(id)] ?? id;
-                return <span key={`gc-${id}`} className="guangdada-detail-tag-pill">{label}</span>;
-              })}
-              {(detailData.raw.game_play || []).length > 0 && (
-                <>
-                  <span className="guangdada-detail-tag-prefix">玩法</span>
-                  {(detailData.raw.game_play || []).map((id) => {
-                    const label = GUANGDADA_CORE_TRACK_CODE_TO_LABEL[String(id)] ?? GUANGDADA_GAME_CODE_TO_LABEL[String(id)] ?? id;
-                    return <span key={`gp-${id}`} className="guangdada-detail-tag-pill">{label}</span>;
-                  })}
-                </>
-              )}
-              {(detailData.raw.game_theme || []).length > 0 && (
-                <>
-                  <span className="guangdada-detail-tag-prefix">主题</span>
-                  {(detailData.raw.game_theme || []).map((id) => {
-                    const label = GUANGDADA_CORE_TRACK_CODE_TO_LABEL[String(id)] ?? GUANGDADA_GAME_CODE_TO_LABEL[String(id)] ?? id;
-                    return <span key={`gt-${id}`} className="guangdada-detail-tag-pill">{label}</span>;
-                  })}
-                </>
-              )}
+            <div className="guangdada-detail-app-title-line">
+              <div className="guangdada-detail-app-name">{appName}</div>
+              <a href={detailPageUrl} target="_blank" rel="noreferrer" className="guangdada-detail-advertiser-search-link">
+                <SearchOutlined /> 查看该广告主创意
+              </a>
+              {storeCategoryLabels.length > 0 ? (
+                <div className="guangdada-detail-store-category">
+                  <span>{Number(displayItem?.os) === 2 ? 'Google Play上架分类:' : Number(displayItem?.os) === 1 ? 'AppStore上架分类:' : '上架分类:'}</span>
+                  <strong>{storeCategoryLabels.join('、')}</strong>
+                </div>
+              ) : null}
             </div>
+            <div className="guangdada-detail-developer-line">
+              <span className="guangdada-detail-developer">{developerName}</span>
+              {detailTagGroups.slice(0, 2).flatMap((group) => group.tags.slice(0, 2)).map((label) => (
+                <span key={label} className="guangdada-detail-soft-tag">{label}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+        {(loadingAdvRec || advRecList.length > 0) && (
+          <div className="guangdada-detail-similar-advertisers">
+            <div className="guangdada-detail-section-title">相似广告主</div>
+            {loadingAdvRec ? (
+              <Spin size="small" />
+            ) : (
+              <div className="guangdada-detail-advertiser-avatars">
+                {advRecList.map((adv, idx) => {
+                  const domain = adv.domain ?? adv.ads_data?.domain ?? adv.advertiser_key;
+                  const name = adv.advertiser_name ?? adv.ads_data?.advertiser_name ?? adv.app_name ?? '';
+                  const logoUrl = adv.logo_url ?? adv.ads_data?.logo_url ?? adv.app_logo;
+                  const menuItems = [
+                    {
+                      key: 'detail',
+                      icon: <FileTextOutlined />,
+                      label: '查看该广告主详情',
+                      onClick: () => {
+                        setAdvertiserDrawerDomain(domain || null);
+                        setAdvertiserDrawerName(name || '');
+                        setAdvertiserDrawerOpen(true);
+                      },
+                    },
+                    {
+                      key: 'creative',
+                      icon: <SearchOutlined />,
+                      label: '查看该广告主创意（待实现）',
+                      disabled: true,
+                    },
+                  ];
+                  return (
+                    <Dropdown
+                      key={domain ?? idx}
+                      menu={{ items: menuItems }}
+                      trigger={['click']}
+                    >
+                      <div className="guangdada-detail-advertiser-avatar guangdada-detail-advertiser-avatar--clickable" title={`广告主: ${name || domain || ''}`}>
+                        {logoUrl ? (
+                          <img src={getProxiedMediaUrl(logoUrl)} alt="" referrerPolicy="no-referrer" onError={(e) => { e.target.style.display = 'none'; }} />
+                        ) : (
+                          <span className="guangdada-detail-avatar-placeholder">{name?.slice(0, 1) || '?'}</span>
+                        )}
+                      </div>
+                    </Dropdown>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
-        {(loadingAdvRec || advRecList.length > 0) && (
-        <div className="guangdada-detail-similar-advertisers">
-          <div className="guangdada-detail-section-title">相似广告主</div>
-          {loadingAdvRec ? (
-            <Spin size="small" />
-          ) : (
-            <div className="guangdada-detail-advertiser-avatars">
-              {advRecList.map((adv, idx) => {
-                const domain = adv.domain ?? adv.ads_data?.domain ?? adv.advertiser_key;
-                const name = adv.advertiser_name ?? adv.ads_data?.advertiser_name ?? adv.app_name ?? '';
-                const logoUrl = adv.logo_url ?? adv.ads_data?.logo_url ?? adv.app_logo;
-                const menuItems = [
-                  {
-                    key: 'detail',
-                    icon: <FileTextOutlined />,
-                    label: '查看该广告主详情',
-                    onClick: () => {
-                      setAdvertiserDrawerDomain(domain || null);
-                      setAdvertiserDrawerName(name || '');
-                      setAdvertiserDrawerOpen(true);
-                    },
-                  },
-                  {
-                    key: 'creative',
-                    icon: <SearchOutlined />,
-                    label: '查看该广告主创意（待实现）',
-                    disabled: true,
-                  },
-                ];
-                return (
-                  <Dropdown
-                    key={domain ?? idx}
-                    menu={{ items: menuItems }}
-                    trigger={['click']}
-                  >
-                    <div className="guangdada-detail-advertiser-avatar guangdada-detail-advertiser-avatar--clickable" title={`广告主: ${name || domain || ''}`}>
-                      {logoUrl ? (
-                        <img src={logoUrl} alt="" referrerPolicy="no-referrer" onError={(e) => { e.target.style.display = 'none'; }} />
-                      ) : (
-                        <span className="guangdada-detail-avatar-placeholder">{name?.slice(0, 1) || '?'}</span>
-                      )}
-                    </div>
-                  </Dropdown>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-      
       </div>
-     
+
+      <div className="guangdada-detail-meta-grid">
+        <div><span>投放渠道</span><strong>{platform}</strong></div>
+        <div><span>文案语言</span><strong>{loadingDetail ? '加载中…' : (detailData?.language ?? '—')}</strong></div>
+        <div><span>地区</span><strong>{loadingDetail ? '加载中…' : (detailData?.region ?? '—')}</strong></div>
+        <div><span>素材尺寸</span><strong>{loadingDetail ? '加载中…' : (detailData?.materialSize ?? '—')}</strong></div>
+        <div><span>投放账号</span><strong>{displayItem.page_name || '—'}</strong></div>
+      </div>
+
       <div className="guangdada-detail-metrics">
         {exposureValue != null && (
           <div className="guangdada-detail-metric-card">
@@ -522,8 +842,7 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
             <div className="guangdada-detail-metric-value">{exposureValue}</div>
             <div className="guangdada-detail-metric-extra">
               总人气值
-            
-              {' '}{item.all_exposure_value ?? '—'}
+              {' '}{formatCompactNumber(displayItem.all_exposure_value)}
               <AntdTooltip title="该广告所有历史人气值（包括重投）的总和，帮助判断广告创意的整体效果">
                 <span className="guangdada-detail-metric-extra-icon" aria-label="说明">
                   <QuestionCircleOutlined />
@@ -536,58 +855,79 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
           <div className="guangdada-detail-metric-label">投放天数</div>
           <div className="guangdada-detail-metric-value">{daysCount}</div>
           <div className="guangdada-detail-metric-extra">(UTC+8) {dateRange}</div>
-          {item.first_seen != null && (
-            <div className="guangdada-detail-metric-extra">首次发现 (UTC+8) {formatDate(item.first_seen)}</div>
+          {displayItem.first_seen != null && (
+            <div className="guangdada-detail-metric-extra">首次发现 (UTC+8) {formatFullDate(displayItem.first_seen)}</div>
           )}
         </div>
         <div className="guangdada-detail-metric-card">
           <div className="guangdada-detail-metric-label">展示估值</div>
           <div className="guangdada-detail-metric-value">{impressionEstimate}</div>
-          {item.heat != null && <div className="guangdada-detail-metric-extra">热度 {item.heat}</div>}
+          {displayItem.heat != null && <div className="guangdada-detail-metric-extra">热度 {displayItem.heat}</div>}
         </div>
+        {displayItem.ad_cost != null ? (
+          <div className="guangdada-detail-metric-card">
+            <div className="guangdada-detail-metric-label">
+              广告花费($)
+              <AntdTooltip title="官方估算花费，供趋势判断参考">
+                <span className="guangdada-detail-metric-label-icon" aria-label="说明"><QuestionCircleOutlined /></span>
+              </AntdTooltip>
+            </div>
+            <div className="guangdada-detail-metric-value">{formatCurrencyNumber(displayItem.ad_cost)}</div>
+          </div>
+        ) : null}
+        {rankStatus?.top_creative || rankStatus?.rising_creative || rankStatus?.new_creative ? (
+          <div className="guangdada-detail-metric-card guangdada-detail-metric-card--rank">
+            <div className="guangdada-detail-metric-label">榜单状态</div>
+            <div className="guangdada-detail-rank-badges">
+              {rankStatus.top_creative ? <span>Top创意</span> : null}
+              {rankStatus.rising_creative ? <span>飙升创意</span> : null}
+              {rankStatus.new_creative ? <span>新创意</span> : null}
+            </div>
+          </div>
+        ) : null}
       </div>
       <div className="guangdada-detail-analysis">
         <div className="guangdada-detail-section-title">创意分析</div>
-        {!detailData?.raw ? (
+        {!rawDetail ? (
           loadingDetail ? (
             <div className="guangdada-detail-placeholder">加载中…</div>
           ) : (
             <div className="guangdada-detail-placeholder">暂无数据</div>
           )
-        ) : (() => {
-          const raw = detailData.raw;
-          const aiTags = Array.isArray(raw.material_ai_tag) ? raw.material_ai_tag : [];
-          const searchWords = Array.isArray(raw.material_ai_search_word) ? raw.material_ai_search_word : [];
-          const byParent = {};
-          aiTags.forEach((t) => {
-            const p = t.parent_cn_name || t.parent_en_name || '其他';
-            if (!byParent[p]) byParent[p] = [];
-            byParent[p].push(t.cn_name || t.en_name || String(t.id));
-          });
-          searchWords.forEach((t) => {
-            const p = t.parent_cn_name || t.parent_en_name || '其他';
-            if (!byParent[p]) byParent[p] = [];
-            byParent[p].push(t.cn_name || t.en_name || String(t.id));
-          });
-          const groups = Object.entries(byParent);
-          if (groups.length === 0) {
-            return <div className="guangdada-detail-placeholder">暂无创意分析标签</div>;
-          }
-          return (
-            <div className="guangdada-detail-analysis-groups">
-              {groups.map(([parentName, tags]) => (
-                <div key={parentName} className="guangdada-detail-analysis-group">
-                  <div className="guangdada-detail-analysis-group-title">{parentName}</div>
-                  <div className="guangdada-detail-tag-list">
-                    {tags.map((name, idx) => (
-                      <span key={`${parentName}-${idx}`} className="guangdada-detail-tag-pill">{name}</span>
-                    ))}
-                  </div>
+        ) : analysisSections.length === 0 ? (
+          <div className="guangdada-detail-placeholder">暂无创意分析标签</div>
+        ) : (
+          <div className="guangdada-detail-analysis-sections">
+            {analysisSections.map((section) => (
+              <div key={section.title} className="guangdada-detail-analysis-section">
+                <span className="guangdada-detail-analysis-section-title">{section.title}</span>
+                <div className="guangdada-detail-analysis-section-body">
+                  {section.groups.map((group) => (
+                    <div key={`${section.title}-${group.parentLabel}`} className="guangdada-detail-analysis-group">
+                      <span className="guangdada-detail-analysis-group-title">{group.parentLabel}</span>
+                      {group.tags.map((name, idx) => (
+                        <span
+                          key={`${section.title}-${group.parentLabel}-${name}-${idx}`}
+                          className={`guangdada-detail-tag-pill ${section.title === '创意策略' ? 'guangdada-detail-tag-pill--purple' : 'guangdada-detail-tag-pill--gold'}`}
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          );
-        })()}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="guangdada-detail-script-block">
+        <div className="guangdada-detail-section-title">素材脚本分析</div>
+        {loadingScriptAnalysis ? (
+          <div className="guangdada-detail-loading-wrap"><Spin size="small" tip="加载素材脚本…" /></div>
+        ) : (
+          <ScriptAnalysisTimeline script={scriptAnalysis} raw={rawDetail || displayItem} />
+        )}
       </div>
     </div>
   );
@@ -831,12 +1171,25 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
       title={
         <div className="guangdada-detail-modal-header">
           <span className="guangdada-detail-modal-title">创意详情</span>
+          <div className="guangdada-detail-modal-actions">
+            <Button size="small" icon={<StarOutlined />} disabled>收藏</Button>
+            <Button
+              size="small"
+              icon={<ShareAltOutlined />}
+              onClick={() => navigator.clipboard?.writeText(detailPageUrl)}
+            >
+              分享
+            </Button>
+            <a href={detailPageUrl} target="_blank" rel="noreferrer">
+              <Button size="small" icon={<ExportOutlined />}>单页打开</Button>
+            </a>
+          </div>
         </div>
       }
       open={open}
       onCancel={onClose}
       footer={null}
-      width={1400}
+      width={1500}
       destroyOnClose
     >
       <div className="guangdada-detail-body">
@@ -857,7 +1210,7 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
                     scrolling="no"
                   />
                 </div>
-              ) : isVideo && videoUrl ? (
+              ) : hasPlayableVideo ? (
                 <video
                   src={getProxiedMediaUrl(videoUrl)}
                   controls
@@ -865,15 +1218,18 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
                   referrerPolicy="no-referrer"
                 />
               ) : thumbnailUrl ? (
-                <img
-                  src={getProxiedMediaUrl(thumbnailUrl)}
-                  alt="创意素材"
-                  className="guangdada-detail-media"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => { e.target.onerror = null; e.target.style.background = '#f0f0f0'; e.target.alt = '加载失败'; }}
-                />
+                <>
+                  <img
+                    src={getProxiedMediaUrl(thumbnailUrl)}
+                    alt="创意素材"
+                    className="guangdada-detail-media"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { e.target.onerror = null; e.target.style.background = '#f0f0f0'; e.target.alt = '加载失败'; }}
+                  />
+                  {isVideo ? <div className="guangdada-detail-media-no-source">暂无播放源</div> : null}
+                </>
               ) : (
-                <div className="guangdada-detail-media guangdada-detail-media--empty">暂无素材</div>
+                <div className="guangdada-detail-media guangdada-detail-media--empty">{isVideo ? '暂无播放源' : '暂无素材'}</div>
               )}
             </div>
             <div className="guangdada-detail-creative-info">
@@ -899,9 +1255,9 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
                     e.stopPropagation();
                     if (htmlUrl) {
                       handleDownload(e);
-                    } else if (onRequestDownload && item) {
+                    } else if (onRequestDownload && displayItem) {
                       // 视频、图片均走尺寸选择弹窗
-                      onRequestDownload(item);
+                      onRequestDownload(displayItem);
                     } else {
                       handleDownload(e);
                     }
@@ -909,10 +1265,10 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
                 >
                   下载素材
                 </Button>
-                {(item?.store_url || detailData?.raw?.store_url) && (
-                  <AntdTooltip title={item?.store_url || detailData?.raw?.store_url || ''}>
+                {(displayItem?.store_url || detailData?.raw?.store_url) && (
+                  <AntdTooltip title={displayItem?.store_url || detailData?.raw?.store_url || ''}>
                     <a
-                      href={item?.store_url || detailData?.raw?.store_url}
+                      href={displayItem?.store_url || detailData?.raw?.store_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="guangdada-detail-store-link-btn"
@@ -942,6 +1298,26 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload }) {
             )}
             <div className="guangdada-detail-disclaimer">
               免责申明：素材来源于 Facebook/Google 等公开透明的数据库，仅用于数据挖掘和分析
+            </div>
+          </div>
+          <div className="guangdada-detail-versions">
+            <div className="guangdada-detail-versions-title">
+              {loadingVersions ? '正在加载关联版本…' : `该广告有 ${Math.max(versionItems.length, 1)} 种版本`}
+            </div>
+            <div className="guangdada-detail-version-list">
+              {versionItems.slice(0, 8).map((version, idx) => {
+                const media = getMediaUrls(version);
+                const thumb = media.thumbnailUrl || version.preview_img_url || version.logo_url || '';
+                return (
+                  <div key={version.ad_key || idx} className="guangdada-detail-version-thumb" title={version.advertiser_name || version.page_name || `版本 ${idx + 1}`}>
+                    {thumb ? (
+                      <img src={getProxiedMediaUrl(thumb)} alt="" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span>{idx + 1}</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

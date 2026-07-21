@@ -10,6 +10,13 @@ export function getRegionFlagUrl(code) {
   return `https://app.sensortower-china.com/assets/flags/${c}.png`;
 }
 
+/** flag-icon-css 类名（ST 外链国旗受 WAF 拦截，改用本地 CSS 图标） */
+export function getRegionFlagIconClass(code) {
+  const c = String(code || '').trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(c)) return null;
+  return `flag-icon-${c}`;
+}
+
 export function getRegionByCode(code) {
   return galleryRegions.find((r) => r.code === code) ?? null;
 }

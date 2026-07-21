@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import RegionFlagIcon from '../shared/RegionFlagIcon.jsx';
 
 /**
  * 简易多选下拉（Material 风格）
@@ -71,7 +72,6 @@ function MultiSelectDropdown({
           {options.map((opt) => {
             const value = typeof opt === 'string' ? opt : opt.value;
             const text = typeof opt === 'string' ? opt : opt.label;
-            const flagUrl = typeof opt === 'object' && opt.flagUrl ? opt.flagUrl : null;
             const checked = selectedValues.includes(value);
             return (
               <label key={value} className="st-msd__item">
@@ -82,9 +82,7 @@ function MultiSelectDropdown({
                   onChange={() => toggle(value)}
                 />
                 <span className="st-msd__option-content">
-                  {showFlags && flagUrl ? (
-                    <img className="st-msd__flag" src={flagUrl} alt="" width={22} height={16} loading="lazy" />
-                  ) : null}
+                  {showFlags ? <RegionFlagIcon code={value} className="st-msd__flag" /> : null}
                   <span className="st-msd__option-label">{text}</span>
                 </span>
               </label>

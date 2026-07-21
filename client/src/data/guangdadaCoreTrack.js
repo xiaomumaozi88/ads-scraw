@@ -23,7 +23,7 @@ export const GUANGDADA_CORE_TRACK_CATEGORIES = [
       { value: '50000001', label: '收集' },
       { value: '50000003', label: '养成' },
       { value: '50000105', label: '解谜' },
-      { value: '50000163', label: 'PvE' },
+      { value: '50000163', label: 'PvE玩家对环境' },
       { value: '50000019', label: '经营管理' },
       { value: '50000033', label: '策略规划' },
       { value: '50000018', label: '任务' },
@@ -70,6 +70,7 @@ export const GUANGDADA_CORE_TRACK_CATEGORIES = [
     items: [
       { value: '100000014', label: '三国演义' },
       { value: '100000030', label: '龙珠' },
+      { value: '100000039', label: 'Cocobi' },
       { value: '100000002', label: '西游记' },
       { value: '100000029', label: '宝可梦' },
       { value: '100000150', label: '三国' },
@@ -82,11 +83,15 @@ export const GUANGDADA_CORE_TRACK_CATEGORIES = [
       { value: '100000186', label: 'Wolfoo' },
       { value: '100000153', label: 'NBA' },
       { value: '100000052', label: '斗罗大陆' },
+      { value: '100000082', label: 'Ragnarok' },
+      { value: '100000317', label: 'Monopoly' },
+      { value: '100000124', label: '仙境传说' },
+      { value: '100000093', label: '东方Project' },
+      { value: '100000219', label: 'BTS' },
+      { value: '100000182', label: '三国志' },
       { value: '100000047', label: '圣斗士星矢' },
       { value: '100000734', label: '圣经' },
-      { value: '100000093', label: '东方Project' },
       { value: '100000275', label: '爱丽丝梦游仙境' },
-      { value: '100000182', label: '三国志' },
       { value: '100000549', label: '金庸' },
     ],
   },
@@ -100,14 +105,12 @@ export const GUANGDADA_CORE_TRACK_CODE_TO_LABEL = GUANGDADA_CORE_TRACK_CATEGORIE
   return acc;
 }, {});
 
-/** 玩法与分类里 category_tag 的 key（如 21、27、72、ip）-> 父级中文名，与 GUANGDADA_CORE_TRACK_CATEGORIES 的 title 对应；含字符串 key 以便接口返回 ip 等时直接展示父级中文名 */
+/** 非分类字段的 tag key -> 父级中文名；category_tag 的数字 key 优先由分类字典解析 */
 export const GUANGDADA_CATEGORY_TAG_KEY_TO_LABEL = {
-  '21': '游戏玩法',
-  '27': '游戏主题',
-  '72': '核心赛道',
-  '73': 'IP',
   ip: 'IP',
   game_play: '游戏玩法',
   game_theme: '游戏主题',
   core_track: '核心赛道',
+  game_core_track: '核心赛道',
+  game_ip: 'IP',
 };

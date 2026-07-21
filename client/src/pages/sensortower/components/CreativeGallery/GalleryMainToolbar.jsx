@@ -47,6 +47,7 @@ function GalleryMainToolbar({
           optionGroups={GALLERY_NETWORK_OPTION_GROUPS}
           selectedValues={selectedNetworks}
           onChange={onSelectedNetworksChange}
+          showNetworkIcons
           triggerClassName="st-toolbar__pill"
         />
       </div>

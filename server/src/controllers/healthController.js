@@ -3,7 +3,18 @@ import * as puppeteerServiceInsightrackr from '../services/puppeteerServiceInsig
 import * as puppeteerServiceGuangdada from '../services/puppeteerService.js';
 import * as puppeteerServiceSensorTower from '../services/puppeteerServiceSensorTower.js';
 import * as transcodeVideoService from '../services/transcodeVideoService.js';
-import { getRecentLogs, clearLogs } from '../utils/memoryLogAppender.js';
+import { getRecentLogs, clearLogs, refreshLogsCacheFromDb } from '../utils/memoryLogAppender.js';
+import { getInsightrackrAutoLoginInfo } from '../services/insightrackrAutoLogin.js';
+import {
+  listPlatformCredentialPublicInfo,
+  updatePlatformCredentials,
+} from '../services/platformCredentialsService.js';
+import { getAllPlatformAutoLoginInfo } from '../services/platformAutoLoginService.js';
+import { auditPlatformCredentialUpdate } from '../services/auditLogService.js';
+import {
+  getContainerRestartInfo,
+  restartApplicationContainer,
+} from '../services/containerRestartService.js';
 
 function roundMb(bytes) {
   return bytes == null ? null : Math.round((bytes / 1024 / 1024) * 10) / 10;
@@ -21,30 +32,46 @@ function formatUptime(ms) {
   return `${s}秒`;
 }
 
+function withTimeout(promise, timeoutMs, fallback) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(fallback), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+async function getPlatformHealthWithTimeout(label, getter, timeoutMs = 6000) {
+  const fallback = {
+    browserExists: false,
+    pageCount: 0,
+    status: null,
+    email: null,
+    isLoggedIn: false,
+    error: `${label} 健康检查超时`,
+  };
+  try {
+    return await withTimeout(getter(), timeoutMs, fallback);
+  } catch (e) {
+    console.error(`健康检查 ${label} 失败:`, e);
+    return {
+      ...fallback,
+      error: e?.message || String(e),
+    };
+  }
+}
+
 /** GET /api/health：汇总各平台浏览器实例数、页面数、登录账号及最近错误日志，供排查用 */
 export const getHealth = async (req, res) => {
   try {
-    let insightrackr;
-    let guangdada;
-    let sensortower;
-    try {
-      insightrackr = await puppeteerServiceInsightrackr.getHealthInfo();
-    } catch (e) {
-      console.error('健康检查 Insightrackr 失败:', e);
-      insightrackr = { browserExists: false, pageCount: 0, status: null, email: null, isLoggedIn: false, error: e?.message || String(e) };
-    }
-    try {
-      guangdada = await puppeteerServiceGuangdada.getHealthInfo();
-    } catch (e) {
-      console.error('健康检查 广大大 失败:', e);
-      guangdada = { browserExists: false, pageCount: 0, status: null, email: null, isLoggedIn: false, error: e?.message || String(e) };
-    }
-    try {
-      sensortower = await puppeteerServiceSensorTower.getHealthInfo();
-    } catch (e) {
-      console.error('健康检查 Sensor Tower 失败:', e);
-      sensortower = { browserExists: false, pageCount: 0, status: null, email: null, isLoggedIn: false, error: e?.message || String(e) };
-    }
+    const [insightrackr, guangdada, sensortower] = await Promise.all([
+      getPlatformHealthWithTimeout('Insightrackr', () => puppeteerServiceInsightrackr.getHealthInfo()),
+      getPlatformHealthWithTimeout('广大大', () => puppeteerServiceGuangdada.getHealthInfo()),
+      getPlatformHealthWithTimeout('Sensor Tower', () => puppeteerServiceSensorTower.getHealthInfo()),
+    ]);
 
     const totalBrowsers = [insightrackr.browserExists, guangdada.browserExists, sensortower.browserExists].filter(Boolean).length;
     const totalPages = (insightrackr.pageCount || 0) + (guangdada.pageCount || 0) + (sensortower.pageCount || 0);
@@ -59,8 +86,9 @@ export const getHealth = async (req, res) => {
     let recentLogs = [];
     let recentErrors = [];
     try {
-      recentLogs = getRecentLogs(80);
-      recentErrors = getRecentLogs(50, 'error');
+      await refreshLogsCacheFromDb(80);
+      recentLogs = await getRecentLogs(80);
+      recentErrors = await getRecentLogs(50, 'error');
     } catch (e) {
       console.error('健康检查 日志 失败:', e);
     }
@@ -151,6 +179,10 @@ export const getHealth = async (req, res) => {
           uptimeText
         },
         remoteDebug: Object.keys(remoteDebug).length ? remoteDebug : undefined,
+        containerRestart: getContainerRestartInfo(),
+        insightrackrAutoLogin: getInsightrackrAutoLoginInfo(),
+        platformAutoLogin: getAllPlatformAutoLoginInfo(),
+        platformCredentials: listPlatformCredentialPublicInfo(),
         recentLogs,
         recentErrors
       }
@@ -165,10 +197,56 @@ export const getHealth = async (req, res) => {
   }
 };
 
-/** POST /api/health/clear-logs：清除内存中的日志 */
+/** GET /api/health/platform-credentials：运维查看平台自动登录账号配置（不返回密码） */
+export const getPlatformCredentials = async (req, res) => {
+  try {
+    res.status(200).json({
+      success: true,
+      data: listPlatformCredentialPublicInfo(),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || '读取平台账号配置失败' });
+  }
+};
+
+/** PUT /api/health/platform-credentials/:platform：运维更新平台自动登录账号配置 */
+export const putPlatformCredentials = async (req, res) => {
+  const platform = String(req.params.platform || '').trim().toLowerCase();
+  try {
+    const data = updatePlatformCredentials(platform, req.body || {}, req.iamProfile);
+    auditPlatformCredentialUpdate({
+      platform,
+      operatorProfile: req.iamProfile,
+      targetAccount: data.email || null,
+      success: true,
+      message: '平台自动登录账号配置已更新',
+      metadata: {
+        autoLoginEnabled: data.autoLoginEnabled,
+        passwordUpdated: Boolean(req.body && req.body.password),
+      },
+    });
+    res.status(200).json({ success: true, data, message: '平台账号配置已保存' });
+  } catch (error) {
+    auditPlatformCredentialUpdate({
+      platform,
+      operatorProfile: req.iamProfile,
+      targetAccount: req.body?.email || null,
+      success: false,
+      message: error.message || '平台自动登录账号配置更新失败',
+      metadata: { code: error.code || 'UPDATE_FAILED' },
+    });
+    res.status(error.code === 'UNKNOWN_PLATFORM' ? 404 : 400).json({
+      success: false,
+      code: error.code || 'UPDATE_FAILED',
+      message: error.message || '保存平台账号配置失败',
+    });
+  }
+};
+
+/** POST /api/health/clear-logs：清除系统日志 */
 export const postClearLogs = async (req, res) => {
   try {
-    clearLogs();
+    await clearLogs();
     res.status(200).json({ success: true, message: '日志已清除' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message || '清除失败' });
@@ -223,5 +301,35 @@ export const postReopenBrowser = async (req, res) => {
   } catch (error) {
     console.error('重新打开浏览器失败:', error);
     res.status(500).json({ success: false, message: error.message || '重新打开失败' });
+  }
+};
+
+/** POST /api/health/restart-container：通过 Docker API 重启当前应用容器 */
+export const postRestartContainer = async (req, res) => {
+  try {
+    const info = getContainerRestartInfo();
+    if (!info.available) {
+      return res.status(400).json({
+        success: false,
+        message:
+          '容器重启未就绪：需设置 DOCKER_CONTAINER_RESTART_ENABLED=true 并挂载 /var/run/docker.sock',
+        data: info,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `已发送重启指令，容器「${info.containerName}」将在数秒内重启，页面可能短暂不可用`,
+      data: info,
+    });
+
+    setTimeout(() => {
+      restartApplicationContainer().catch((err) => {
+        console.error('容器重启失败:', err);
+      });
+    }, 300);
+  } catch (error) {
+    console.error('容器重启失败:', error);
+    res.status(500).json({ success: false, message: error.message || '容器重启失败' });
   }
 };

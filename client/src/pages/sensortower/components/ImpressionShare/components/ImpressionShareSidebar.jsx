@@ -59,7 +59,9 @@ function ImpressionShareSidebar({
   onMetricChange,
   onOpenAddApp,
   onToggleApp,
+  onToggleStoreVersion,
   onRemoveApp,
+  onEnrichApp,
   appsPickerCollapsed,
   onAppsPickerCollapse,
   onAppsPickerExpand,
@@ -108,13 +110,6 @@ function ImpressionShareSidebar({
         </select>
       </label>
 
-      <button type="button" className="st-sidebar__add-app" onClick={onOpenAddApp}>
-        <span className="st-sidebar__add-icon" aria-hidden>
-          +
-        </span>
-        添加应用
-      </button>
-
       <ImpressionShareAppPicker
         apps={apps}
         platformId={platformId}
@@ -123,7 +118,9 @@ function ImpressionShareSidebar({
         onCollapse={onAppsPickerCollapse}
         onExpand={onAppsPickerExpand}
         onToggleApp={onToggleApp}
+        onToggleStoreVersion={onToggleStoreVersion}
         onRemoveApp={onRemoveApp}
+        onEnrichApp={onEnrichApp}
         onOpenAddApp={onOpenAddApp}
       />
 

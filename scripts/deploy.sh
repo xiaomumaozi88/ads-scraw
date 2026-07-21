@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 # ========== 你的服务器与路径 ==========
 SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519_nginx}"
-SERVER="${DEPLOY_SERVER:-ecs-user@120.27.200.123}"
+SERVER="${DEPLOY_SERVER:-ecs-user@115.29.236.160}"
 REMOTE_PATH="${DEPLOY_PATH:-/home/ecs-user/ads-scraw}"
 # =====================================
 

@@ -860,7 +860,23 @@ export const GUANGDADA_GAME_CATEGORIES_TREE = [
 
 /** 一级分类名 -> 广大大 API 的 tag_id（选整类时用该 id 替代二级 code 列表，与产品请求一致） */
 export const GAME_FIRST_LEVEL_API_TAG_ID = {
+  策略: '14',
+  桌面游戏: '24',
   角色扮演: '25',
+  动作: '11',
+  博彩娱乐: '21',
+  街机游戏厅: '22',
+  消除: '27',
+  体育运动: '18',
+  模拟: '17',
+  儿童教育: '20',
+  冒险: '13',
+  赛车竞速: '16',
+  益智: '15',
+  射击: '12',
+  派对聚会: '26',
+  音乐: '10',
+  游戏网赚: '72',
 };
 
 export const GUANGDADA_GAME_CATEGORIES = GUANGDADA_GAME_CATEGORIES_TREE.map((item) => item.name);

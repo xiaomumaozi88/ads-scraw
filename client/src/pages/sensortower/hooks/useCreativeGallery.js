@@ -12,14 +12,20 @@ import {
   GALLERY_VIDEO_DURATIONS,
   GALLERY_VIEW_MODES,
   getAllGalleryRegionCodes,
+  getGalleryAdTypeOptionGroups,
 } from '../constants/galleryConstants.js';
 import { loadGalleryViewMode, saveGalleryViewMode } from '../utils/galleryViewStorage.js';
-import { isValidUnifiedAppId } from '../utils/galleryAppSearch.js';
+import {
+  isValidUnifiedAppId,
+  fetchUnifiedAppDetail,
+  mergeAppSearchWithDetails,
+  toggleStoreVersionSelection,
+} from '../utils/galleryAppSearch.js';
 import { loadGalleryAppsFromStorage, saveGalleryAppsToStorage } from '../utils/galleryAppsStorage.js';
 import { buildGalleryFilters, getDefaultDateRange } from '../utils/buildGalleryFilters.js';
 import { resolveDatePresetRange } from '../utils/galleryDatePresets.js';
 import { fetchGalleryData, fetchGalleryFilterCounts } from '../utils/galleryApi.js';
-import { buildFilterFacetCountMaps, buildKpiCountMap } from '../utils/formatGallery.js';
+import { buildFilterFacetCountMaps, buildKpiCountMap, dedupeCreativeGalleryRows, getCreativeGalleryRowKey } from '../utils/formatGallery.js';
 
 const defaultRange = getDefaultDateRange(30);
 const AUTO_FETCH_MS = 400;
@@ -45,10 +51,26 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
   const [selectedBannerDimensions, setSelectedBannerDimensions] = useState([]);
   const [selectedAdTypes, setSelectedAdTypes] = useState([]);
   const [apps, setApps] = useState(() => loadGalleryAppsFromStorage());
+
+  useEffect(() => {
+    const validValues = new Set(
+      getGalleryAdTypeOptionGroups(platformId).flatMap((g) =>
+        (g.options || []).map((o) => o.value)
+      )
+    );
+    setSelectedAdTypes((prev) => {
+      const next = prev.filter((value) => validValues.has(value));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [platformId]);
+  const [appsPickerCollapsed, setAppsPickerCollapsed] = useState(
+    () => loadGalleryAppsFromStorage().length > 0
+  );
   const [addAppModalOpen, setAddAppModalOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState('report');
-  const [keywords, setKeywords] = useState('');
+  const [keywordItems, setKeywordItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [kpisRows, setKpisRows] = useState([]);
   const [creativesRows, setCreativesRows] = useState([]);
@@ -153,6 +175,12 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
     return Math.max(1, Math.ceil(total / pageSize) || 1);
   }, [totalCount, pageSize]);
 
+  const hasMore = useMemo(() => {
+    if (viewMode === GALLERY_VIEW_MODES.list) return false;
+    if (totalCount == null) return false;
+    return creativesRows.length < totalCount;
+  }, [viewMode, creativesRows.length, totalCount]);
+
   const appSummaries = useMemo(
     () =>
       apps
@@ -168,7 +196,7 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
     saveGalleryAppsToStorage(apps);
   }, [apps]);
 
-  const fetchGallery = useCallback(async () => {
+  const fetchGallery = useCallback(async ({ append = false, targetPage } = {}) => {
     if (!isLoggedIn) {
       onRequireLogin?.();
       return;
@@ -180,13 +208,24 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
       setTotalCount(null);
       return;
     }
-    setLoading(true);
+    const isListView = viewMode === GALLERY_VIEW_MODES.list;
+    if (append && isListView) return;
+
+    if (append) {
+      if (loading || loadingMore || !hasMore) return;
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     setError('');
-    addLog?.('正在加载创意库数据…', 'info');
+    const requestPage = append ? page + 1 : (isListView ? (targetPage ?? page) : 1);
+    if (!append) {
+      addLog?.('正在加载创意库数据…', 'info');
+    }
     try {
       const result = await fetchGalleryData(
         filters,
-        { limit: pageSize, offset: (page - 1) * pageSize },
+        { limit: pageSize, offset: (requestPage - 1) * pageSize },
         { orderField: sortOption.orderField, orderDir: sortOption.orderDir }
       );
       if (!result.ok) {
@@ -198,22 +237,48 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
         }
         return;
       }
-      setKpisRows(result.kpisRows);
-      setCreativesRows(result.creativesRows);
-      setTotalCount(result.totalCount);
-      addLog?.(
-        `创意库加载成功：${result.creativesRows.length} 条创意${result.totalCount != null ? ` / 共 ${result.totalCount}` : ''}`,
-        'success'
-      );
+      if (append) {
+        setCreativesRows((prev) => {
+          const seen = new Set(prev.map(getCreativeGalleryRowKey));
+          const nextRows = result.creativesRows.filter(
+            (row) => !seen.has(getCreativeGalleryRowKey(row))
+          );
+          return nextRows.length ? [...prev, ...nextRows] : prev;
+        });
+        setPage(requestPage);
+      } else {
+        setKpisRows(result.kpisRows);
+        setCreativesRows(dedupeCreativeGalleryRows(result.creativesRows));
+        setTotalCount(result.totalCount);
+        setPage(requestPage);
+        addLog?.(
+          `创意库加载成功：${result.creativesRows.length} 条创意${result.totalCount != null ? ` / 共 ${result.totalCount}` : ''}`,
+          'success'
+        );
+      }
     } catch (e) {
       const msg = e?.message || String(e);
       setError(msg);
       addLog?.(msg, 'error');
       if (e?.requiresLogin) onRequireLogin?.();
     } finally {
-      setLoading(false);
+      if (append) setLoadingMore(false);
+      else setLoading(false);
     }
-  }, [isLoggedIn, selectedAppIds, filters, page, pageSize, sortOption, onRequireLogin, addLog]);
+  }, [
+    isLoggedIn,
+    selectedAppIds,
+    filters,
+    page,
+    pageSize,
+    sortOption,
+    viewMode,
+    onRequireLogin,
+    addLog,
+    loading,
+    loadingMore,
+    hasMore,
+  ]);
 
   fetchGalleryRef.current = fetchGallery;
 
@@ -258,11 +323,19 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
 
   useEffect(() => {
     setPage(1);
-  }, [filters]);
+    setCreativesRows([]);
+    setTotalCount(null);
+  }, [filters, sortById, pageSize]);
+
+  const loadMore = useCallback(() => {
+    if (viewMode !== GALLERY_VIEW_MODES.grid) return;
+    fetchGalleryRef.current?.({ append: true });
+  }, [viewMode]);
 
   useEffect(() => {
+    if (viewMode !== GALLERY_VIEW_MODES.list) return;
     if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  }, [viewMode, page, totalPages]);
 
   useEffect(() => {
     if (!isLoggedIn || !selectedAppIds.length) return undefined;
@@ -271,14 +344,24 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
       return undefined;
     }
     const timer = setTimeout(() => {
-      fetchGalleryRef.current?.();
+      fetchGalleryRef.current?.({ append: false });
     }, AUTO_FETCH_MS);
     return () => clearTimeout(timer);
-  }, [isLoggedIn, selectedAppIds, filters, page, pageSize, sortById]);
+  }, [
+    isLoggedIn,
+    selectedAppIds,
+    filters,
+    pageSize,
+    sortById,
+    viewMode,
+    ...(viewMode === GALLERY_VIEW_MODES.list ? [page] : []),
+  ]);
 
   const handleViewModeChange = useCallback((mode) => {
     const next = mode === GALLERY_VIEW_MODES.list ? GALLERY_VIEW_MODES.list : GALLERY_VIEW_MODES.grid;
     setViewMode(next);
+    setPage(1);
+    setCreativesRows([]);
     saveGalleryViewMode(next);
   }, []);
 
@@ -367,13 +450,26 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
     setSortById('share');
     setNewCreativesOnly(false);
     setCreativesWithImpressionsOnly(false);
-    setTimeout(() => fetchGalleryRef.current?.(), 0);
+    setTimeout(() => fetchGalleryRef.current?.({ append: false }), 0);
   }, [selectAllRegions]);
 
   const toggleAppSelected = useCallback((unifiedAppId) => {
     setApps((prev) =>
       prev.map((a) =>
         a.unifiedAppId === unifiedAppId ? { ...a, selected: !a.selected } : a
+      )
+    );
+  }, []);
+
+  const collapseAppsPicker = useCallback(() => setAppsPickerCollapsed(true), []);
+  const expandAppsPicker = useCallback(() => setAppsPickerCollapsed(false), []);
+
+  const toggleStoreVersion = useCallback((unifiedAppId, versionId, os) => {
+    setApps((prev) =>
+      prev.map((a) =>
+        a.unifiedAppId === unifiedAppId
+          ? toggleStoreVersionSelection(a, versionId, os)
+          : a
       )
     );
   }, []);
@@ -391,6 +487,12 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
                 name: app.name || a.name,
                 iconUrl: app.iconUrl || a.iconUrl,
                 publisher: app.publisher || a.publisher,
+                iosCount: app.iosCount ?? a.iosCount,
+                androidCount: app.androidCount ?? a.androidCount,
+                iosApps: app.iosApps?.length ? app.iosApps : a.iosApps,
+                androidApps: app.androidApps?.length ? app.androidApps : a.androidApps,
+                downloads: app.downloads ?? a.downloads,
+                revenue: app.revenue ?? a.revenue,
               }
             : a
         );
@@ -403,6 +505,12 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
           publisher: app.publisher || '—',
           iconUrl: app.iconUrl || '',
           accent: '#5c6bc0',
+          iosCount: app.iosCount ?? 0,
+          androidCount: app.androidCount ?? 0,
+          iosApps: app.iosApps ?? [],
+          androidApps: app.androidApps ?? [],
+          downloads: app.downloads || '',
+          revenue: app.revenue || '',
           selected: true,
           order: prev.length + 1,
         },
@@ -411,8 +519,52 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
     return true;
   }, []);
 
+  const enrichAppDetails = useCallback(async (unifiedAppId) => {
+    const detail = await fetchUnifiedAppDetail(unifiedAppId);
+    if (!detail) return null;
+
+    let merged = null;
+    setApps((prev) => {
+      const app = prev.find((a) => a.unifiedAppId === unifiedAppId);
+      if (!app) return prev;
+      if ((app.iosApps?.length || 0) + (app.androidApps?.length || 0) > 0) {
+        merged = app;
+        return prev;
+      }
+      merged = mergeAppSearchWithDetails(app, detail);
+      const next = prev.map((a) =>
+        a.unifiedAppId === unifiedAppId ? { ...a, ...merged } : a
+      );
+      saveGalleryAppsToStorage(next);
+      return next;
+    });
+    return merged;
+  }, []);
+
   const removeApp = useCallback((unifiedAppId) => {
     setApps((prev) => prev.filter((a) => a.unifiedAppId !== unifiedAppId));
+  }, []);
+
+  const addKeyword = useCallback((text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setKeywordItems((prev) => {
+      if (prev.some((item) => item.text === trimmed)) return prev;
+      return [
+        ...prev,
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          text: trimmed,
+          selected: true,
+        },
+      ];
+    });
+  }, []);
+
+  const toggleKeyword = useCallback((id) => {
+    setKeywordItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item))
+    );
   }, []);
 
   return {
@@ -463,16 +615,25 @@ export function useCreativeGallery({ isLoggedIn, onRequireLogin, addLog }) {
     setSelectedBannerDimensions,
     apps,
     setApps,
+    appsPickerCollapsed,
+    collapseAppsPicker,
+    expandAppsPicker,
     toggleAppSelected,
+    toggleStoreVersion,
     addAppFromSearch,
+    enrichAppDetails,
     removeApp,
     addAppModalOpen,
     setAddAppModalOpen,
     sidebarTab,
     setSidebarTab,
-    keywords,
-    setKeywords,
+    keywordItems,
+    addKeyword,
+    toggleKeyword,
     loading,
+    loadingMore,
+    hasMore,
+    loadMore,
     error,
     kpisRows,
     creativesRows,

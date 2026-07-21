@@ -1,0 +1,10 @@
+.sensor-tower-logo {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.sensor-tower-logo--on-dark {
+  filter: brightness(0) invert(1);
+  opacity: 0.92;
+}

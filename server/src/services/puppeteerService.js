@@ -1,9 +1,12 @@
-import puppeteerBase, {TimeoutError} from 'puppeteer';
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { TimeoutError } from 'puppeteer';
 import { spawn } from 'child_process';
-import {puppeteerOptions} from '../config.js';
+import { puppeteerOptions } from '../config.js';
 import { removeChromeUserDataSingletonLocks } from '../utils/removeChromeUserDataSingletonLocks.js';
+import {
+  applyPageAntiDetection,
+  enhanceLaunchOptions,
+  getStealthPuppeteer,
+} from '../utils/browserAntiDetection.js';
 import {rm} from 'fs/promises';
 import {dirname} from 'path';
 import {fileURLToPath} from 'url';
@@ -21,7 +24,7 @@ function isGuangdadaSearchParamsApiFormat(sp) {
 }
 
 // 使用 Stealth 插件来避免反爬虫检测
-puppeteer.use(StealthPlugin());
+const puppeteer = getStealthPuppeteer();
 
 const __filename = fileURLToPath(import.meta.url);
 // 获取当前目录的绝对路径
@@ -181,70 +184,20 @@ async function syncAuthorizationCnFromJwtStorage(page) {
     }
 }
 
-// 配置页面的反检测措施
+// 配置页面的反检测措施（统一模块：stealth + 固定 UA/时区/语言）
 async function setupAntiDetection(page) {
-    // 1. 覆盖 WebDriver 属性
-    await page.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        });
-        
-        // 覆盖 chrome 属性
-        window.chrome = {
-            runtime: {},
-            loadTimes: function() {},
-            csi: function() {},
-            app: {}
-        };
-        
-        // 覆盖 plugins
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [1, 2, 3, 4, 5]
-        });
-        
-        // 覆盖 languages
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['zh-CN', 'zh', 'en']
-        });
-    });
-    
-    // 2. 设置更真实的 User-Agent
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    
-    // 3. 设置视口
-    await page.setViewport({
-        width: 1920,
-        height: 1080,
-        deviceScaleFactor: 1,
-        hasTouch: false,
-        isLandscape: true,
-        isMobile: false
-    });
-    
-    // 4. 添加额外的头部信息
-    await page.setExtraHTTPHeaders({
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-        'Upgrade-Insecure-Requests': '1',
-        'Connection': 'keep-alive',
-        'Cache-Control': 'max-age=0'
-    });
-    
-    // 5. 模拟人类行为：随机延迟和鼠标移动
+    await applyPageAntiDetection(page);
+
     page.on('load', async () => {
-        // 随机延迟
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
-        
-        // 随机鼠标移动
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * 1000 + 500));
         try {
             await page.mouse.move(
                 Math.random() * 800 + 100,
                 Math.random() * 600 + 100,
                 { steps: 10 }
             );
-        } catch (e) {
-            // 忽略鼠标移动错误
+        } catch {
+            /* ignore */
         }
     });
 }
@@ -286,7 +239,7 @@ export const initializeBrowser = async () => {
             logger.info('已启用 Chrome 远程调试端口(内部):', internalPort, '外部端口:', externalPort);
         }
         logger.info('尝试启动浏览器，配置:', JSON.stringify(launchOpts, null, 2));
-        browser = await puppeteer.launch(launchOpts);
+        browser = await puppeteer.launch(enhanceLaunchOptions(launchOpts));
         await browser.defaultBrowserContext().overridePermissions('https://guangdada.net/', ['clipboard-read', 'clipboard-write']);
         console.log('广大大浏览器已启动');
         logger.info('浏览器启动成功');
@@ -300,10 +253,10 @@ export const initializeBrowser = async () => {
         // 重新尝试使用默认配置
         try {
             logger.info('尝试使用默认配置启动浏览器');
-            browser = await puppeteer.launch({
+            browser = await puppeteer.launch(enhanceLaunchOptions({
                 headless: false,
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
-            });
+                args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            }));
             logger.info('使用默认配置启动浏览器成功');
         } catch (e2) {
             logger.error('使用默认配置也启动失败:', e2.message);
@@ -618,12 +571,153 @@ export function getStoredGuangdadaBbaAuthorization() {
     return getStoredGuangdadaAuthorization();
 }
 
-/** 在发起 /guangdada-cn/ad-info 前从登录页刷新 jwt.cn（jwt 可能晚于首屏写入 localStorage） */
+/** 在发起国内版 ad-info 代理前从登录页刷新 jwt.cn（jwt 可能晚于首屏写入 localStorage） */
 export async function refreshGuangdadaBbaAuthFromLoginPage() {
     if (status.current !== LoginStatus.ONLINE) return;
     if (!loginPage || loginPage.isClosed()) return;
     await syncAuthorizationCnFromJwtStorage(loginPage);
 }
+
+async function resolveGuangdadaNapiAuthFromLoginPage() {
+    let authorizationToken = loginInfo.authorization;
+    let deviceId = loginInfo.deviceId;
+    let userToken = loginInfo.userToken;
+
+    if (!loginPage || loginPage.isClosed()) {
+        return { authorizationToken, deviceId, userToken };
+    }
+
+    if (authorizationToken && userToken && deviceId) {
+        return { authorizationToken, deviceId, userToken };
+    }
+
+    try {
+        const storageData = await loginPage.evaluate(() => {
+            const result = {};
+            const readStorage = (storage) => {
+                try {
+                    for (let i = 0; i < storage.length; i++) {
+                        const key = storage.key(i);
+                        const value = storage.getItem(key);
+                        if (!key || !value) continue;
+                        if (/auth|token|bearer|user|jwt|nbs|device/i.test(key)) {
+                            result[key] = value;
+                        }
+                    }
+                } catch (_) {}
+            };
+            readStorage(localStorage);
+            readStorage(sessionStorage);
+            for (const jwtKey of ['jwt', 'JWT']) {
+                const raw = localStorage.getItem(jwtKey) || sessionStorage.getItem(jwtKey);
+                if (!raw) continue;
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && typeof parsed.nbs === 'string' && parsed.nbs.trim()) {
+                        result.__jwt_nbs = parsed.nbs.trim();
+                    }
+                } catch (_) {}
+            }
+            return result;
+        });
+
+        authorizationToken =
+            authorizationToken ||
+            storageData.__jwt_nbs ||
+            storageData.authorization ||
+            storageData.Authorization ||
+            storageData.token ||
+            storageData.authToken ||
+            storageData.accessToken ||
+            null;
+
+        if (!authorizationToken) {
+            for (const value of Object.values(storageData)) {
+                if (looksLikeJwt(value)) {
+                    authorizationToken = String(value).trim();
+                    break;
+                }
+            }
+        }
+
+        userToken = userToken || storageData['user-token'] || storageData.userToken || null;
+        deviceId = deviceId || storageData['device-id'] || storageData.deviceId || null;
+
+        if (authorizationToken) loginInfo.authorization = authorizationToken;
+        if (userToken) loginInfo.userToken = userToken;
+        if (deviceId) loginInfo.deviceId = deviceId;
+    } catch (e) {
+        logger.warn('从页面存储读取广大大 napi 鉴权失败:', e.message);
+    }
+
+    return { authorizationToken, deviceId, userToken };
+}
+
+/** 读取当前登录账号的 nbs-info：包含 user_count 的官方额度上限与周期。 */
+export const fetchNbsInfo = async () => {
+    if (status.current !== LoginStatus.ONLINE) {
+        return { data: null, success: false, code: 'NOT_LOGGED_IN', message: '未登录，请先登录' };
+    }
+    if (!loginPage || loginPage.isClosed()) {
+        return { data: null, success: false, code: 'NO_LOGIN_PAGE', message: '登录页面已关闭，请重新登录' };
+    }
+
+    await ensureGuangdadaGlobalDisplayAdsForInternationalApis(loginPage);
+
+    try {
+        const { authorizationToken, deviceId, userToken } = await resolveGuangdadaNapiAuthFromLoginPage();
+        const response = await loginPage.evaluate(async (authToken, devId, uToken) => {
+            try {
+                const headers = {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                    'Authorization': authToken || '',
+                    'Connection': 'keep-alive',
+                    'Referer': 'https://guangdada.net/modules/creative/display-ads',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+                };
+                if (devId) headers['x-device-id'] = devId;
+                if (uToken) headers['x-nbs-user-token'] = uToken;
+                headers['x-product-id'] = '2';
+                headers['x-timezone'] = '+0800';
+
+                const res = await fetch('/napi/v1/user/nbs-info', {
+                    method: 'GET',
+                    headers,
+                    credentials: 'include'
+                });
+                const text = await res.text();
+                let data = null;
+                if (text && text.trim()) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch (parseError) {
+                        return { ok: false, status: res.status, statusText: parseError.message, data: null };
+                    }
+                }
+                return { ok: res.ok, status: res.status, statusText: res.statusText, data };
+            } catch (error) {
+                return { ok: false, status: 500, statusText: error.message, data: null };
+            }
+        }, authorizationToken, deviceId, userToken);
+
+        const apiData = response.data;
+        const success = response.ok && apiData && (apiData.id === 'SUCCESS' || apiData.code === 0);
+        return {
+            data: success ? (apiData.data || null) : null,
+            raw: apiData,
+            success: !!success,
+            code: response.status,
+            message: success ? 'success' : (apiData?.message || response.statusText || '读取 nbs-info 失败')
+        };
+    } catch (error) {
+        logger.error('广大大 nbs-info 请求失败:', error);
+        return { data: null, success: false, code: 500, message: `读取 nbs-info 失败: ${error.message || '未知错误'}` };
+    }
+};
 
 /** 健康检查：浏览器是否存在、页面数、登录状态与账号，供 /health 排查用 */
 export const getHealthInfo = async () => {
@@ -2310,6 +2404,231 @@ export const fetchAdvertiserAssociation = async (params = {}) => {
     }
 };
 
+/** 广大大素材内容属性：GET /napi/v1/creative/ai-tags-v2?app_type=1 */
+export const fetchAiTagsV2 = async (params = {}) => {
+    if (status.current !== LoginStatus.ONLINE) {
+        return { data: [], success: false, code: 'NOT_LOGGED_IN', message: '未登录，请先登录' };
+    }
+    if (!loginPage || loginPage.isClosed()) {
+        return { data: [], success: false, code: 'NO_LOGIN_PAGE', message: '登录页面已关闭，请重新登录' };
+    }
+    await ensureGuangdadaGlobalDisplayAdsForInternationalApis(loginPage);
+    const appTypeRaw = Number(params.app_type);
+    const appType = [1, 2, 3].includes(appTypeRaw) ? appTypeRaw : 1;
+    try {
+        let authorizationToken = loginInfo.authorization;
+        let deviceId = loginInfo.deviceId;
+        let userToken = loginInfo.userToken;
+        if (!authorizationToken) {
+            try {
+                const storageData = await loginPage.evaluate(() => {
+                    const keys = ['authorization', 'token', 'Authorization', 'user-token', 'device-id'];
+                    const result = {};
+                    for (const key of keys) {
+                        const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+                        if (value) result[key] = value;
+                    }
+                    return result;
+                });
+                if (storageData.authorization || storageData.Authorization || storageData.token) {
+                    authorizationToken = storageData.authorization || storageData.Authorization || storageData.token;
+                    loginInfo.authorization = authorizationToken;
+                }
+                if (storageData['user-token']) { userToken = storageData['user-token']; loginInfo.userToken = userToken; }
+                if (storageData['device-id']) { deviceId = storageData['device-id']; loginInfo.deviceId = deviceId; }
+            } catch (e) {
+                logger.warn('ai-tags-v2 从存储获取 token 失败:', e.message);
+            }
+        }
+
+        const qs = new URLSearchParams({ app_type: String(appType) });
+        const requestUrl = `/napi/v1/creative/ai-tags-v2?${qs.toString()}`;
+        const response = await loginPage.evaluate(async (url, authToken, devId, uToken) => {
+            try {
+                const headers = {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                    'Authorization': authToken || '',
+                    'Connection': 'keep-alive',
+                    'Referer': 'https://guangdada.net/modules/creative/display-ads',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+                };
+                if (devId) headers['x-device-id'] = devId;
+                if (uToken) headers['x-nbs-user-token'] = uToken;
+                headers['x-product-id'] = '2';
+                headers['x-timezone'] = '+0800';
+                const res = await fetch(url, { method: 'GET', headers, credentials: 'include' });
+                const text = await res.text();
+                let data = null;
+                if (text && text.trim()) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch (parseError) {
+                        return { ok: false, status: res.status, statusText: parseError.message, data: null };
+                    }
+                }
+                return { ok: res.ok, status: res.status, statusText: res.statusText, data };
+            } catch (error) {
+                return { ok: false, status: 500, statusText: error.message, data: null };
+            }
+        }, requestUrl, authorizationToken, deviceId, userToken);
+
+        const apiData = response.data;
+        const success = response.ok && apiData && (apiData.id === 'SUCCESS' || apiData.code === 0);
+        return {
+            data: Array.isArray(apiData?.data) ? apiData.data : [],
+            success: !!success,
+            code: response.status,
+            message: success ? 'success' : (apiData?.message || response.statusText || '请求失败')
+        };
+    } catch (error) {
+        logger.error('广大大 ai-tags-v2 请求失败:', error);
+        return {
+            data: [],
+            success: false,
+            code: 500,
+            message: `请求失败: ${error.message}`
+        };
+    }
+};
+
+function getLastFullWeekMondayYmdBeijing() {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const nowBeijing = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const todayUtcMidnight = Date.UTC(
+        nowBeijing.getUTCFullYear(),
+        nowBeijing.getUTCMonth(),
+        nowBeijing.getUTCDate()
+    );
+    const daysSinceMonday = (nowBeijing.getUTCDay() + 6) % 7;
+    const lastMonday = new Date(todayUtcMidnight - (daysSinceMonday + 7) * dayMs);
+    const y = lastMonday.getUTCFullYear();
+    const m = String(lastMonday.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(lastMonday.getUTCDate()).padStart(2, '0');
+    return `${y}${m}${d}`;
+}
+
+export function normalizeCreativeRankListBody(params = {}) {
+    const chartTypeRaw = params.chart_type ?? params.chartType ?? 3;
+    const chartType = ['1', '2', '3'].includes(String(chartTypeRaw)) ? String(chartTypeRaw) : '3';
+    const appTypeRaw = Number(params.app_type ?? params.appType ?? 1);
+    const appType = [1, 2, 3].includes(appTypeRaw) ? String(appTypeRaw) : '1';
+    const dateRaw = params.date ?? params.rank_week;
+    const date = dateRaw != null && /^\d{8}$/.test(String(dateRaw).trim())
+        ? String(dateRaw).trim()
+        : getLastFullWeekMondayYmdBeijing();
+    const sortTypeRaw = params.sort_type ?? params.sortType ?? 1;
+    const body = {
+        app_type: appType,
+        chart_type: chartType,
+        date,
+        sort_type: String(sortTypeRaw || 1),
+    };
+
+    const copyArray = (targetKey, sourceKey = targetKey, mapNumber = false) => {
+        const value = params[sourceKey];
+        if (!Array.isArray(value) || value.length === 0) return;
+        const list = value
+            .map((item) => (mapNumber ? parseInt(item, 10) : String(item).trim()))
+            .filter((item) => (mapNumber ? !Number.isNaN(item) : item !== ''));
+        if (list.length > 0) body[targetKey] = list;
+    };
+    copyArray('tag_ids', 'tag_ids', true);
+    copyArray('platform', 'platform');
+    copyArray('geo', 'geo');
+    copyArray('language', 'language');
+
+    const os = params.os != null && params.os !== '' ? parseInt(params.os, 10) : null;
+    if (os != null && !Number.isNaN(os)) body.os = os;
+    if (params.top_type != null && String(params.top_type).trim() !== '') body.top_type = String(params.top_type).trim();
+    if (params.ads_type != null && String(params.ads_type).trim() !== '') {
+        const adsType = parseInt(params.ads_type, 10);
+        body.ads_type = Number.isNaN(adsType) ? String(params.ads_type).trim() : adsType;
+    }
+    if (params.is_new_ads === true || params.is_new_ads === 1 || params.is_new_ads === '1') body.is_new_ads = true;
+    return body;
+}
+
+/** 广大大创意排行榜：POST /napi/v1/creative/creative-rank/list */
+export const fetchCreativeRankList = async (params = {}) => {
+    if (status.current !== LoginStatus.ONLINE) {
+        return { data: null, success: false, code: 'NOT_LOGGED_IN', message: '未登录，请先登录' };
+    }
+    if (!loginPage || loginPage.isClosed()) {
+        return { data: null, success: false, code: 'NO_LOGIN_PAGE', message: '登录页面已关闭，请重新登录' };
+    }
+    await ensureGuangdadaGlobalDisplayAdsForInternationalApis(loginPage);
+
+    try {
+        const { authorizationToken, deviceId, userToken } = await resolveGuangdadaNapiAuthFromLoginPage();
+        const requestBody = normalizeCreativeRankListBody(params);
+        logger.info('广大大创意排行榜请求体:', JSON.stringify(requestBody, null, 2));
+
+        const response = await loginPage.evaluate(async (body, authToken, devId, uToken) => {
+            try {
+                const headers = {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                    'Authorization': authToken || '',
+                    'Connection': 'keep-alive',
+                    'Content-Type': 'application/json',
+                    'Origin': 'https://guangdada.net',
+                    'Referer': 'https://guangdada.net/modules/creative/creative-charts',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+                };
+                if (devId) headers['x-device-id'] = devId;
+                if (uToken) headers['x-nbs-user-token'] = uToken;
+                headers['x-product-id'] = '2';
+                headers['x-timezone'] = '+0800';
+
+                const res = await fetch('/napi/v1/creative/creative-rank/list', {
+                    method: 'POST',
+                    headers,
+                    credentials: 'include',
+                    body: JSON.stringify(body),
+                });
+                const text = await res.text();
+                let data = null;
+                if (text && text.trim()) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch (parseError) {
+                        return { ok: false, status: res.status, statusText: parseError.message, data: null };
+                    }
+                }
+                return { ok: res.ok, status: res.status, statusText: res.statusText, data };
+            } catch (error) {
+                return { ok: false, status: 500, statusText: error.message, data: null };
+            }
+        }, requestBody, authorizationToken, deviceId, userToken);
+
+        const apiData = response.data;
+        const payload = apiData && apiData.data ? apiData.data : apiData;
+        const success = response.ok && apiData && (
+            apiData.id === 'SUCCESS' ||
+            apiData.code === 0 ||
+            Array.isArray(payload?.creatives) ||
+            Array.isArray(payload?.list)
+        );
+        return {
+            data: payload || null,
+            raw: apiData || null,
+            success: !!success,
+            code: response.status,
+            message: success ? 'success' : (apiData?.message || response.statusText || '请求失败')
+        };
+    } catch (error) {
+        logger.error('广大大创意排行榜请求失败:', error);
+        return { data: null, success: false, code: 500, message: `请求失败: ${error.message}` };
+    }
+};
+
 /**
  * 广大大创意详情 detail-v2（GET）
  * @param {{ ad_key: string, app_type: number, search_flag: number }} params
@@ -2388,6 +2707,116 @@ export const fetchCreativeDetail = async (params = {}) => {
         logger.error('广大大创意详情请求失败:', error);
         return { data: null, success: false, code: 500, message: `请求失败: ${error.message}` };
     }
+};
+
+function appendDefinedQuery(qs, key, value) {
+    if (value == null || value === '') return;
+    qs.set(key, String(value));
+}
+
+async function fetchGuangdadaNapiGetJson(path, query = {}, options = {}) {
+    if (status.current !== LoginStatus.ONLINE) {
+        return { data: null, success: false, code: 'NOT_LOGGED_IN', message: '未登录，请先登录' };
+    }
+    if (!loginPage || loginPage.isClosed()) {
+        return { data: null, success: false, code: 'NO_LOGIN_PAGE', message: '登录页面已关闭，请重新登录' };
+    }
+    await ensureGuangdadaGlobalDisplayAdsForInternationalApis(loginPage);
+
+    try {
+        const { authorizationToken, deviceId, userToken } = await resolveGuangdadaNapiAuthFromLoginPage();
+        const qs = new URLSearchParams();
+        Object.entries(query || {}).forEach(([key, value]) => appendDefinedQuery(qs, key, value));
+        const requestUrl = `${path}${qs.toString() ? `?${qs.toString()}` : ''}`;
+        const referer = options.referer || 'https://guangdada.net/modules/creative/charts/hot-charts';
+
+        const response = await loginPage.evaluate(async (url, authToken, devId, uToken, refererUrl) => {
+            try {
+                const headers = {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                    'Authorization': authToken || '',
+                    'Connection': 'keep-alive',
+                    'Referer': refererUrl,
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+                };
+                if (devId) headers['x-device-id'] = devId;
+                if (uToken) headers['x-nbs-user-token'] = uToken;
+                headers['x-product-id'] = '2';
+                headers['x-timezone'] = '+0800';
+                const res = await fetch(url, { method: 'GET', headers, credentials: 'include' });
+                const text = await res.text();
+                let data = null;
+                if (text && text.trim()) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch (parseError) {
+                        return { ok: false, status: res.status, statusText: parseError.message, data: null };
+                    }
+                }
+                return { ok: res.ok, status: res.status, statusText: res.statusText, data };
+            } catch (error) {
+                return { ok: false, status: 500, statusText: error.message, data: null };
+            }
+        }, requestUrl, authorizationToken, deviceId, userToken, referer);
+
+        const apiData = response.data;
+        const success = response.ok && apiData && (apiData.id === 'SUCCESS' || apiData.code === 0);
+        return {
+            data: apiData?.data ?? null,
+            raw: apiData || null,
+            success: !!success,
+            code: response.status,
+            message: success ? 'success' : (apiData?.message || response.statusText || '请求失败'),
+        };
+    } catch (error) {
+        logger.error(`广大大 ${path} 请求失败:`, error);
+        return { data: null, success: false, code: 500, message: `请求失败: ${error.message}` };
+    }
+}
+
+/** 广大大详情页关联版本：GET creative/related-dynamic */
+export const fetchRelatedDynamic = async (params = {}) => {
+    const { dynamic_number, app_type = 1, creative_key, platform, created_at } = params;
+    if (!dynamic_number || !creative_key) {
+        return { data: null, success: false, code: 400, message: '缺少 dynamic_number 或 creative_key' };
+    }
+    return fetchGuangdadaNapiGetJson('/napi/v1/creative/related-dynamic', {
+        dynamic_number,
+        app_type,
+        creative_key,
+        platform,
+        created_at,
+    });
+};
+
+/** 广大大详情页榜单状态：GET creative/rank-status */
+export const fetchRankStatus = async (params = {}) => {
+    const { ad_key, app_type = 1 } = params;
+    if (!ad_key) {
+        return { data: null, success: false, code: 400, message: '缺少 ad_key' };
+    }
+    return fetchGuangdadaNapiGetJson('/napi/v1/creative/rank-status', {
+        ad_key,
+        app_type,
+    });
+};
+
+/** 广大大详情页素材脚本分析：GET creative/material-script-analysis */
+export const fetchMaterialScriptAnalysis = async (params = {}) => {
+    const { ad_key, app_type = 1, search_flag, ads_type } = params;
+    if (!ad_key) {
+        return { data: null, success: false, code: 400, message: '缺少 ad_key' };
+    }
+    return fetchGuangdadaNapiGetJson('/napi/v1/creative/material-script-analysis', {
+        ad_key,
+        app_type,
+        search_flag,
+        ads_type,
+    });
 };
 
 /**

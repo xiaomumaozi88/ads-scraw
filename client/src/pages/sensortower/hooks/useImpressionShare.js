@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { buildImpressionShareRequest } from '../utils/buildImpressionShareRequest.js';
 import {
   CUSTOM_DATE_PRESET_ID,
   resolveDatePresetRange,
   toDateKey,
 } from '../utils/galleryDatePresets.js';
+import { parseImpressionShareUrlParams } from '../utils/galleryToImpressionShare.js';
 import { IS_DATE_PRESET_RANGE_OPTIONS } from '../constants/impressionShareDatePresets.js';
 import {
   loadImpressionShareAppsFromStorage,
   normalizeImpressionShareAppFromSearch,
   saveImpressionShareAppsToStorage,
 } from '../utils/impressionShareAppsStorage.js';
+import {
+  fetchUnifiedAppDetail,
+  mergeAppSearchWithDetails,
+  toggleStoreVersionSelection,
+} from '../utils/galleryAppSearch.js';
 import { fetchImpressionShareData } from '../utils/impressionShareApi.js';
 import { buildChartDateAxis } from '../utils/impressionShareChartAxis.js';
 import {
@@ -24,6 +31,10 @@ const initialRange = resolveDatePresetRange('last30', new Date(), IS_DATE_PRESET
 const AUTO_FETCH_MS = 400;
 
 export function useImpressionShare({ isLoggedIn, onRequireLogin, addLog } = {}) {
+  const [searchParams] = useSearchParams();
+  const appliedUrlKeyRef = useRef('');
+  const skipDatePresetSyncRef = useRef(false);
+
   const [apps, setApps] = useState(() => loadImpressionShareAppsFromStorage());
   const [appsPickerCollapsed, setAppsPickerCollapsed] = useState(
     () => loadImpressionShareAppsFromStorage().length > 0
@@ -97,7 +108,13 @@ export function useImpressionShare({ isLoggedIn, onRequireLogin, addLog } = {}) 
       if (apps.some((a) => a.unifiedAppId === normalized.unifiedAppId)) {
         persistApps(
           apps.map((a) =>
-            a.unifiedAppId === normalized.unifiedAppId ? { ...a, selected: true } : a
+            a.unifiedAppId === normalized.unifiedAppId
+              ? {
+                  ...a,
+                  ...normalized,
+                  selected: true,
+                }
+              : a
           )
         );
       } else {
@@ -108,6 +125,41 @@ export function useImpressionShare({ isLoggedIn, onRequireLogin, addLog } = {}) 
     },
     [apps, persistApps]
   );
+
+  const toggleStoreVersion = useCallback(
+    (unifiedAppId, versionId, os) => {
+      persistApps(
+        apps.map((a) =>
+          a.unifiedAppId === unifiedAppId
+            ? toggleStoreVersionSelection(a, versionId, os)
+            : a
+        )
+      );
+    },
+    [apps, persistApps]
+  );
+
+  const enrichAppDetails = useCallback(async (unifiedAppId) => {
+    const detail = await fetchUnifiedAppDetail(unifiedAppId);
+    if (!detail) return null;
+
+    let merged = null;
+    setApps((prev) => {
+      const app = prev.find((a) => a.unifiedAppId === unifiedAppId);
+      if (!app) return prev;
+      if ((app.iosApps?.length || 0) + (app.androidApps?.length || 0) > 0) {
+        merged = app;
+        return prev;
+      }
+      merged = mergeAppSearchWithDetails(app, detail);
+      const next = prev.map((a) =>
+        a.unifiedAppId === unifiedAppId ? { ...a, ...merged } : a
+      );
+      saveImpressionShareAppsToStorage(next);
+      return next;
+    });
+    return merged;
+  }, []);
 
   const collapseAppsPicker = useCallback(() => setAppsPickerCollapsed(true), []);
   const expandAppsPicker = useCallback(() => setAppsPickerCollapsed(false), []);
@@ -267,8 +319,36 @@ export function useImpressionShare({ isLoggedIn, onRequireLogin, addLog } = {}) 
 
   fetchRef.current = fetchImpressionShare;
 
+  useEffect(() => {
+    const parsed = parseImpressionShareUrlParams(searchParams);
+    if (!parsed || appliedUrlKeyRef.current === parsed.urlKey) return;
+    appliedUrlKeyRef.current = parsed.urlKey;
+    skipDatePresetSyncRef.current = true;
+
+    setPlatformId(parsed.platformId);
+    setStartDate(parsed.startDate);
+    setEndDate(parsed.endDate);
+    setDatePresetId(parsed.datePresetId);
+    setAllRegions(parsed.allRegions);
+    setSelectedRegions(parsed.selectedRegions);
+    setAllNetworks(parsed.allNetworks);
+    setSelectedNetworks(parsed.selectedNetworks);
+    setGranularityId(parsed.granularityId);
+    setChartTypeId(parsed.chartTypeId);
+    setMetricOptionId(parsed.metricOptionId);
+    setAdSourceId(parsed.adSourceId);
+    setBreakdownId(parsed.breakdownId);
+
+    const stored = loadImpressionShareAppsFromStorage();
+    if (stored.length) {
+      setApps(stored);
+      setAppsPickerCollapsed(true);
+    }
+  }, [searchParams]);
+
   // 挂载时校正预设日期（避免旧逻辑残留的错误区间）
   useEffect(() => {
+    if (skipDatePresetSyncRef.current) return;
     if (datePresetId === CUSTOM_DATE_PRESET_ID) return;
     const range = resolveDatePresetRange(datePresetId, new Date(), IS_DATE_PRESET_RANGE_OPTIONS);
     setStartDate((s) => (toDateKey(s) === toDateKey(range.startDate) ? s : range.startDate));
@@ -337,8 +417,10 @@ export function useImpressionShare({ isLoggedIn, onRequireLogin, addLog } = {}) 
     apiRequest,
     selectedAppIds,
     toggleAppSelected,
+    toggleStoreVersion,
     removeApp,
     addAppFromSearch,
+    enrichAppDetails,
     appsPickerCollapsed,
     collapseAppsPicker,
     expandAppsPicker,

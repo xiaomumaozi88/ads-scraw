@@ -94,20 +94,25 @@ function splitCoreTrack(values) {
   return { tag_ids: tagIds, game_play: gamePlay, game_theme: gameTheme, game_ip: gameIp };
 }
 
-function buildAiTagObject(selectedCodes, parentMap) {
-  if (!Array.isArray(selectedCodes) || selectedCodes.length === 0) return undefined;
-  const byParent = {};
-  for (const codeStr of selectedCodes) {
-    const code = parseInt(String(codeStr), 10);
-    if (Number.isNaN(code)) continue;
-    const parent = parentMap[code];
-    if (parent != null) {
-      if (!byParent[parent]) byParent[parent] = [];
-      byParent[parent].push(code);
-    }
-  }
-  if (Object.keys(byParent).length === 0) return undefined;
-  return byParent;
+function normalizeContentAttributeIds(id) {
+  const raw = Array.isArray(id) ? id : String(id ?? '').split(',');
+  return raw
+    .map((v) => parseInt(String(v).trim(), 10))
+    .filter((n) => !Number.isNaN(n));
+}
+
+function applyContentAttributesToBody(body, selectedAttributes) {
+  if (!Array.isArray(selectedAttributes) || selectedAttributes.length === 0) return;
+  selectedAttributes.forEach((item) => {
+    const key = item?.key || item?.categoryKey;
+    if (!key) return;
+    const ids = normalizeContentAttributeIds(item.id ?? item.ids ?? item.value);
+    if (ids.length === 0) return;
+    const current = Array.isArray(body[key]) ? body[key] : [];
+    const next = new Set(current);
+    ids.forEach((id) => next.add(id));
+    body[key] = Array.from(next);
+  });
 }
 
 /** 广大大官方使用北京时间(UTC+8)：YYYY-MM-DD 转为 seen_begin/seen_end 时按北京 00:00:00 / 23:59:59 */
@@ -142,17 +147,6 @@ export function dateRangeToSeenParams(startTime, endTime) {
   };
 }
 
-const IMAGE_AI_PARENT = {
-  97: 96, 98: 96, 99: 96, 100: 96, 6: 1, 7: 1, 8: 1, 9: 1, 10: 1, 12: 1, 13: 1, 38: 1, 39: 1, 40: 1, 41: 1, 42: 1, 44: 1, 45: 1, 46: 1, 47: 1, 48: 1, 49: 1,
-  14: 2, 15: 2, 16: 2, 17: 2, 51: 2, 52: 2, 53: 2, 54: 2, 55: 2, 56: 2, 57: 2, 58: 2, 61: 2, 63: 2, 64: 2, 65: 2, 66: 2,
-  18: 3, 19: 3, 20: 3, 21: 3, 22: 3, 101: 3, 102: 3, 103: 3, 104: 3, 105: 3, 106: 3, 111: 3,
-};
-const VIDEO_AI_PARENT = {
-  142: 140, 144: 140, 145: 140, 146: 140, 147: 140, 148: 140, 149: 140, 150: 140, 151: 140,
-  204: 200, 205: 200, 206: 200, 207: 200, 208: 200, 209: 200, 210: 200, 211: 200, 212: 200,
-  134: 130, 135: 130, 136: 130, 137: 130, 138: 130, 139: 130, 140: 130, 141: 130,
-};
-
 /**
  * 将表单/搜索参数转为广大大 API 的 body（与 guangdada.net 标准请求一致）
  * @param {Object} params - 含 keyWord, startTime, endTime, page, pageSize, sort_field, duplicate_removal 及 guangdada* 等
@@ -173,6 +167,7 @@ export function buildGuangdadaApiBody(params = {}) {
     guangdadaSearchType,
     guangdadaExactSearch,
     guangdadaNewAds,
+    guangdadaNewAdvertiserFlag,
     guangdadaIsTheater,
     guangdadaIsAiApp,
     guangdadaMediaType,
@@ -186,8 +181,7 @@ export function buildGuangdadaApiBody(params = {}) {
     guangdadaOnlyInSelectedRegion,
     guangdadaCopyLangs,
     guangdadaCreativeAttr,
-    guangdadaImageAnalysis,
-    guangdadaVideoAnalysis,
+    guangdadaContentAttributes,
     guangdadaCoreTrack,
     guangdadaPreorderAd,
     guangdadaMonetizationType,
@@ -204,12 +198,14 @@ export function buildGuangdadaApiBody(params = {}) {
     guangdadaIncludePageInfo,
     guangdadaViolationAd,
     guangdadaEndCard,
+    guangdadaHasCustomStorePage,
     guangdadaCodFlag,
     guangdadaSearchArbitrageFlag,
     guangdadaWebsiteTypeCodes,
     guangdadaSearchCategory,
     exclude_keyword,
     advertiser_key,
+    has_custom_store_page: hasCustomStorePage,
   } = params;
 
   let seenBegin = paramSeenBegin;
@@ -240,7 +236,7 @@ export function buildGuangdadaApiBody(params = {}) {
     sort_field: sortFieldApi,
     duplicate_removal: parseInt(duplicate_removal, 10) || 0,
     search_type: searchType,
-    new_advertiser_flag: false,
+    new_advertiser_flag: !!guangdadaNewAdvertiserFlag,
     complete_country_match: !!guangdadaOnlyInSelectedRegion,
     fb_merge: Array.isArray(guangdadaChannels) && guangdadaChannels.includes('merge_facebook'),
     new_ads_flag: guangdadaNewAds ? 1 : 0,
@@ -403,6 +399,7 @@ export function buildGuangdadaApiBody(params = {}) {
   if (guangdadaIncludePageInfo) body.account_flag = true;
   if (guangdadaViolationAd) body.view_illegal = true;
   if (guangdadaEndCard) body.end_card = 1;
+  body.has_custom_store_page = hasCustomStorePage != null ? !!hasCustomStorePage : !!guangdadaHasCustomStorePage;
   body.cod_flag = (guangdadaCodFlag != null && Number(guangdadaCodFlag) === 1) ? 1 : 0;
   body.search_arbitrage_flag = (guangdadaSearchArbitrageFlag != null && Number(guangdadaSearchArbitrageFlag) === 1) ? 1 : 0;
 
@@ -476,10 +473,7 @@ export function buildGuangdadaApiBody(params = {}) {
     });
   }
 
-  const aiImage = buildAiTagObject(guangdadaImageAnalysis, IMAGE_AI_PARENT);
-  if (aiImage) body.ai_image_tag = aiImage;
-  const aiVideo = buildAiTagObject(guangdadaVideoAnalysis, VIDEO_AI_PARENT);
-  if (aiVideo) body.ai_video_tag = aiVideo;
+  applyContentAttributesToBody(body, guangdadaContentAttributes);
 
   return body;
 }

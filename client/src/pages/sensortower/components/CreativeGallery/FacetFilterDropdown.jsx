@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import NetworkIcon from '../shared/NetworkIcon.jsx';
+import RegionFlagIcon from '../shared/RegionFlagIcon.jsx';
 import {
   facetExplicitSelectionFromAll,
   facetMergeGroupSelection,
@@ -48,6 +50,7 @@ function FacetFilterDropdown({
   onAllChange,
   allSelected = false,
   showFlags = false,
+  showNetworkIcons = false,
   triggerSummary,
   triggerClassName = 'st-ffd__trigger',
 }) {
@@ -108,6 +111,11 @@ function FacetFilterDropdown({
     if (checked) onChange([]);
   };
 
+  const selectOnly = (value) => {
+    exitAllMode();
+    onChange([value]);
+  };
+
   const summary =
     triggerSummary ||
     (allSelected && showAllOption
@@ -121,7 +129,7 @@ function FacetFilterDropdown({
   const headerRight = columnTitle || 'Creative Count';
 
   const renderLeaf = (opt, { child = false } = {}) => {
-    const { value, label: text, flagUrl } = normalizeFacetOption(opt);
+    const { value, label: text } = normalizeFacetOption(opt);
     const checked = isFacetLeafChecked(value, selectionCtx);
     const count = countMap?.get?.(value) ?? countMap?.[value];
     const countText = formatCreativeCount(count);
@@ -132,15 +140,26 @@ function FacetFilterDropdown({
       >
         <span className="st-ffd__row-left">
           <CheckboxInput checked={checked} onChange={() => toggleLeaf(value)} />
-          {showFlags && flagUrl ? (
-            <img className="st-ffd__flag" src={flagUrl} alt="" width={22} height={16} loading="lazy" />
+          {showFlags ? <RegionFlagIcon code={value} /> : null}
+          {showNetworkIcons ? (
+            <NetworkIcon network={value} className="st-ffd__network-icon" size={20} title={text} />
           ) : null}
           <span className="st-ffd__row-label">{text}</span>
         </span>
         {countText != null ? (
           <span className="st-ffd__row-count">{countText}</span>
         ) : (
-          <span className="st-ffd__row-count st-ffd__row-count--empty">—</span>
+          <button
+            type="button"
+            className="st-ffd__row-count st-ffd__row-count--empty"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              selectOnly(value);
+            }}
+          >
+            仅此
+          </button>
         )}
       </label>
     );

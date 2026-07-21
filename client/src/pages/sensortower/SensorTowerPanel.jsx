@@ -9,6 +9,7 @@ import {
   SENSOR_TOWER_PAGES,
   isValidSensorTowerPageId,
 } from './constants/sensorTowerPages.js';
+import { buildGalleryToImpressionShareSearchParams } from './utils/galleryToImpressionShare.js';
 import { readStoredSensorTowerPage, writeStoredSensorTowerPage } from './utils/sensorTowerPageStorage.js';
 import './SensorTowerPanel.css';
 
@@ -51,6 +52,15 @@ function SensorTowerPanel({ isLoggedIn, addLog, onRequireLogin }) {
     [activePageId, searchParams, setSearchParams]
   );
 
+  const handleAnalyzeAdsFromGallery = useCallback(
+    (galleryState) => {
+      const next = buildGalleryToImpressionShareSearchParams(galleryState);
+      writeStoredSensorTowerPage(SENSOR_TOWER_PAGE_IDS.IMPRESSION_SHARE);
+      setSearchParams(next);
+    },
+    [setSearchParams]
+  );
+
   const panelId = `st-page-panel-${activePageId}`;
 
   return (
@@ -71,6 +81,7 @@ function SensorTowerPanel({ isLoggedIn, addLog, onRequireLogin }) {
             isLoggedIn={isLoggedIn}
             addLog={addLog}
             onRequireLogin={onRequireLogin}
+            onAnalyzeAds={handleAnalyzeAdsFromGallery}
           />
         ) : null}
         {activePageId === SENSOR_TOWER_PAGE_IDS.IMPRESSION_SHARE ? (

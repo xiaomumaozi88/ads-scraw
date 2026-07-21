@@ -157,6 +157,33 @@ docker run -d \
   - 直接部署示例：`BROWSER_RESTART_INTERVAL_HOURS=6 NODE_ENV=production npm start` 或 pm2 的 `env` 中配置。
   - Docker 示例：`docker run ... -e BROWSER_RESTART_INTERVAL_HOURS=6 ...`
 
+### 5.1 Insightrackr 自动登录（可选）
+
+在 `.env` 或 `docker run -e` 中配置（**勿将真实密码提交 Git**）：
+
+```bash
+-e INSIGHTRACKR_EMAIL=your-account@example.com \
+-e INSIGHTRACKR_PASSWORD=your-password \
+-e INSIGHTRACKR_AUTO_LOGIN=true \
+-e INSIGHTRACKR_AUTO_LOGIN_INTERVAL_HOURS=6
+```
+
+服务启动、浏览器定时重启、健康检查页「重新打开窗口」后，若 Insightrackr 未登录将自动调用 Puppeteer 登录。
+
+### 5.2 健康检查页重启 Docker 容器（可选）
+
+需在容器中挂载 Docker 套接字，并启用开关：
+
+```bash
+docker run -d --name ads-scraw \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e DOCKER_CONTAINER_RESTART_ENABLED=true \
+  -e CONTAINER_NAME=ads-scraw \
+  ...其他参数... ads-scraw
+```
+
+部署后访问 `/health`，具备运维权限的用户可在页面上点击「重启容器」。重启后若已配置 Insightrackr 凭据，将自动尝试登录。
+
 ### 6. 远程调试 Chrome（远程操作页面、处理人机验证）
 
 部署后 Chrome 以**无头模式**运行，服务器上没有浏览器窗口可看。当广大大等平台出现人机验证、滑块或需要人工点击时，可通过 **Chrome 远程调试** 在本机连接服务器上的页面，用 DevTools 查看并操作（例如在 Console 里执行 JS 完成验证）。
@@ -281,13 +308,13 @@ echo ">>> 部署完成，访问 http://<服务器IP>:3000"
 ./scripts/build-docker-and-export.sh
 
 # 2. 上传到服务器（约 1～2 分钟）
-scp -i ~/.ssh/id_ed25519_nginx ads-scraw-docker.tar ecs-user@120.27.200.123:/home/ecs-user/
+scp -i ~/.ssh/id_ed25519_nginx ads-scraw-docker.tar ecs-user@115.29.236.160:/home/ecs-user/
 
 # 3. 在服务器上加载并启动（4 核 16G 推荐：留 1 核给 Web，转码并发 3）
-ssh -i ~/.ssh/id_ed25519_nginx ecs-user@120.27.200.123 "cd /home/ecs-user && sudo docker load -i ads-scraw-docker.tar && sudo docker stop ads-scraw 2>/dev/null || true && sudo docker rm ads-scraw 2>/dev/null || true && sudo docker run -d --name ads-scraw -p 3000:3000 -e NODE_ENV=production -e FFMPEG_CPUS=1,2,3 --restart unless-stopped --shm-size=1g ads-scraw:latest"
+ssh -i ~/.ssh/id_ed25519_nginx ecs-user@115.29.236.160 "cd /home/ecs-user && sudo docker load -i ads-scraw-docker.tar && sudo docker stop ads-scraw 2>/dev/null || true && sudo docker rm ads-scraw 2>/dev/null || true && sudo docker run -d --name ads-scraw -p 3000:3000 -e NODE_ENV=production -e FFMPEG_CPUS=1,2,3 --restart unless-stopped --shm-size=1g ads-scraw:latest"
 ```
 
-完成后访问：`http://120.27.200.123:3000`。
+完成后访问：`http://115.29.236.160:3000`。
 
 ---
 
@@ -427,6 +454,81 @@ docker stop ads-scraw 2>/dev/null || true
 docker rm ads-scraw 2>/dev/null || true
 docker run -d --name ads-scraw -p 3000:3000 -e NODE_ENV=production --restart unless-stopped --shm-size=1g ads-scraw:latest
 ```
+
+---
+
+## 八、Docker 备份与回退
+
+### 8.1 部署前自动备份
+
+`./scripts/deploy-docker-remote.sh` 在发布前会默认执行 `./scripts/backup-docker-remote.sh`（**轻量模式**：仅 `docker save ads-scraw:latest`，约 2GB、数分钟）。
+
+全量备份（含 Chrome 会话等容器层，约 10GB、15～30 分钟）：
+
+```bash
+FULL_BACKUP=1 ./scripts/backup-docker-remote.sh
+```
+
+在远程服务器上：
+
+1. `docker commit` 当前运行容器为 `ads-scraw:backup-YYYYMMDDHHMMSS`
+2. `docker save` 导出为 `/home/ecs-user/ads-scraw-backup-*.tar`
+3. 保存 `ads-scraw-inspect-*.json`（含当时环境变量与端口映射）
+
+仅备份、不部署：
+
+```bash
+./scripts/backup-docker-remote.sh
+```
+
+跳过备份直接部署：
+
+```bash
+SKIP_BACKUP=1 ./scripts/deploy-docker-remote.sh
+```
+
+### 8.2 回退到备份版本
+
+SSH 登录服务器后（将 `BACKUP_TAG` 换成实际备份 tag，如 `backup-20260623143000`）：
+
+```bash
+cd /home/ecs-user
+sudo docker stop ads-scraw 2>/dev/null || true
+sudo docker rm ads-scraw 2>/dev/null || true
+
+# 若 tar 已存在可直接 load；否则 tag 已在本地镜像列表中
+sudo docker load -i ads-scraw-backup-BACKUP_TAG.tar
+
+sudo docker run -d \
+  --name ads-scraw \
+  -p 3000:3000 \
+  -p 9222:9222 \
+  -e NODE_ENV=production \
+  -e CHROME_REMOTE_DEBUGGING_PORT=9222 \
+  -e FFMPEG_CPUS=1,2,3 \
+  --restart unless-stopped \
+  --shm-size=1g \
+  ads-scraw:BACKUP_TAG
+```
+
+若备份时使用了 `--env-file`，可从 `ads-scraw-inspect-BACKUP_TAG.json` 的 `Config.Env` 还原当时参数。
+
+### 8.3 生产环境变量文件
+
+部署脚本从本地 `.env` 提取服务端变量，生成 `ads-scraw-production.env` 并上传到服务器（**勿提交 Git**）：
+
+```bash
+./scripts/prepare-production-env.sh
+```
+
+包含 IAM、MySQL、Insightrackr 等 `docker run --env-file` 所需项。详见 `docs/IAM-ACCESS.md`。
+
+---
+
+## 九、IAM 与 MySQL
+
+- **IAM 接入、宽松模式、权限模型**：见 [docs/IAM-ACCESS.md](docs/IAM-ACCESS.md)
+- **迭代发布记录**：见 [docs/iterations/2026-06-23-mysql-iam-relaxed-deploy.md](docs/iterations/2026-06-23-mysql-iam-relaxed-deploy.md)
 
 ---
 

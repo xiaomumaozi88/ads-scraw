@@ -32,10 +32,6 @@ function ImpressionShare({ isLoggedIn, addLog, onRequireLogin }) {
   };
 
   const handleOpenAddApp = () => {
-    if (!isLoggedIn) {
-      onRequireLogin?.();
-      return;
-    }
     is.expandAppsPicker();
     is.setAddAppModalOpen(true);
   };
@@ -59,7 +55,9 @@ function ImpressionShare({ isLoggedIn, addLog, onRequireLogin }) {
           onMetricChange={is.setMetricId}
           onOpenAddApp={handleOpenAddApp}
           onToggleApp={is.toggleAppSelected}
+          onToggleStoreVersion={is.toggleStoreVersion}
           onRemoveApp={is.removeApp}
+          onEnrichApp={is.enrichAppDetails}
           appsPickerCollapsed={is.appsPickerCollapsed}
           onAppsPickerCollapse={is.collapseAppsPicker}
           onAppsPickerExpand={is.expandAppsPicker}

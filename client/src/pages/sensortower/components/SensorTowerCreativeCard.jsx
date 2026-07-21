@@ -1,36 +1,86 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   formatSharePercent,
-  getCreativeThumbUrl,
-  getNetworkColor,
+  getCreativeThumbAspectRatio,
   isNewCreative,
+  isVideoCreative,
+  resolveCreativeThumbUrl,
 } from '../utils/formatGallery.js';
+import { getNetworkIconUrl } from '../utils/networkIcons.js';
+import CreativeThumbPlayOverlay from './CreativeThumbPlayOverlay.jsx';
+import NetworkIcon from './shared/NetworkIcon.jsx';
 import './SensorTowerCreativeCard.css';
 
-function getCtaLabel(adFormats) {
-  const fmt = Array.isArray(adFormats) ? adFormats[0] : adFormats;
-  if (!fmt) return 'INSTALL NOW';
-  const s = String(fmt).toLowerCase();
-  if (s.includes('video') || s.includes('playable')) return 'INSTALL NOW';
-  if (s.includes('banner') || s.includes('image')) return 'LEARN MORE';
-  return 'INSTALL NOW';
-}
-
-function SensorTowerCreativeCard({ creative, rank = 1, appName: appNameProp, appIconUrl }) {
+function SensorTowerCreativeCard({
+  creative,
+  rank = 1,
+  appName: appNameProp,
+  appIconUrl,
+  onClick,
+  batchMode = false,
+  selected = false,
+  onToggleSelect,
+  onEnterBatchMode,
+  onRequestDownload,
+}) {
   if (!creative) return null;
   const appName = appNameProp || `App ${String(creative.unified_app_id || '').slice(0, 8)}`;
-  const thumbUrl = getCreativeThumbUrl(creative.grouped_creative_id);
+  const thumbUrl = resolveCreativeThumbUrl(creative);
   const shareText = formatSharePercent(creative.grouped_creative_share);
   const network = creative.network || 'Unknown';
   const isNew = isNewCreative(creative.grouped_creative_first_seen_at);
-  const cta = getCtaLabel(creative.grouped_creative_ad_formats);
-  const isVideo =
-    Array.isArray(creative.grouped_creative_ad_formats) &&
-    creative.grouped_creative_ad_formats.some((f) => String(f).toLowerCase().includes('video'));
-  const networkColor = getNetworkColor(network);
+  const isVideo = isVideoCreative(creative);
+  const thumbAspect = useMemo(() => getCreativeThumbAspectRatio(creative), [creative]);
+  const networkIconUrl = getNetworkIconUrl(network);
+
+  const handleCheckboxClick = (event) => {
+    event.stopPropagation();
+    if (!batchMode && onEnterBatchMode) {
+      onEnterBatchMode();
+    }
+    onToggleSelect?.();
+  };
+
+  const handleDownloadClick = (event) => {
+    event.stopPropagation();
+    onRequestDownload?.(creative);
+  };
+
+  const handleCardClick = (event) => {
+    if (
+      event.target.closest('.batch-card-checkbox') ||
+      event.target.closest('.card-thumbnail-download')
+    ) {
+      return;
+    }
+    onClick?.(creative);
+  };
+
+  const handleKeyDown = (event) => {
+    if (!onClick) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onClick(creative);
+    }
+  };
 
   return (
-    <article className="st-creative-card">
+    <article
+      className={`st-creative-card creative-card${onClick ? ' st-creative-card--clickable' : ''}${batchMode ? ' creative-card--batch-mode' : ''}`}
+      onClick={onClick ? handleCardClick : undefined}
+      onKeyDown={onClick ? handleKeyDown : undefined}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+    >
+      <div
+        className={`batch-card-checkbox${selected ? ' batch-card-checkbox--checked' : ''}`}
+        onClick={handleCheckboxClick}
+        role="button"
+        aria-label={selected ? '取消选择' : '选择'}
+      >
+        {selected ? '✓' : ''}
+      </div>
+
       <header className="st-creative-card__header">
         <div className="st-creative-card__header-left">
           {appIconUrl ? (
@@ -44,21 +94,11 @@ function SensorTowerCreativeCard({ creative, rank = 1, appName: appNameProp, app
             {appName}
           </h3>
         </div>
-        <span
-          className="st-creative-card__network-badge"
-          style={{ backgroundColor: `${networkColor}18`, color: networkColor, borderColor: `${networkColor}40` }}
-          title={network}
-        >
-          {network.slice(0, 1)}
-        </span>
       </header>
-      <div className="st-creative-card__copy">
-        <p className="st-creative-card__headline">{network}</p>
-        <button type="button" className="st-creative-card__cta" tabIndex={-1}>
-          {cta}
-        </button>
-      </div>
-      <div className="st-creative-card__thumb-wrap">
+      <div
+        className="st-creative-card__thumb-wrap card-thumbnail"
+        style={{ aspectRatio: `${thumbAspect.width} / ${thumbAspect.height}` }}
+      >
         {thumbUrl ? (
           <img
             className="st-creative-card__thumb"
@@ -70,7 +110,15 @@ function SensorTowerCreativeCard({ creative, rank = 1, appName: appNameProp, app
         ) : (
           <div className="st-creative-card__thumb-empty">暂无预览</div>
         )}
-        {isVideo ? <span className="st-creative-card__play" aria-hidden>▶</span> : null}
+        {isVideo ? <CreativeThumbPlayOverlay /> : null}
+        {onRequestDownload ? (
+          <div className="card-thumbnail-download" onClick={handleDownloadClick}>
+            <span className="card-download-icon" title={isVideo ? '下载视频' : '下载图片'}>
+              ⬇
+            </span>
+            <span className="card-download-text">{isVideo ? '下载视频' : '下载图片'}</span>
+          </div>
+        ) : null}
       </div>
       <footer className="st-creative-card__footer">
         <div className="st-creative-card__chips">
@@ -78,8 +126,12 @@ function SensorTowerCreativeCard({ creative, rank = 1, appName: appNameProp, app
           <span className="st-creative-card__chip st-creative-card__chip--share">{shareText}</span>
           {isNew ? <span className="st-creative-card__chip st-creative-card__chip--new">新</span> : null}
         </div>
-        <span className="st-creative-card__brand" title="Sensor Tower" aria-hidden>
-          ST
+        <span className="st-creative-card__headline" title={network}>
+          {networkIconUrl ? (
+            <NetworkIcon network={network} size={20} title={network} />
+          ) : (
+            <span className="st-creative-card__headline-text">{network}</span>
+          )}
         </span>
       </footer>
     </article>

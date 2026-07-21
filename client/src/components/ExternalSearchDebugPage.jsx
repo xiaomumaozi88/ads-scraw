@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { API_BASE } from '../config/api';
+import { apiFetch } from '../utils/api';
 import './ExternalSearchDebugPage.css';
-
-const API_BASE = '/api';
 
 function jsonPretty(v) {
   try {
@@ -31,7 +31,7 @@ export default function ExternalSearchDebugPage() {
   const refreshLog = useCallback(async () => {
     setLogError('');
     try {
-      const r = await fetch(`${API_BASE}/external/debug-log`);
+      const r = await apiFetch(`${API_BASE}/external/debug-log`);
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
         setLogPayload(null);
@@ -52,7 +52,7 @@ export default function ExternalSearchDebugPage() {
   const clearLog = useCallback(async () => {
     setLogError('');
     try {
-      await fetch(`${API_BASE}/external/debug-log/clear`, { method: 'POST' });
+      await apiFetch(`${API_BASE}/external/debug-log/clear`, { method: 'POST' });
       await refreshLog();
     } catch (e) {
       setLogError(e.message || '清空失败');
@@ -75,9 +75,9 @@ export default function ExternalSearchDebugPage() {
     try {
       const path =
         platform === 'guangdada'
-          ? `${API_BASE}/external/guangdada/top50`
+          ? `${API_BASE}/external/g1/top50`
           : `${API_BASE}/external/insightrackr/top50`;
-      const r = await fetch(path, {
+      const r = await apiFetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -93,14 +93,17 @@ export default function ExternalSearchDebugPage() {
   };
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const apiOrigin = /^https?:\/\//i.test(API_BASE)
+    ? API_BASE.replace(/\/api$/, '')
+    : origin;
   const sampleBody = {
     keyWord: keyWord.trim() || '关键词',
     sortBy,
     timeRange,
     topN: Number(topN) || 50,
   };
-  const curlGuangdada = buildPostCurl(origin || 'http://localhost:3000', '/api/external/guangdada/top50', sampleBody);
-  const curlInsight = buildPostCurl(origin || 'http://localhost:3000', '/api/external/insightrackr/top50', sampleBody);
+  const curlGuangdada = buildPostCurl(apiOrigin || 'http://localhost:3000', '/api/external/g1/top50', sampleBody);
+  const curlInsight = buildPostCurl(apiOrigin || 'http://localhost:3000', '/api/external/insightrackr/top50', sampleBody);
 
   const entries = logPayload?.entries || [];
 
@@ -159,7 +162,7 @@ export default function ExternalSearchDebugPage() {
         </div>
         <div className="external-search-debug__actions">
           <button type="button" disabled={loading} onClick={() => runExternal('guangdada')}>
-            调用广大大 /external/guangdada/top50
+            调用广大大 /external/g1/top50
           </button>
           <button type="button" disabled={loading} onClick={() => runExternal('insightrackr')}>
             调用热云 /external/insightrackr/top50

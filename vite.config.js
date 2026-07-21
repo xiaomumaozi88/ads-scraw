@@ -5,6 +5,7 @@ import { dirname, resolve } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const devApiTarget = process.env.DEV_API_TARGET || `http://localhost:${process.env.PORT || 3000}`;
 
 export default defineConfig({
   plugins: [react()],
@@ -23,7 +24,11 @@ export default defineConfig({
     host: true, // 允许局域网通过 IP 访问
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: devApiTarget,
+        changeOrigin: true,
+      },
+      '/sso': {
+        target: devApiTarget,
         changeOrigin: true,
       },
     },

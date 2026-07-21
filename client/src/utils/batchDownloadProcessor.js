@@ -75,8 +75,11 @@ function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
     .finally(() => clearTimeout(timeoutId));
 }
 
-/** 稳定获取卡片项唯一 id（Insightrackr / 广大大），统一返回字符串便于 Set 比较 */
+/** 稳定获取卡片项唯一 id（Insightrackr / 广大大 / Sensor Tower），统一返回字符串便于 Set 比较 */
 export function getBatchItemId(item, platform) {
+  if (platform === 'sensortower') {
+    return String(item?.grouped_creative_id ?? '');
+  }
   const raw = platform === 'guangdada'
     ? (item.ad_key ?? item.id ?? item.material_key ?? item.creative_id ?? '')
     : (item.id ?? item.search_flag ?? item.ad_key ?? item.bizId ?? item.materialId ?? '');
@@ -98,6 +101,9 @@ function sanitizeFilenamePart(s) {
  */
 export function getCompetitorName(item, platform) {
   if (!item) return '';
+  if (platform === 'sensortower') {
+    return String(item.unified_app_name || item._appName || '').trim();
+  }
   if (platform === 'guangdada') {
     return (
       item.advertiser_name ||
@@ -131,6 +137,45 @@ export function buildDownloadBaseName(competitorName, dateStr, materialId, sizeL
 /** 从 item 提取下载 URL、是否视频、是否 HTML、建议文件名 */
 export function getBatchDownloadInfo(item, platform) {
   const sanitize = (s) => (s == null ? '' : String(s).replace(/[\\/:*?"<>|\x00-\x1f]/g, '').trim().slice(0, 80));
+  if (platform === 'sensortower') {
+    const id = item?.grouped_creative_id;
+    const primaryType = String(item?.primary_ad_type || '').toLowerCase();
+    let isVideo = primaryType === 'video';
+    if (!isVideo && primaryType !== 'image') {
+      const formats = item?.grouped_creative_ad_formats;
+      const tokens = Array.isArray(formats) ? formats : formats != null ? [formats] : [];
+      isVideo = tokens.some((token) => {
+        const text = String(
+          typeof token === 'object' ? (token.value ?? token.label ?? token.name ?? token.id ?? '') : token
+        ).toLowerCase();
+        return (
+          text.includes('video') ||
+          text.includes('reels') ||
+          text.includes('short-video') ||
+          text.includes('in-stream')
+        );
+      });
+      if (!isVideo) {
+        for (const key of ['filter_ad_type', 'ad_type', 'grouped_creative_ad_type']) {
+          const value = item?.[key];
+          if (value != null && String(value).toLowerCase().includes('video')) {
+            isVideo = true;
+            break;
+          }
+        }
+      }
+    }
+    const rawUrl = isVideo
+      ? (item.creative_media_url ||
+          item.preview_media_url ||
+          (id ? `https://x-ad-assets.s3.amazonaws.com/media_asset/${id}/media` : ''))
+      : (item.thumbnail_media_url ||
+          item.preview_media_url ||
+          (id ? `https://x-ad-assets.s3.amazonaws.com/media_asset/${id}/thumb` : ''));
+    const url = rawUrl ? getProxiedMediaUrl(rawUrl) : '';
+    const name = item.unified_app_name || id || 'creative';
+    return { url, isVideo, isHtml: false, filename: sanitize(name) || 'creative' };
+  }
   if (platform === 'guangdada') {
     const hasIntlResources = Array.isArray(item.resource_urls) && item.resource_urls.length > 0;
     const looksDomesticBba =
@@ -151,15 +196,17 @@ export function getBatchDownloadInfo(item, platform) {
       return { url, isVideo, isHtml: false, filename: sanitize(name) || 'creative' };
     }
     const r0 = item.resource_urls?.[0];
-    const isHtml = r0?.type === 4 && r0?.html_url && String(r0.html_url).trim() !== '';
-    const isVideo = !isHtml && (item.ads_type === 2 || r0?.type === 2 || !!(r0?.video_url));
+    const rawVideoUrl = r0?.video_url != null ? String(r0.video_url).trim() : '';
+    const isHtml = Number(r0?.type) === 4 && r0?.html_url && String(r0.html_url).trim() !== '';
+    const hasPlayableVideo = !isHtml && rawVideoUrl !== '';
+    const isVideoType = !isHtml && (Number(item.ads_type) === 2 || Number(r0?.type) === 2 || hasPlayableVideo);
     let url = '';
     if (isHtml) url = r0.html_url.trim();
-    else if (isVideo) url = r0?.video_url ?? '';
+    else if (hasPlayableVideo) url = rawVideoUrl;
     else url = r0?.image_url ?? item.preview_img_url ?? '';
     const title = item.title || item.message || item.body || '';
     const name = (item.advertiser_name || item.ad_key || '') + (title ? `_${title}` : '');
-    return { url, isVideo, isHtml: !!isHtml, filename: sanitize(name) || 'creative' };
+    return { url, isVideo: isVideoType && hasPlayableVideo, isHtml: !!isHtml, filename: sanitize(name) || 'creative' };
   }
   const isVideo = item.materialType === 2 || !!(item.videoUrl && item.videoUrl.trim());
   const url = isVideo
@@ -268,13 +315,36 @@ export async function processImageToBlob(imageUrl, targetW, targetH, onProgress 
 /**
  * 视频 → 固定尺寸 Blob（优先后端转码，失败则 ffmpeg.wasm，再失败则 canvas+MediaRecorder）
  */
-export async function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null) {
+export async function processVideoToBlob(videoUrl, targetW, targetH, onProgress = null, meta = {}) {
   // 1) 优先后端转码（更快、不占浏览器资源）
   try {
-    const { transcodeVideoBackend } = await import('./api.js');
+    const { transcodeVideoBackend, waitAndDownloadTranscodeJob } = await import('./api.js');
     const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 300000);
-    const blob = await transcodeVideoBackend(videoUrl, targetW, targetH, controller.signal);
+    const t = setTimeout(() => controller.abort(), 360000);
+
+    if (meta.serverJobId) {
+      const blob = await waitAndDownloadTranscodeJob(
+        meta.serverJobId,
+        controller.signal,
+        onProgress
+      );
+      clearTimeout(t);
+      return blob;
+    }
+
+    const blob = await transcodeVideoBackend(
+      videoUrl,
+      targetW,
+      targetH,
+      controller.signal,
+      {
+        ...meta,
+        onProgress,
+        onJobSubmitted: (jobId) => {
+          meta.onJobSubmitted?.(jobId);
+        },
+      }
+    );
     clearTimeout(t);
     if (typeof onProgress === 'function') onProgress(100);
     return blob;
@@ -724,12 +794,47 @@ export function getMediaDimensions(url, isVideo) {
   });
 }
 
+function resolveOutputExtension({ url, isVideo, isHtml, blob }) {
+  let ext = 'png';
+  if (isHtml) {
+    ext = 'html';
+  } else {
+    const fromUrl = url.split('?')[0].match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase();
+    if (fromUrl && /^(mp4|webm|mov|avi|jpg|jpeg|png|gif|webp)$/i.test(fromUrl)) {
+      ext = fromUrl === 'jpeg' ? 'jpg' : fromUrl;
+    } else if (blob.type) {
+      if (blob.type === 'video/mp4') ext = 'mp4';
+      else if (blob.type === 'video/webm') ext = 'webm';
+      else if (blob.type === 'image/jpeg') ext = 'jpg';
+      else if (blob.type === 'image/gif') ext = 'gif';
+      else if (blob.type === 'image/webp') ext = 'webp';
+      else if (isVideo) ext = blob.type === 'video/mp4' ? 'mp4' : 'webm';
+    }
+  }
+  return ext;
+}
+
+export function buildProcessedFilename({ url, isVideo, isHtml, filename, baseFilename, blob }) {
+  const ext = resolveOutputExtension({ url, isVideo, isHtml, blob });
+  const name = baseFilename != null && String(baseFilename).trim()
+    ? String(baseFilename).trim().replace(/\.[a-zA-Z0-9]+$/, '')
+    : (filename.replace(/\.[a-zA-Z0-9]+$/, '') || 'creative');
+  return baseFilename != null && String(baseFilename).trim()
+    ? `${name}.${ext}`
+    : `${name}_${Date.now()}.${ext}`;
+}
+
 /**
- * 批量处理并下载：HTML 直接下载为 .html；视频/图片按尺寸处理或原尺寸下载。
- * 当 targetW/targetH 为 null 时按原尺寸直接下载（不缩放、不重编码）。
- * onProgress(percent?) 可选；baseFilename 可选，若传入则使用「竞品_日期_素材ID_尺寸」格式，否则用原 filename_时间戳。
+ * 处理素材为 Blob（不触发浏览器下载）
  */
-export async function processAndDownloadItem({ url, isVideo, isHtml, filename }, targetW, targetH, onProgress, baseFilename) {
+export async function processItemToBlob(
+  { url, isVideo, isHtml, filename },
+  targetW,
+  targetH,
+  onProgress,
+  baseFilename,
+  meta = {}
+) {
   let blob;
   let sim = null;
   let lastForwarded = 0;
@@ -782,7 +887,7 @@ export async function processAndDownloadItem({ url, isVideo, isHtml, filename },
         if (wrappedProgress) wrappedProgress(100);
       } else {
         blob = isVideo
-          ? await processVideoToBlob(url, targetW, targetH, wrappedProgress)
+          ? await processVideoToBlob(url, targetW, targetH, wrappedProgress, meta)
           : await processImageToBlob(url, targetW, targetH, wrappedProgress);
         if (!isVideo && wrappedProgress) wrappedProgress(100);
       }
@@ -794,34 +899,33 @@ export async function processAndDownloadItem({ url, isVideo, isHtml, filename },
     }
   }
 
-  let ext = 'png';
-  if (isHtml) {
-    ext = 'html';
-  } else {
-    const fromUrl = url.split('?')[0].match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase();
-    if (fromUrl && /^(mp4|webm|mov|avi|jpg|jpeg|png|gif|webp)$/i.test(fromUrl)) {
-      ext = fromUrl === 'jpeg' ? 'jpg' : fromUrl;
-    } else if (blob.type) {
-      if (blob.type === 'video/mp4') ext = 'mp4';
-      else if (blob.type === 'video/webm') ext = 'webm';
-      else if (blob.type === 'image/jpeg') ext = 'jpg';
-      else if (blob.type === 'image/gif') ext = 'gif';
-      else if (blob.type === 'image/webp') ext = 'webp';
-      else if (isVideo) ext = blob.type === 'video/mp4' ? 'mp4' : 'webm';
-    }
-  }
-
-  const name = baseFilename != null && String(baseFilename).trim()
-    ? String(baseFilename).trim().replace(/\.[a-zA-Z0-9]+$/, '')
-    : (filename.replace(/\.[a-zA-Z0-9]+$/, '') || 'creative');
-  const finalName = baseFilename != null && String(baseFilename).trim()
-    ? `${name}.${ext}`
-    : `${name}_${Date.now()}.${ext}`;
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = finalName;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const finalFilename = buildProcessedFilename({
+    url,
+    isVideo,
+    isHtml,
+    filename,
+    baseFilename,
+    blob,
+  });
   if (isVideo && wrappedProgress && !isHtml) wrappedProgress(100);
+  return { blob, finalFilename };
+}
+
+/**
+ * 批量处理并下载：HTML 直接下载为 .html；视频/图片按尺寸处理或原尺寸下载。
+ * 当 targetW/targetH 为 null 时按原尺寸直接下载（不缩放、不重编码）。
+ * onProgress(percent?) 可选；baseFilename 可选，若传入则使用「竞品_日期_素材ID_尺寸」格式，否则用原 filename_时间戳。
+ */
+export async function processAndDownloadItem({ url, isVideo, isHtml, filename }, targetW, targetH, onProgress, baseFilename) {
+  const { blob, finalFilename } = await processItemToBlob(
+    { url, isVideo, isHtml, filename },
+    targetW,
+    targetH,
+    onProgress,
+    baseFilename
+  );
+  const { saveProcessedBlob } = await import('./downloadFolder.js');
+  await saveProcessedBlob(blob, finalFilename);
   await new Promise((r) => setTimeout(r, 200));
+  return { blob, finalFilename };
 }

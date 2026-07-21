@@ -8,12 +8,11 @@ import './GuangdadaDomesticResults.css';
 import InsightrackrDetailModal from './InsightrackrDetailModal';
 import SortSelector from './SortSelector';
 import Pagination from './Pagination';
-import { useDownloadList } from '../contexts/DownloadListContext';
+import { useMaterialProcessing } from '../contexts/MaterialProcessingContext';
 import {
   getBatchItemId,
   getBatchDownloadInfo,
   BATCH_DOWNLOAD_SIZE_OPTIONS,
-  processAndDownloadItem,
   CUSTOM_SIZE_INDEX,
   CUSTOM_SIZE_MIN,
   CUSTOM_SIZE_MAX,
@@ -22,11 +21,17 @@ import {
   getCompetitorName,
   buildDownloadBaseName,
 } from '../utils/batchDownloadProcessor';
+import FolderPickerField from './FolderPickerField';
 import {
   getDomesticAdInfoListItems,
   getDomesticAdInfoRootMeta,
   DOMESTIC_AD_INFO_PAGE_SIZE,
 } from '../utils/guangdadaDomesticAdInfo';
+import {
+  GUANGDADA_DISPLAY_PAGE_SIZE,
+  getGuangdadaDisplayOffset,
+  getGuangdadaDisplayPageFromParams,
+} from '../utils/guangdadaPaging';
 
 function DataDisplay({
   data,
@@ -42,17 +47,16 @@ function DataDisplay({
   batchDownloadMode = false,
   selectedIds = new Set(),
   onToggleSelect,
-  onSelectAllPage,
   onBatchDownloadCancel,
   onEnterBatchMode,
   onBatchModeEnteredWithHint,
   onExitBatchMode,
   onBlockAdvertiser,
+  onGuangdadaDownloadQuotaConsume,
+  onGuangdadaQuotaChanged,
 }) {
   const isDomesticGuangdadaView = platform === 'guangdada' && domesticAdInfoResult != null;
   const startDownloadBtnRef = useRef(null);
-  /** 批量下载时各任务进度缓存，避免并发 setState 互相覆盖导致「共用一个进度」 */
-  const batchProgressRef = useRef({});
   const [sizeModalOpen, setSizeModalOpen] = useState(false);
   /** 多选尺寸：选中的尺寸下标数组，如 [0,1,3] 表示 原尺寸、720×1280、800×800；含 CUSTOM_SIZE_INDEX 表示自定义 */
   const [selectedSizeIndices, setSelectedSizeIndices] = useState([0]);
@@ -83,7 +87,8 @@ function DataDisplay({
   const [insightrackrDetailItem, setInsightrackrDetailItem] = useState(null);
   /** 单卡片点击「下载视频」时暂存该项，弹窗确认后按所选尺寸下载 */
   const [pendingSingleDownloadItem, setPendingSingleDownloadItem] = useState(null);
-  const { downloadList, setDownloadList, downloading, setDownloading, setBatchSizeLabel } = useDownloadList();
+  const [downloadSubmitting, setDownloadSubmitting] = useState(false);
+  const { startBatch } = useMaterialProcessing();
   const scrollToTop = () => {
     const scrollEl = document.querySelector('.data-card');
     if (!scrollEl) return;
@@ -163,12 +168,21 @@ function DataDisplay({
       } else if (data.data.items && Array.isArray(data.data.items)) {
         dataList = data.data.items;
       }
-    } else if (data.items && Array.isArray(data.items)) {
+  } else if (data.items && Array.isArray(data.items)) {
       dataList = data.items;
     }
   }
 
-  if (dataList.length === 0 && !isDomesticGuangdadaView) {
+  const isGuangdadaSplitPage = platform === 'guangdada' && !isDomesticGuangdadaView;
+  const guangdadaDisplayPage = isGuangdadaSplitPage
+    ? getGuangdadaDisplayPageFromParams(currentSearchParams)
+    : null;
+  const guangdadaDisplayOffset = isGuangdadaSplitPage ? getGuangdadaDisplayOffset(guangdadaDisplayPage) : 0;
+  const displayDataList = isGuangdadaSplitPage
+    ? dataList.slice(guangdadaDisplayOffset, guangdadaDisplayOffset + GUANGDADA_DISPLAY_PAGE_SIZE)
+    : dataList;
+
+  if (displayDataList.length === 0 && !isDomesticGuangdadaView) {
     return (
       <div className="data-container data-container--empty">
         <div className="data-placeholder">
@@ -210,18 +224,14 @@ function DataDisplay({
   const newNum = countInfo?.newNum ?? 0;
   const latestDate = countInfo?.latestDate ?? '';
   const currentPage = platform === 'guangdada'
-    ? (currentSearchParams?.page ?? 1)
+    ? (isDomesticGuangdadaView ? (currentSearchParams?.page ?? 1) : guangdadaDisplayPage)
     : (currentSearchParams?.baseOption?.pageIndex || 1);
   const pageSize = isDomesticGuangdadaView
     ? (currentSearchParams?.pageSize ?? DOMESTIC_AD_INFO_PAGE_SIZE)
     : platform === 'guangdada'
-      ? (currentSearchParams?.pageSize ?? 60)
+      ? GUANGDADA_DISPLAY_PAGE_SIZE
       : (currentSearchParams?.baseOption?.pageSize || 60);
 
-  const pageItemIds = dataList.map((item) => getBatchItemId(item, platform));
-  const handleSelectAllPage = () => {
-    if (onSelectAllPage) onSelectAllPage(pageItemIds);
-  };
   const handleConfirmDownload = () => {
     setPendingSingleDownloadItem(null);
     setSizeModalOpen(true);
@@ -233,10 +243,14 @@ function DataDisplay({
     setSizeModalOpen(true);
   };
 
-  const updateDownloadItem = (list, id, updates) =>
-    list.map((item) => (item.id === id ? { ...item, ...updates } : item));
+  const SOURCE_LABELS = {
+    insightrackr: 'Insightrackr 素材下载',
+    guangdada: '广大大 素材下载',
+    sensortower: 'Sensor Tower 素材下载',
+  };
 
   const handleStartBatchDownload = async () => {
+    if (downloadSubmitting) return;
     if (selectedSizeIndices.length === 0) {
       message.warning('请至少选择一种输出尺寸');
       return;
@@ -250,121 +264,123 @@ function DataDisplay({
         return;
       }
     }
-    const selectedSizes = selectedSizeIndices.map((i) => getSizeOptionAtIndex(i));
-    const isSingle = !!pendingSingleDownloadItem;
-    const selectedItems = isSingle
-      ? (() => {
-          const raw = pendingSingleDownloadItem;
-          const info = getBatchDownloadInfo(raw, platform);
-          const id = getBatchItemId(raw, platform);
-          return info.url ? [{ ...info, id, rawItem: raw }] : [];
-        })()
-      : dataList
-          .filter((item) => selectedIds.has(getBatchItemId(item, platform)))
-          .map((item) => {
-            const info = getBatchDownloadInfo(item, platform);
-            return { ...info, id: getBatchItemId(item, platform), rawItem: item };
-          })
-          .filter((x) => x.url);
-    if (selectedItems.length === 0) {
-      message.warning(isSingle ? '该素材没有可下载的 URL' : '所选素材中没有可下载的 URL');
-      setSizeModalOpen(false);
-      setPendingSingleDownloadItem(null);
-      return;
-    }
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const tasks = [];
-    selectedItems.forEach((one) => {
-      selectedSizeIndices.forEach((sizeIndex) => {
-        const opt = getSizeOptionAtIndex(sizeIndex);
-        const sizeLabel = opt.originalSize ? '原尺寸' : `${opt.width}x${opt.height}`;
-        tasks.push({
-          ...one,
-          sizeOpt: opt,
-          sizeIndex,
-          taskId: `${one.id}_${sizeLabel}`,
-          baseFilename: buildDownloadBaseName(
-            getCompetitorName(one.rawItem, platform),
-            dateStr,
-            one.id,
-            sizeLabel
-          ),
-        });
-      });
-    });
-    const initialList = tasks.map((t) => ({
-      id: t.taskId,
-      filename: t.baseFilename,
-      isVideo: t.isVideo,
-      status: 'pending',
-      progress: 0,
-      errorMessage: null,
-      sizeLabel: t.sizeOpt.originalSize ? '原尺寸' : `${t.sizeOpt.width}×${t.sizeOpt.height}`,
-    }));
-    setDownloadList(initialList);
-    batchProgressRef.current = {};
-    setBatchSizeLabel(selectedSizes.map((o) => o.label).join('、') || '');
-    setDownloading(true);
-    setSizeModalOpen(false);
-    setPendingSingleDownloadItem(null);
-    onBatchDownloadCancel?.();
-
-    const CONCURRENCY = 3;
-    let nextIndex = 0;
-    const runOne = async () => {
-      while (nextIndex < tasks.length) {
-        const task = tasks[nextIndex++];
-        const { sizeOpt, sizeIndex, taskId, baseFilename } = task;
-        const targetW = sizeOpt.originalSize ? null : sizeOpt.width;
-        const targetH = sizeOpt.originalSize ? null : sizeOpt.height;
-        const useSameRatioOriginal = sameRatioByIndex[sizeIndex];
-        setDownloadList((prev) => updateDownloadItem(prev, taskId, { status: 'processing', progress: 0 }));
-        console.info('[批量下载] 开始:', baseFilename);
-        try {
+    setDownloadSubmitting(true);
+    try {
+      const selectedSizes = selectedSizeIndices.map((i) => getSizeOptionAtIndex(i));
+      const isSingle = !!pendingSingleDownloadItem;
+      const selectedItems = isSingle
+        ? (() => {
+            const raw = pendingSingleDownloadItem;
+            const info = getBatchDownloadInfo(raw, platform);
+            const id = getBatchItemId(raw, platform);
+            return info.url ? [{ ...info, id, rawItem: raw }] : [];
+          })()
+        : dataList
+            .filter((item) => selectedIds.has(getBatchItemId(item, platform)))
+            .map((item) => {
+              const info = getBatchDownloadInfo(item, platform);
+              return { ...info, id: getBatchItemId(item, platform), rawItem: item };
+            })
+            .filter((x) => x.url);
+      if (selectedItems.length === 0) {
+        message.warning(isSingle ? '该素材没有可下载的 URL' : '所选素材中没有可下载的 URL');
+        setSizeModalOpen(false);
+        setPendingSingleDownloadItem(null);
+        return;
+      }
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const taskDefs = [];
+      for (const one of selectedItems) {
+        for (const sizeIndex of selectedSizeIndices) {
+          const opt = getSizeOptionAtIndex(sizeIndex);
+          const sizeLabel = opt.originalSize ? '原尺寸' : `${opt.width}×${opt.height}`;
+          const targetW = opt.originalSize ? null : opt.width;
+          const targetH = opt.originalSize ? null : opt.height;
           let useW = targetW;
           let useH = targetH;
-          if (useSameRatioOriginal && targetW != null && targetH != null && !task.isHtml) {
-            const dims = await getMediaDimensions(task.url, task.isVideo);
+          const useSameRatioOriginal = sameRatioByIndex[sizeIndex];
+          if (useSameRatioOriginal && targetW != null && targetH != null && !one.isHtml) {
+            const dims = await getMediaDimensions(one.url, one.isVideo);
             if (dims && isSameAspectRatio(dims.width, dims.height, targetW, targetH)) {
               useW = null;
               useH = null;
             }
           }
-          await processAndDownloadItem(task, useW, useH, (percent) => {
-            const p = Math.min(100, Math.max(0, percent ?? 100));
-            batchProgressRef.current[taskId] = Math.max(batchProgressRef.current[taskId] ?? 0, p);
-            setDownloadList((prev) =>
-              prev.map((item) => ({
-                ...item,
-                progress: Math.max(item.progress, batchProgressRef.current[item.id] ?? 0),
-              }))
-            );
-          }, baseFilename);
-          console.info('[批量下载] 完成:', baseFilename);
-          setDownloadList((prev) => updateDownloadItem(prev, taskId, { status: 'done', progress: 100 }));
-        } catch (e) {
-          const msg = e?.message || String(e);
-          console.error('[批量下载] 失败:', baseFilename, msg);
-          setDownloadList((prev) =>
-            updateDownloadItem(prev, taskId, { status: 'error', errorMessage: msg })
-          );
-          message.error(`下载失败: ${baseFilename}（${msg}）`);
+          const dims = !one.isHtml ? await getMediaDimensions(one.url, one.isVideo) : null;
+          taskDefs.push({
+            filename: buildDownloadBaseName(
+              getCompetitorName(one.rawItem, platform),
+              dateStr,
+              one.id,
+              sizeLabel.replace(/×/g, 'x')
+            ),
+            sizeLabel,
+            sourceUrl: one.url,
+            sourceLabel: getCompetitorName(one.rawItem, platform) || one.filename,
+            originalWidth: dims?.width ?? null,
+            originalHeight: dims?.height ?? null,
+            targetWidth: useW,
+            targetHeight: useH,
+            isVideo: one.isVideo,
+            isHtml: one.isHtml,
+            sourceType: 'remote',
+            processPayload: {
+              url: one.url,
+              isVideo: one.isVideo,
+              isHtml: one.isHtml,
+              filename: one.filename,
+              targetW: useW,
+              targetH: useH,
+              baseFilename: buildDownloadBaseName(
+                getCompetitorName(one.rawItem, platform),
+                dateStr,
+                one.id,
+                sizeLabel.replace(/×/g, 'x')
+              ),
+            },
+          });
         }
       }
-    };
-    try {
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, runOne));
+
+      if (platform === 'guangdada' && typeof onGuangdadaDownloadQuotaConsume === 'function') {
+        const ok = await onGuangdadaDownloadQuotaConsume({
+          amount: taskDefs.length,
+          metadata: {
+            action: isSingle ? 'single_material_download' : 'batch_material_download',
+            selectedItemCount: selectedItems.length,
+            taskCount: taskDefs.length,
+            sourceUrls: taskDefs.map((task) => task.sourceUrl).filter(Boolean).slice(0, 20),
+            sizeLabels: selectedSizes.map((size) => size.label),
+          },
+        });
+        if (!ok) return;
+      }
+
+      setSizeModalOpen(false);
+      setPendingSingleDownloadItem(null);
+      onBatchDownloadCancel?.();
+
+      await startBatch({
+        source: platform,
+        sourceLabel: SOURCE_LABELS[platform] || `${platform} 素材下载`,
+        tasks: taskDefs,
+      });
+      message.success(
+        taskDefs.length === 1
+          ? '已加入下载列表，请点击右上角「下载列表」查看'
+          : `已加入下载队列，共 ${taskDefs.length} 个任务，请点击右上角「下载列表」查看`
+      );
+    } catch (e) {
+      message.error(e?.message || '批量下载启动失败');
     } finally {
-      setDownloading(false);
-      const doneCount = initialList.length;
-      message.success(doneCount === 1 ? '已加入下载列表，请点击右上角「下载列表」查看' : `已处理 ${doneCount} 个素材，请点击右上角「下载列表」查看`);
+      setDownloadSubmitting(false);
     }
   };
 
   return (
     <div className="data-container">
       <div className="data-content">
-        {dataList.length > 0 &&
+        {displayDataList.length > 0 &&
           (!batchDownloadMode ? (
             <div className="batch-download-toolbar">
               <Button type="primary" ghost onClick={onEnterBatchMode}>
@@ -373,9 +389,6 @@ function DataDisplay({
             </div>
           ) : (
             <div className="batch-download-toolbar batch-download-toolbar--active">
-              <Button type="primary" ghost onClick={handleSelectAllPage}>
-                全选本页
-              </Button>
               <Button type="primary" onClick={handleConfirmDownload} disabled={selectedIds.size === 0}>
                 确认下载 ({selectedIds.size})
               </Button>
@@ -383,7 +396,7 @@ function DataDisplay({
             </div>
           ))}
         {isDomesticGuangdadaView ? (
-          dataList.length === 0 ? (
+          displayDataList.length === 0 ? (
             <div className="gdd-results gdd-results--empty">
               <p>本次查询未返回列表数据（或结构异常）。</p>
               <p className="gdd-results__hint">
@@ -404,8 +417,9 @@ function DataDisplay({
           <div
             className={`results-container${platform === 'insightrackr' && currentSearchParams?.insightrackrSearchTab === 'playable' ? ' results-container--playable' : ''}`}
           >
-            {dataList.map((item, index) => {
-              const key = item.ad_key || item.id || item.search_flag || index;
+            {displayDataList.map((item, index) => {
+              const displayIndex = guangdadaDisplayOffset + index;
+              const key = item.ad_key || item.id || item.search_flag || displayIndex;
               const creativeId = item.id || item.search_flag || item.ad_key || item.bizId || item.materialId;
               const itemId = getBatchItemId(item, platform);
               const cardBatchProps = {
@@ -422,6 +436,15 @@ function DataDisplay({
                     onOpenDetail={() => setGuangdadaDetailItem(item)}
                     onRequestVideoDownload={handleRequestVideoDownload}
                     onBlockAdvertiser={onBlockAdvertiser}
+                    onBeforeDownload={(rawItem, meta) => onGuangdadaDownloadQuotaConsume?.({
+                      amount: 1,
+                      metadata: {
+                        action: 'direct_material_download',
+                        adKey: rawItem?.ad_key,
+                        advertiserName: rawItem?.advertiser_name,
+                        ...meta,
+                      },
+                    })}
                     {...cardBatchProps}
                   />
                 );
@@ -454,6 +477,7 @@ function DataDisplay({
           open={!!guangdadaDetailItem}
           onClose={() => setGuangdadaDetailItem(null)}
           onRequestDownload={handleRequestVideoDownload}
+          onQuotaChanged={onGuangdadaQuotaChanged}
         />
       )}
       {platform === 'insightrackr' && (
@@ -490,7 +514,9 @@ function DataDisplay({
             key="ok"
             ref={startDownloadBtnRef}
             type="primary"
+            loading={downloadSubmitting}
             disabled={
+              downloadSubmitting ||
               (!pendingSingleDownloadItem && selectedIds.size === 0) ||
               selectedSizeIndices.length === 0 ||
               (selectedSizeIndices.includes(CUSTOM_SIZE_INDEX) && (
@@ -517,6 +543,9 @@ function DataDisplay({
           <p style={{ color: '#faad14', margin: 0 }}>请先勾选要下载的素材，再确认下载。</p>
         ) : (
           <>
+            <div style={{ marginBottom: 16 }}>
+              <FolderPickerField size="small" />
+            </div>
             <div style={{ marginBottom: 8 }}>可多选，每个素材将按所选尺寸各输出一份：</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {BATCH_DOWNLOAD_SIZE_OPTIONS.map((opt, i) => (

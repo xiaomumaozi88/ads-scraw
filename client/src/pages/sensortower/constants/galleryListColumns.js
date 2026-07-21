@@ -1,5 +1,6 @@
 /** 列表视图可配置列（与官方「列」面板一致） */
 
+/** 列表视图固定列：排名 + 创意（创意列渲染在应用列之后） */
 export const GALLERY_LIST_FIXED_COLUMNS = ['rank', 'creative'];
 
 export const GALLERY_LIST_COLUMN_GROUPS = [

@@ -9,8 +9,10 @@ tmp/
 # 广大大/BBA 调试日志（含 JWT、Cookie）
 logs/guangdada-outbound-debug.txt
 *.old
-docs/
-cat-catch/
-
 # 本地构建的 Docker 镜像导出（体积大，勿提交）
 ads-scraw-docker.tar
+ads-scraw-production.env
+server/data/transcode-jobs.json
+server/data/transcode-output/
+server/data/operation-audits.json
+server/data/platform-credentials.json

@@ -1,12 +1,11 @@
 import React, { useMemo } from 'react';
 import {
   GALLERY_AD_OBJECTIVES,
-  GALLERY_AD_TYPE_OPTION_GROUPS,
   GALLERY_ASPECT_RATIOS,
   GALLERY_PLACEMENTS,
   GALLERY_VIDEO_DURATIONS,
 } from '../../constants/galleryConstants.js';
-import { mergeFacetOptionGroups, mergeFacetOptions } from '../../utils/formatGallery.js';
+import { buildAdTypeFacetOptionGroups, mergeFacetOptions } from '../../utils/formatGallery.js';
 import FacetFilterDropdown from './FacetFilterDropdown.jsx';
 
 function facetSummary({ allSelected, selected, baseLabel, allText }) {
@@ -16,6 +15,7 @@ function facetSummary({ allSelected, selected, baseLabel, allText }) {
 }
 
 function GalleryFilterBar({
+  platformId = 'ios',
   selectedAdTypes,
   onSelectedAdTypesChange,
   allPlacements,
@@ -41,8 +41,8 @@ function GalleryFilterBar({
   aspectRatioCountMap,
 }) {
   const adTypeOptionGroups = useMemo(
-    () => mergeFacetOptionGroups(GALLERY_AD_TYPE_OPTION_GROUPS, adTypeCountMap),
-    [adTypeCountMap]
+    () => buildAdTypeFacetOptionGroups(adTypeCountMap, platformId),
+    [adTypeCountMap, platformId]
   );
   const placementOptions = useMemo(
     () => mergeFacetOptions(GALLERY_PLACEMENTS, placementCountMap),

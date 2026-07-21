@@ -1,0 +1,25 @@
+.insightrackr-quick-login__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: 200px;
+  min-width: 82px;
+}
+
+.insightrackr-quick-login__btn--online {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insightrackr-quick-login__btn.ant-btn-primary {
+  color: #fff;
+  font-weight: 500;
+}
+
+.insightrackr-quick-login__btn.ant-btn-primary .ant-btn-icon,
+.insightrackr-quick-login__btn.ant-btn-primary > span:not(.ant-btn-icon) {
+  color: #fff;
+}

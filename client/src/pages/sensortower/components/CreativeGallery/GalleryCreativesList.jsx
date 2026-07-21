@@ -1,17 +1,16 @@
 import React, { useMemo } from 'react';
 import { GALLERY_LIST_COLUMN_GROUPS } from '../../constants/galleryListColumns.js';
-import { formatSharePercent, getCreativeThumbUrl, getNetworkColor } from '../../utils/formatGallery.js';
+import {
+  formatSharePercent,
+  getCreativeGalleryRowKey,
+  getNetworkColor,
+  isVideoCreative,
+  resolveCreativeThumbUrl,
+} from '../../utils/formatGallery.js';
 import { formatListCellValue } from '../../utils/galleryListCellFormat.js';
 import ShareSparkline from './ShareSparkline.jsx';
+import CreativeThumbPlayOverlay from '../CreativeThumbPlayOverlay.jsx';
 import './GalleryCreativesList.css';
-
-function isVideoCreative(creative) {
-  const formats = creative?.grouped_creative_ad_formats;
-  return (
-    Array.isArray(formats) &&
-    formats.some((f) => String(f).toLowerCase().includes('video'))
-  );
-}
 
 function buildVisibleColumnDefs(isColumnVisible) {
   const cols = [];
@@ -25,11 +24,44 @@ function buildVisibleColumnDefs(isColumnVisible) {
   return cols;
 }
 
-function GalleryCreativesList({ rows, appsById, page, pageSize, visibleColumns }) {
+function orderListColumns(visibleCols) {
+  const appCol = visibleCols.find((col) => col.id === 'app');
+  const rest = visibleCols.filter((col) => col.id !== 'app');
+  const ordered = [];
+  if (appCol) ordered.push(appCol);
+  ordered.push({ id: 'creative', label: '创意' });
+  ordered.push(...rest);
+  return ordered;
+}
+
+function CreativeThumbCell({ item, onClick }) {
+  const thumbUrl = resolveCreativeThumbUrl(item);
+  const isVideo = isVideoCreative(item);
+
+  return (
+    <button
+      type="button"
+      className="st-creatives-list__thumb-btn"
+      onClick={() => onClick?.(item)}
+      aria-label="查看创意详情"
+    >
+      <div className="st-creatives-list__thumb-wrap">
+        {thumbUrl ? (
+          <img className="st-creatives-list__thumb" src={thumbUrl} alt="" loading="lazy" />
+        ) : (
+          <span className="st-creatives-list__thumb-empty">无预览</span>
+        )}
+        {isVideo ? <CreativeThumbPlayOverlay size="sm" /> : null}
+      </div>
+    </button>
+  );
+}
+
+function GalleryCreativesList({ rows, appsById, page, pageSize, visibleColumns, onCreativeClick }) {
   const rankBase = (page - 1) * pageSize;
-  const visibleCols = useMemo(() => {
+  const orderedCols = useMemo(() => {
     const isVisible = (id) => visibleColumns.has(id);
-    return buildVisibleColumnDefs(isVisible);
+    return orderListColumns(buildVisibleColumnDefs(isVisible));
   }, [visibleColumns]);
 
   return (
@@ -40,24 +72,15 @@ function GalleryCreativesList({ rows, appsById, page, pageSize, visibleColumns }
             <th scope="col" className="st-creatives-list__th st-creatives-list__th--rank">
               排名
             </th>
-            {visibleCols.map((col) =>
-              col.id === 'app' ? (
-                <th key={col.id} scope="col" className="st-creatives-list__th">
-                  {col.label}
-                </th>
-              ) : (
-                <th
-                  key={col.id}
-                  scope="col"
-                  className={`st-creatives-list__th st-creatives-list__th--${col.id}`}
-                >
-                  {col.id === 'share' ? `${col.label} ↓` : col.label}
-                </th>
-              )
-            )}
-            <th scope="col" className="st-creatives-list__th st-creatives-list__th--creative">
-              创意
-            </th>
+            {orderedCols.map((col) => (
+              <th
+                key={col.id}
+                scope="col"
+                className={`st-creatives-list__th st-creatives-list__th--${col.id}`}
+              >
+                {col.id === 'share' ? `${col.label} ↓` : col.label}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -66,18 +89,16 @@ function GalleryCreativesList({ rows, appsById, page, pageSize, visibleColumns }
             const app = appsById.get(item.unified_app_id);
             const appName = app?.name || `App ${String(item.unified_app_id || '').slice(0, 8)}`;
             const publisher = app?.publisher || '—';
-            const thumbUrl = getCreativeThumbUrl(item.grouped_creative_id);
             const network = item.network || '—';
             const shareText = formatSharePercent(item.grouped_creative_share);
-            const isVideo = isVideoCreative(item);
 
             return (
               <tr
-                key={item.grouped_creative_id || `${item.unified_app_id}-${idx}`}
+                key={getCreativeGalleryRowKey(item) || `creative-${idx}`}
                 className="st-creatives-list__row"
               >
                 <td className="st-creatives-list__td st-creatives-list__td--rank">{rank}</td>
-                {visibleCols.map((col) => {
+                {orderedCols.map((col) => {
                   if (col.id === 'app') {
                     return (
                       <td key={col.id} className="st-creatives-list__td st-creatives-list__td--app">
@@ -102,6 +123,13 @@ function GalleryCreativesList({ rows, appsById, page, pageSize, visibleColumns }
                             <span className="st-creatives-list__app-publisher">{publisher}</span>
                           </span>
                         </div>
+                      </td>
+                    );
+                  }
+                  if (col.id === 'creative') {
+                    return (
+                      <td key={col.id} className="st-creatives-list__td st-creatives-list__td--creative">
+                        <CreativeThumbCell item={item} onClick={onCreativeClick} />
                       </td>
                     );
                   }
@@ -143,16 +171,6 @@ function GalleryCreativesList({ rows, appsById, page, pageSize, visibleColumns }
                     </td>
                   );
                 })}
-                <td className="st-creatives-list__td st-creatives-list__td--creative">
-                  <div className="st-creatives-list__thumb-wrap">
-                    {thumbUrl ? (
-                      <img className="st-creatives-list__thumb" src={thumbUrl} alt="" loading="lazy" />
-                    ) : (
-                      <span className="st-creatives-list__thumb-empty">无预览</span>
-                    )}
-                    {isVideo ? <span className="st-creatives-list__play" aria-hidden>▶</span> : null}
-                  </div>
-                </td>
               </tr>
             );
           })}

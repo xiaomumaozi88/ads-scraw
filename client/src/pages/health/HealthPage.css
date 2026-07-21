@@ -1,0 +1,258 @@
+.health-page {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.health-page__intro {
+  margin-bottom: 16px;
+}
+
+.health-page__desc {
+  margin-bottom: 4px !important;
+}
+
+.health-page__updated {
+  font-size: 12px;
+}
+
+.health-page__actions {
+  margin-bottom: 16px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.health-page__actions .ant-card-body {
+  padding: 14px 20px;
+}
+
+.health-page__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px;
+}
+
+.health-page__alert {
+  margin-bottom: 16px;
+}
+
+.health-page__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.health-page__stats-row {
+  margin-bottom: 0;
+}
+
+.health-page__stat-card {
+  height: 100%;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.health-page__stat-card .ant-statistic-title {
+  color: #546e7a;
+  font-size: 13px;
+}
+
+.health-page__stat-sub {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.health-page__stat-progress {
+  margin-top: 8px;
+}
+
+.health-page__panel {
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.health-page__panel--transcode {
+  border-top: 3px solid #1677ff;
+}
+
+.health-page__panel-hint {
+  display: block;
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.health-page__credential-alert {
+  margin-bottom: 14px;
+}
+
+.health-page__credential-list {
+  display: grid;
+  gap: 14px;
+}
+
+.health-page__credential-item {
+  padding: 14px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.health-page__credential-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.health-page__credential-email {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.health-page__credential-form .ant-form-item {
+  margin-bottom: 10px;
+}
+
+.health-page__credential-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.health-page__credential-meta {
+  font-size: 12px;
+}
+
+.health-page__transcode-summary {
+  margin-bottom: 16px;
+}
+
+.health-page__transcode-meter {
+  max-width: 320px;
+  margin-bottom: 12px;
+}
+
+.health-page__transcode-meta {
+  margin-bottom: 4px;
+}
+
+.health-page__transcode-table .health-page__url-cell {
+  max-width: 280px;
+  font-size: 12px;
+}
+
+.health-page__platform-card {
+  height: 100%;
+  border-radius: 10px;
+}
+
+.health-page__platform-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.health-page__platform-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.health-page__platform-dl {
+  margin: 0 0 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.health-page__platform-dl > div {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.health-page__platform-dl dt {
+  margin: 0;
+  color: #8c8c8c;
+}
+
+.health-page__platform-dl dd {
+  margin: 0;
+  color: #262626;
+}
+
+.health-page__platform-error dd {
+  color: #cf1322;
+}
+
+.health-page__debug-card {
+  height: 100%;
+  background: #fffbf0;
+  border-color: #ffd591;
+}
+
+.health-page__debug-line {
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+
+.health-page__debug-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.health-page__log-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.health-page__log-list--error {
+  border-left: 3px solid #ff4d4f;
+  padding-left: 10px;
+}
+
+.health-page__log-item {
+  display: grid;
+  grid-template-columns: 148px 52px 1fr;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+  align-items: start;
+}
+
+.health-page__log-item:last-child {
+  border-bottom: none;
+}
+
+.health-page__log-item--error .health-page__log-level {
+  color: #ff4d4f;
+}
+
+.health-page__log-item--warn .health-page__log-level {
+  color: #faad14;
+}
+
+.health-page__log-time {
+  font-size: 11px;
+}
+
+.health-page__log-msg {
+  word-break: break-all;
+}

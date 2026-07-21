@@ -108,6 +108,24 @@
   color: #78909c;
 }
 
+.st-creatives-list__thumb-btn {
+  display: block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.st-creatives-list__thumb-btn:hover .st-creatives-list__thumb-wrap {
+  box-shadow: 0 0 0 2px #00897b;
+}
+
+.st-creatives-list__thumb-btn:focus-visible {
+  outline: 2px solid #00897b;
+  outline-offset: 2px;
+}
+
 .st-creatives-list__thumb-wrap {
   position: relative;
   width: 112px;
@@ -132,23 +150,6 @@
   height: 100%;
   font-size: 0.75rem;
   color: #90a4ae;
-}
-
-.st-creatives-list__play {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.85rem;
-  pointer-events: none;
 }
 
 .st-creatives-list__network-badge {

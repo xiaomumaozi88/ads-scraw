@@ -1,0 +1,148 @@
+.download-list-drawer__batch-info {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(5, 5, 5, 0.06);
+}
+
+.download-list-drawer-queue-block {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f0f7ff;
+  border: 1px solid #bae0ff;
+}
+
+.download-list-drawer-queue-block__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.download-list-drawer-queue-block__list {
+  max-height: 180px;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 6px;
+}
+
+.download-list-drawer-queue-block__list .ant-list-item {
+  padding: 8px 10px;
+  align-items: flex-start;
+}
+
+.download-list-drawer-queue-block__item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.download-list-drawer-queue-block__url {
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+  max-width: 420px;
+}
+
+.download-list-drawer-queue-block__duration {
+  font-size: 11px;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.download-list-drawer-queue-block__empty {
+  display: block;
+  font-size: 12px;
+}
+
+.processing-task-row {
+  padding: 12px;
+  border: 1px solid rgba(5, 5, 5, 0.06);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+
+.processing-task-row--error {
+  border-color: #ffccc7;
+  background: #fff2f0;
+}
+
+.processing-task-row--done {
+  border-color: #b7eb8f;
+}
+
+.processing-task-row__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.processing-task-row__filename {
+  flex: 1;
+  min-width: 0;
+}
+
+.processing-task-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.55);
+  margin-bottom: 4px;
+}
+
+.processing-task-row__source-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.processing-task-row__link {
+  font-size: 12px;
+}
+
+.processing-task-row__error {
+  display: block;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.processing-history-page {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.processing-history-page__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.processing-history-batch {
+  margin-bottom: 16px;
+}
+
+.processing-history-batch__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.processing-history-batch__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.processing-history-batch__tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

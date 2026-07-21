@@ -15,21 +15,33 @@ FROM node:18-buster
 
 ENV BUILD=1
 
-# Buster 已归档，使用阿里云 debian-archive 源
-RUN echo "deb http://mirrors.aliyun.com/debian-archive/debian/ buster main" > /etc/apt/sources.list \
-  && echo "deb http://mirrors.aliyun.com/debian-archive/debian/ buster-updates main" >> /etc/apt/sources.list \
-  && echo "deb http://mirrors.aliyun.com/debian-archive/debian-security buster/updates main" >> /etc/apt/sources.list \
-  && apt-get clean && apt-get update \
-  && apt-get install -y wget gnupg ca-certificates procps libxss1 --fix-missing
-
-# 直接下载 Chrome .deb 安装，避免 apt 源中 google-chrome-stable 无法定位
-# .deb 安装后二进制为 /usr/bin/google-chrome-stable，创建 google-chrome 供 Puppeteer 使用
-RUN apt-get update && apt-get install -y ffmpeg util-linux socat --fix-missing \
-  && wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb \
-  && dpkg -i /tmp/chrome.deb || apt-get install -f -y \
-  && ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome \
-  && rm -f /tmp/chrome.deb \
-  && rm -rf /var/lib/apt/lists/*
+# Buster 已归档，使用阿里云 debian-archive 源；网络抖动时重试，关键依赖缺失则中断构建。
+# Chrome .deb 安装后二进制为 /usr/bin/google-chrome-stable，创建 google-chrome 供 Puppeteer 使用。
+RUN set -eux; \
+  echo "deb http://mirrors.aliyun.com/debian-archive/debian/ buster main" > /etc/apt/sources.list; \
+  echo "deb http://mirrors.aliyun.com/debian-archive/debian/ buster-updates main" >> /etc/apt/sources.list; \
+  echo "deb http://mirrors.aliyun.com/debian-archive/debian-security buster/updates main" >> /etc/apt/sources.list; \
+  apt_install() { \
+    for attempt in 1 2 3 4 5; do \
+      apt-get clean; \
+      apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 "$@" && return 0; \
+      echo "apt install failed, retry ${attempt}/5"; \
+      sleep 5; \
+    done; \
+    apt-get update -o Acquire::Retries=3; \
+    apt-get install -y --no-install-recommends -o Acquire::Retries=3 "$@"; \
+  }; \
+  apt_install wget gnupg ca-certificates procps libxss1 ffmpeg util-linux socat; \
+  wget -q --tries=5 --waitretry=5 https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb; \
+  dpkg -i /tmp/chrome.deb || apt-get install -f -y -o Acquire::Retries=3; \
+  test -x /usr/bin/google-chrome-stable; \
+  test -x /usr/bin/ffmpeg; \
+  test -x /usr/bin/socat; \
+  ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome; \
+  google-chrome --version; \
+  ffmpeg -version | head -1; \
+  rm -f /tmp/chrome.deb; \
+  rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package.json package-lock.json ./

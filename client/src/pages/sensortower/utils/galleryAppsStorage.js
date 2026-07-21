@@ -1,4 +1,4 @@
-import { isValidUnifiedAppId } from './galleryAppSearch.js';
+import { isValidUnifiedAppId, formatMetric, normalizeStoreVersions } from './galleryAppSearch.js';
 
 const STORAGE_KEY = 'st-gallery-selected-apps';
 
@@ -11,6 +11,12 @@ function normalizeStoredApp(raw, index) {
     publisher: String(raw?.publisher || '').trim() || '—',
     iconUrl: String(raw?.iconUrl || '').trim(),
     accent: raw?.accent || '#5c6bc0',
+    iosCount: Number(raw?.iosCount) || 0,
+    androidCount: Number(raw?.androidCount) || 0,
+    iosApps: normalizeStoreVersions(raw?.iosApps ?? raw?.ios_apps, 'ios'),
+    androidApps: normalizeStoreVersions(raw?.androidApps ?? raw?.android_apps, 'android'),
+    downloads: formatMetric(raw?.downloads) || String(raw?.downloads || '').trim(),
+    revenue: formatMetric(raw?.revenue) || String(raw?.revenue || '').trim(),
     selected: raw?.selected !== false,
     order: Number(raw?.order) || index + 1,
   };
@@ -40,6 +46,12 @@ export function saveGalleryAppsToStorage(apps) {
         publisher: a.publisher,
         iconUrl: a.iconUrl || '',
         accent: a.accent,
+        iosCount: a.iosCount ?? 0,
+        androidCount: a.androidCount ?? 0,
+        iosApps: a.iosApps ?? [],
+        androidApps: a.androidApps ?? [],
+        downloads: a.downloads || '',
+        revenue: a.revenue || '',
         selected: a.selected !== false,
         order: a.order ?? i + 1,
       }));

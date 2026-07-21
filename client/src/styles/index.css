@@ -8,7 +8,7 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
         sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f5f5f5;
     min-height: 100vh;
     padding: 0;
     margin: 0;
@@ -49,6 +49,44 @@ body {
     min-height: 0;
     display: flex;
     flex-direction: column;
+}
+
+/* Ant Design 后台布局内：平台页高度适配侧边栏 + 顶栏（Insightrackr 等可整页滚动） */
+.admin-layout__content .container,
+.admin-layout__content .main-content {
+  min-height: calc(100vh - 64px);
+}
+
+.admin-layout__content:not(.admin-layout__content--sensortower):not(.admin-layout__content--insightrackr) .container,
+.admin-layout__content:not(.admin-layout__content--sensortower):not(.admin-layout__content--insightrackr) .main-content {
+  height: auto;
+  overflow: visible;
+}
+
+.admin-layout__content:not(.admin-layout__content--sensortower):not(.admin-layout__content--insightrackr) .data-card {
+  height: auto;
+  min-height: calc(100vh - 64px);
+  overflow: visible;
+}
+
+.admin-layout__content .data-card--sensortower {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+}
+
+.admin-layout__content--sensortower .container,
+.admin-layout__content--sensortower .main-content {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-layout__content--sensortower .main-content {
+    padding-bottom: 0;
 }
 
 .header {
@@ -136,6 +174,164 @@ body {
     color: #1677ff;
     font-weight: 500;
     border-bottom-color: #1677ff;
+}
+
+.gdd-quota-board {
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    border: 1px solid #d9e6ef;
+    border-left: 3px solid #1677ff;
+    border-radius: 8px;
+    background: #fbfdff;
+}
+
+.gdd-quota-board--muted {
+    border-color: #ececec;
+    border-left-color: #bfbfbf;
+    background: #fafafa;
+}
+
+.gdd-quota-board__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.gdd-quota-board__title {
+    font-size: 14px;
+    line-height: 1.4;
+    font-weight: 650;
+    color: #1f2937;
+}
+
+.gdd-quota-board__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    min-height: 18px;
+    color: #667085;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.gdd-quota-board__account-sub {
+    margin-left: 8px;
+    color: #98a2b3;
+}
+
+.gdd-quota-board__warning {
+    color: #b54708;
+}
+
+.gdd-quota-board__notice {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #ffd8bf;
+    background: #fff7ed;
+    color: #b42318;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.gdd-quota-board__empty {
+    color: #8c8c8c;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.gdd-quota-board__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+}
+
+.gdd-quota-board__item {
+    min-width: 0;
+    padding: 8px 9px;
+    border: 1px solid #edf2f7;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.gdd-quota-board__item--main {
+    border-color: #c7dcff;
+    background: #f8fbff;
+}
+
+.gdd-quota-board__item--low {
+    border-color: #ffd591;
+    background: #fffaf0;
+}
+
+.gdd-quota-board__item--empty {
+    border-color: #ffccc7;
+    background: #fff5f5;
+}
+
+.gdd-quota-board__item-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.gdd-quota-board__item-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+    color: #344054;
+}
+
+.gdd-quota-board__cycle {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: #667085;
+}
+
+.gdd-quota-board__numbers {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-top: 4px;
+    color: #667085;
+    font-size: 12px;
+}
+
+.gdd-quota-board__numbers strong {
+    color: #101828;
+    font-size: 18px;
+    line-height: 1.1;
+}
+
+.gdd-quota-board__bar {
+    height: 5px;
+    margin-top: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #eef2f6;
+}
+
+.gdd-quota-board__bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: #16a34a;
+    transition: width 0.2s ease;
+}
+
+.gdd-quota-board__item--low .gdd-quota-board__bar span {
+    background: #f59e0b;
+}
+
+.gdd-quota-board__item--empty .gdd-quota-board__bar span {
+    background: #ef4444;
 }
 
 /* 广大大国内版：ad-info 原始 JSON 预览（列表卡片接入前） */
@@ -615,7 +811,7 @@ body {
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 1200px;
+  max-width: none;
   margin: 0 auto;
 }
 
@@ -650,9 +846,10 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 100%;
-  margin-bottom: 12px;
-  align-self: flex-start;
+  width: 60%;
+  max-width: 980px;
+  margin: 0 auto 12px;
+  align-self: center;
 }
 
 .guangdada-category-tabs {
@@ -715,8 +912,10 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
-  width: 100%;
-  align-self: stretch;
+  width: 60%;
+  max-width: 980px;
+  margin: 0 auto;
+  align-self: center;
   flex-wrap: wrap;
 }
 
@@ -2758,6 +2957,14 @@ body {
 .guangdada-image-analysis-popover-footer .ant-btn {
   min-width: 80px;
 }
+.guangdada-content-attributes-popover-empty {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #8c8c8c;
+}
 
 /* 视频智能分析 Popover（仅从产品 HTML 提取的数据与结构） */
 .guangdada-video-analysis-popover-overlay.ant-popover {
@@ -4517,6 +4724,22 @@ body.insightrackr-fullscreen-active .data-card {
     line-height: 1;
 }
 
+.creative-card.guangdada-card .card-thumbnail-no-source {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    z-index: 2;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.58);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
 .creative-card.guangdada-card .play-icon-center .video-duration {
     font-size: 12px;
     font-weight: 600;
@@ -4992,5 +5215,10 @@ body.insightrackr-fullscreen-active .data-card {
     .results-container {
         grid-template-columns: 1fr;
     }
-}
 
+    .guangdada-category-row,
+    .guangdada-search-row {
+        width: 100%;
+        max-width: none;
+    }
+}

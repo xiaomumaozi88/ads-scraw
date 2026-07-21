@@ -1,5 +1,9 @@
 import React from 'react';
-import { DATE_PRESETS, GALLERY_NETWORKS, GALLERY_REGIONS } from '../../constants/galleryConstants.js';
+import {
+  DATE_PRESETS,
+  GALLERY_NETWORK_OPTION_GROUPS,
+  GALLERY_REGIONS,
+} from '../../constants/galleryConstants.js';
 import { formatDateRangeLabel } from '../../utils/formatGallery.js';
 import { toInputDate } from '../../utils/buildGalleryFilters.js';
 import FacetFilterDropdown from './FacetFilterDropdown.jsx';
@@ -81,9 +85,10 @@ function GalleryTopBar({
           showAllOption
           allSelected={allNetworks}
           onAllChange={onAllNetworksChange}
-          options={GALLERY_NETWORKS.map((n) => ({ value: n, label: n }))}
+          optionGroups={GALLERY_NETWORK_OPTION_GROUPS}
           selectedValues={selectedNetworks}
           onChange={onSelectedNetworksChange}
+          showNetworkIcons
         />
       </div>
       <button

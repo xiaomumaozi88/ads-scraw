@@ -1,0 +1,41 @@
+.st-share-trend {
+  width: 100%;
+}
+
+.st-share-trend--empty {
+  display: block;
+  color: #b0bec5;
+  font-size: 0.88rem;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.st-share-trend__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.st-share-trend__grid {
+  stroke: #eceff1;
+  stroke-width: 1;
+}
+
+.st-share-trend__ylabel {
+  fill: #78909c;
+  font-size: 11px;
+}
+
+.st-share-trend__xlabel {
+  fill: #546e7a;
+  font-size: 11px;
+}
+
+.st-share-trend__xlabel-year {
+  fill: #90a4ae;
+  font-size: 10px;
+}
+
+.st-share-trend__line {
+  vector-effect: non-scaling-stroke;
+}

@@ -1,0 +1,38 @@
+.operation-audit-page {
+  width: 100%;
+}
+
+.operation-audit-page__intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.operation-audit-page__desc {
+  margin-bottom: 0 !important;
+  max-width: 640px;
+}
+
+.operation-audit-page__alert {
+  margin-bottom: 16px;
+}
+
+.operation-audit-page__filters {
+  margin-bottom: 16px;
+}
+
+.operation-audit-page__summary-card {
+  margin-bottom: 16px;
+}
+
+.operation-audit-page__select {
+  min-width: 160px;
+  margin-left: 8px;
+}
+
+.operation-audit-page__table-card .ant-card-body {
+  padding-top: 8px;
+}

@@ -1,0 +1,31 @@
+.no-permission-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f0f2f5;
+}
+
+.no-permission-page__card {
+  max-width: 440px;
+  width: 100%;
+  background: #fff;
+  border-radius: 12px;
+  padding: 40px 32px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.no-permission-page__title {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.no-permission-page__desc {
+  margin: 0;
+  color: #424242;
+  line-height: 1.6;
+}

@@ -1,5 +1,8 @@
 import { toIsoDate } from './buildGalleryFilters.js';
-import { GALLERY_PLATFORMS } from '../constants/galleryConstants.js';
+import {
+  getGalleryAdTypeOptionGroups,
+  GALLERY_PLATFORMS,
+} from '../constants/galleryConstants.js';
 import { getRegionByCode } from '../constants/galleryRegionCodes.js';
 
 const NETWORK_COLORS = {
@@ -15,6 +18,23 @@ const NETWORK_COLORS = {
 export function getNetworkColor(network) {
   if (!network) return '#607d8b';
   return NETWORK_COLORS[network] || '#546e7a';
+}
+
+/** 创意库行唯一键：同一 grouped_creative_id 可能对应不同 network */
+export function getCreativeGalleryRowKey(row) {
+  if (!row) return '';
+  return `${row.unified_app_id}|${row.grouped_creative_id}|${row.network}`;
+}
+
+export function dedupeCreativeGalleryRows(rows) {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  const seen = new Set();
+  return rows.filter((row) => {
+    const key = getCreativeGalleryRowKey(row);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function formatGalleryDate(dateStr) {
@@ -53,6 +73,52 @@ export function formatDurationBetween(first, last) {
   if (Number.isNaN(a) || Number.isNaN(b)) return '—';
   if (b < a) return '—';
   return formatDurationBetweenMs(b - a);
+}
+
+/** 创意投放持续时间：最后看到 − 首次看到 */
+export function formatCreativeActiveDuration(firstSeen, lastSeen) {
+  return formatDurationBetween(firstSeen, lastSeen);
+}
+
+export function normalizeSharePercentValue(share) {
+  const n = Number(share);
+  if (!Number.isFinite(n)) return null;
+  return n <= 1 ? n * 100 : n;
+}
+
+export function formatVideoDurationSeconds(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  const total = Math.round(n);
+  if (total < 60) return `${total}秒`;
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return secs > 0 ? `${mins}分${secs}秒` : `${mins}分钟`;
+}
+
+export function formatCreativeDimensions(width, height) {
+  const w = Number(width);
+  const h = Number(height);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return '—';
+  return `${Math.round(w)}x${Math.round(h)}`;
+}
+
+/** 网格卡片封面比例（优先使用 metadata 返回的宽高） */
+export function getCreativeThumbAspectRatio(creative) {
+  const w = Number(creative?.creative_width);
+  const h = Number(creative?.creative_height);
+  if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+    return { width: w, height: h };
+  }
+  return { width: 16, height: 9 };
+}
+
+export function formatCreativeRegionsZh(regions) {
+  if (!Array.isArray(regions) || !regions.length) return '—';
+  const labels = regions
+    .map((code) => getRegionByCode(String(code))?.nameZh || String(code))
+    .filter(Boolean);
+  return labels.length ? labels.join(', ') : '—';
 }
 
 function formatDurationBetweenMs(ms) {
@@ -173,6 +239,102 @@ export function getCreativeThumbUrl(groupedCreativeId) {
   return `https://x-ad-assets.s3.amazonaws.com/media_asset/${groupedCreativeId}/thumb`;
 }
 
+/** 优先使用 metadata 返回的缩略图 URL */
+export function resolveCreativeThumbUrl(creativeOrId) {
+  if (creativeOrId && typeof creativeOrId === 'object') {
+    if (creativeOrId.thumbnail_media_url) return creativeOrId.thumbnail_media_url;
+    return getCreativeThumbUrl(creativeOrId.grouped_creative_id);
+  }
+  return getCreativeThumbUrl(creativeOrId);
+}
+
+export function getCreativeVideoUrl(groupedCreativeId) {
+  if (!groupedCreativeId) return '';
+  return `https://x-ad-assets.s3.amazonaws.com/media_asset/${groupedCreativeId}/media`;
+}
+
+export function getCreativeImageUrl(groupedCreativeId) {
+  if (!groupedCreativeId) return '';
+  return `https://x-ad-assets.s3.amazonaws.com/media_asset/${groupedCreativeId}/media`;
+}
+
+export function formatGalleryDateShort(dateStr) {
+  if (!dateStr) return '—';
+  const d = dateStr instanceof Date ? dateStr : new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '—';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}/${m}/${day}`;
+}
+
+function lookupFacetLabel(value, options) {
+  if (value == null || value === '') return null;
+  const key = String(value);
+  const hit = options?.find((o) => o.value === key);
+  return hit?.label || key;
+}
+
+export function formatCreativeFacetValues(values, options) {
+  if (!Array.isArray(values) || !values.length) return '—';
+  const labels = values
+    .map((v) => lookupFacetLabel(v, options))
+    .filter((v) => v != null && String(v).trim() !== '');
+  return labels.length ? labels.join(', ') : '—';
+}
+
+export function isVideoCreative(creative) {
+  const primaryType = String(creative?.primary_ad_type || '').toLowerCase();
+  if (primaryType === 'video') return true;
+  if (primaryType === 'image') return false;
+
+  const tokens = normalizeCreativeFormatTokens(creative?.grouped_creative_ad_formats);
+  if (tokens.some(isVideoFormatToken)) return true;
+
+  for (const key of ['filter_ad_type', 'ad_type', 'grouped_creative_ad_type']) {
+    const value = creative?.[key];
+    if (value != null && isVideoFormatToken(value)) return true;
+  }
+
+  return false;
+}
+
+function normalizeCreativeFormatTokens(formats) {
+  if (formats == null) return [];
+  if (Array.isArray(formats)) return formats.flatMap(normalizeCreativeFormatTokens);
+  if (typeof formats === 'object') {
+    const value = formats.value ?? formats.label ?? formats.name ?? formats.id;
+    return value != null ? [value] : [];
+  }
+  return [formats];
+}
+
+function isVideoFormatToken(token) {
+  const text = String(token).toLowerCase();
+  return (
+    text.includes('video') ||
+    text.includes('视频') ||
+    text.includes('reels') ||
+    text.includes('short-video') ||
+    text.includes('in-stream')
+  );
+}
+
+export function getCreativePrimaryAdTypeLabel(creative, adTypeOptions) {
+  const primaryType = String(creative?.primary_ad_type || '').toLowerCase();
+  if (primaryType === 'video') return '视频';
+  if (primaryType === 'image') return '图片';
+  if (primaryType.includes('playable') || primaryType === 'interactive') return '试玩';
+
+  const formats = creative?.grouped_creative_ad_formats;
+  if (!Array.isArray(formats) || !formats.length) return '—';
+  const first = String(formats[0]).toLowerCase();
+  if (first.includes('video')) return '视频';
+  if (first.includes('image')) return '图片';
+  if (first.includes('playable') || first.includes('interactive')) return '试玩';
+  return lookupFacetLabel(formats[0], adTypeOptions) || formats[0];
+}
+
 export function formatDateRangeLabel(startDate, endDate) {
   const opts = { month: 'short', day: 'numeric', year: 'numeric' };
   const en = (d) => d.toLocaleDateString('en-US', opts);
@@ -239,22 +401,113 @@ export function buildFilterFacetCountMaps(rows) {
   return { placements, adTypes, adObjectives, aspectRatios, videoDurations, bannerDimensions };
 }
 
-/** 合并分组下拉的选项与 filter_counts */
+function getCountMapKeys(countMap) {
+  if (!countMap) return [];
+  return countMap instanceof Map ? [...countMap.keys()] : Object.keys(countMap);
+}
+
+function inferAdTypeGroupId(value) {
+  const key = String(value);
+  if (key.startsWith('video-')) return 'video';
+  if (key.startsWith('interactive-playable-')) return 'playable';
+  if (key.startsWith('image-')) return 'image';
+  return null;
+}
+
+function formatUnknownAdTypeLabel(value, groupLabel) {
+  const key = String(value);
+  const suffix = key.replace(/^(video-|image-|interactive-playable-)/, '');
+  const subtypeLabels = {
+    interstitial: '插页广告',
+    rewarded: '奖励',
+    other: '其他',
+    banner: '横幅',
+  };
+  const subtype = subtypeLabels[suffix] || suffix;
+  return groupLabel ? `${subtype} ${groupLabel}` : key;
+}
+
+/**
+ * 按平台与 filter_counts 构建广告类型分组（与 Sensor Tower 官方一致）
+ * @param {Map|object} countMap filter_ad_type 计数
+ * @param {string} platformId ios | android | unified
+ */
+export function buildAdTypeFacetOptionGroups(countMap, platformId = 'ios') {
+  const staticGroups = getGalleryAdTypeOptionGroups(platformId);
+  const groupOrder = staticGroups.map((g) => g.id);
+  const apiKeys = new Set(getCountMapKeys(countMap).map(String));
+  const hasApiData = apiKeys.size > 0;
+
+  const labelByValue = new Map();
+  const groupByValue = new Map();
+  const staticGroupsById = new Map(staticGroups.map((g) => [g.id, g]));
+
+  for (const group of staticGroups) {
+    for (const opt of group.options || []) {
+      labelByValue.set(opt.value, opt.label);
+      groupByValue.set(opt.value, group.id);
+    }
+  }
+
+  if (hasApiData) {
+    for (const key of apiKeys) {
+      if (groupByValue.has(key)) continue;
+      const groupId = inferAdTypeGroupId(key);
+      if (!groupId || !staticGroupsById.has(groupId)) continue;
+      groupByValue.set(key, groupId);
+      const groupLabel = staticGroupsById.get(groupId)?.label || '';
+      labelByValue.set(key, formatUnknownAdTypeLabel(key, groupLabel));
+    }
+  }
+
+  return groupOrder
+    .map((groupId) => {
+      const staticGroup = staticGroupsById.get(groupId);
+      if (!staticGroup) return null;
+
+      const staticOrder = (staticGroup.options || []).map((o) => o.value);
+      const valuesInGroup = hasApiData
+        ? staticOrder.filter((value) => apiKeys.has(value))
+        : [...staticOrder];
+
+      if (hasApiData) {
+        for (const key of apiKeys) {
+          if (groupByValue.get(key) === groupId && !valuesInGroup.includes(key)) {
+            valuesInGroup.push(key);
+          }
+        }
+      }
+
+      if (!valuesInGroup.length) return null;
+
+      return {
+        id: groupId,
+        label: staticGroup.label,
+        options: valuesInGroup.map((value) => ({
+          value,
+          label: labelByValue.get(value) || value,
+        })),
+      };
+    })
+    .filter(Boolean);
+}
+
+/** 合并分组下拉的选项与 filter_counts（不向每个分组注入其它组的枚举） */
 export function mergeFacetOptionGroups(staticGroups, countMap) {
   if (!staticGroups?.length) return [];
   return staticGroups.map((group) => ({
     ...group,
-    options: mergeFacetOptions(group.options, countMap),
+    options: mergeFacetOptions(group.options, countMap, { allowNewFromCountMap: false }),
   }));
 }
 
 /** 将静态选项与 filter_counts 返回值合并，保证 API 新枚举也能出现在下拉中 */
-export function mergeFacetOptions(staticOptions, countMap) {
+export function mergeFacetOptions(staticOptions, countMap, { allowNewFromCountMap = true } = {}) {
   const byValue = new Map();
   for (const opt of staticOptions || []) {
     byValue.set(opt.value, opt);
   }
-  if (countMap) {
+  if (countMap && allowNewFromCountMap) {
     const entries = countMap instanceof Map ? countMap.entries() : Object.entries(countMap);
     for (const [value] of entries) {
       const key = String(value);

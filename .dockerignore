@@ -1,0 +1,12 @@
+.git
+.DS_Store
+.env
+.env.*
+ads-scraw-production.env
+*.log
+*.tar
+node_modules
+dist
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

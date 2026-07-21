@@ -1,0 +1,10 @@
+.insightrackr-logo {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.insightrackr-logo--on-dark {
+  opacity: 0.95;
+}

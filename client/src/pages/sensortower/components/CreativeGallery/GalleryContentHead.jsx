@@ -13,6 +13,7 @@ function GalleryContentHead({
   totalCount,
   displayedCount,
   loading,
+  loadingMore,
   viewMode,
   onViewModeChange,
   page,
@@ -23,6 +24,8 @@ function GalleryContentHead({
   columnsOpen,
   onColumnsOpenChange,
   listColumns,
+  canAnalyzeAds,
+  onAnalyzeAds,
 }) {
   const subtitle = buildSummarySubtitle({
     platformId,
@@ -81,6 +84,7 @@ function GalleryContentHead({
         totalCount={totalCount}
         displayedCount={displayedCount}
         loading={loading}
+        loadingMore={loadingMore}
         viewMode={viewMode}
         onViewModeChange={onViewModeChange}
         page={page}
@@ -91,6 +95,8 @@ function GalleryContentHead({
         columnsOpen={columnsOpen}
         onColumnsOpenChange={onColumnsOpenChange}
         listColumns={listColumns}
+        canAnalyzeAds={canAnalyzeAds}
+        onAnalyzeAds={onAnalyzeAds}
       />
     </section>
   );

@@ -1,8 +1,8 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import './PlatformSelection.css';
 import insightrackrLogo from '../../assets/insightrackr-logo.png';
-import guangdadaLogo from '../../assets/guangdada-logo.svg';
+import sensorTowerLogo from '../../assets/sensorTower.svg';
+import { FEATURES } from '../config/features';
 
 const platforms = [
   {
@@ -12,18 +12,18 @@ const platforms = [
     logo: insightrackrLogo,
     color: '#667eea'
   },
-  {
+  ...(FEATURES.guangdada ? [{
     id: 'guangdada',
     name: '广大大',
     description: '广告创意分析平台',
-    logo: guangdadaLogo,
+    logo: null,
     color: '#764ba2'
-  },
+  }] : []),
   {
     id: 'sensortower',
     name: 'Sensor Tower',
     description: '应用分析与创意库',
-    logo: null,
+    logo: sensorTowerLogo,
     color: '#0d47a1'
   }
 ];
@@ -55,9 +55,11 @@ function PlatformSelection({ onSelectPlatform }) {
           </div>
         ))}
       </div>
-      <p className="platform-selection-debug-link">
-        <Link to="/external-search-debug">外部查询接口调试（临时）</Link>
-      </p>
+      {FEATURES.externalSearchDebug && (
+        <p className="platform-selection-debug-link">
+          <a href="/external-search-debug">外部查询接口调试（临时）</a>
+        </p>
+      )}
     </div>
   );
 }

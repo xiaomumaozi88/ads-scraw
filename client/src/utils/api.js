@@ -1,6 +1,158 @@
 import { buildDomesticAdInfoQuery } from './guangdadaDomesticAdInfo';
+import { API_BASE } from '../config/api';
 
-const API_BASE = '/api';
+const ACTION_TOKEN_REFRESH_SKEW_MS = 60 * 1000;
+let actionTokenCache = null;
+let actionTokenPromise = null;
+
+function resolveUrl(url) {
+  if (typeof window === 'undefined') return null;
+  try {
+    return new URL(url, window.location.origin);
+  } catch {
+    return null;
+  }
+}
+
+function resolveApiBaseUrl() {
+  if (typeof window === 'undefined') return null;
+  try {
+    return new URL(API_BASE, window.location.origin);
+  } catch {
+    return null;
+  }
+}
+
+function apiRelativePath(url) {
+  const requestUrl = resolveUrl(url);
+  const baseUrl = resolveApiBaseUrl();
+  if (!requestUrl || !baseUrl || requestUrl.origin !== baseUrl.origin) return '';
+  const basePath = baseUrl.pathname.replace(/\/+$/, '') || '/api';
+  if (requestUrl.pathname !== basePath && !requestUrl.pathname.startsWith(`${basePath}/`)) {
+    return '';
+  }
+  const relative = requestUrl.pathname.slice(basePath.length) || '/';
+  return relative.startsWith('/') ? relative : `/${relative}`;
+}
+
+function shouldAttachActionToken(url) {
+  const path = apiRelativePath(url);
+  if (!path) return false;
+  return !(
+    path === '/security/action-token'
+    || path.startsWith('/security/action-token/')
+    || path === '/iam'
+    || path.startsWith('/iam/')
+    || path === '/proxy-media'
+    || path.startsWith('/proxy-media/')
+    || path === '/download-image'
+    || path.startsWith('/download-image/')
+    || path === '/external'
+    || path.startsWith('/external/')
+  );
+}
+
+async function fetchActionToken() {
+  const now = Date.now();
+  if (
+    actionTokenCache?.token
+    && actionTokenCache.expiresAt
+    && actionTokenCache.expiresAt - ACTION_TOKEN_REFRESH_SKEW_MS > now
+  ) {
+    return actionTokenCache.token;
+  }
+
+  if (!actionTokenPromise) {
+    actionTokenPromise = fetch(`${API_BASE}/security/action-token`, {
+      credentials: 'include',
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.data?.token) {
+          throw new Error(data.message || `获取操作令牌失败: ${res.status}`);
+        }
+        const expiresAt = Number(data.data.expiresAt) || Date.now() + 5 * 60 * 1000;
+        actionTokenCache = {
+          token: data.data.token,
+          expiresAt,
+        };
+        return actionTokenCache.token;
+      })
+      .finally(() => {
+        actionTokenPromise = null;
+      });
+  }
+
+  return actionTokenPromise;
+}
+
+function clearActionTokenCache() {
+  actionTokenCache = null;
+  actionTokenPromise = null;
+}
+
+function buildRequestOptions(options, actionToken = null) {
+  const requestOptions = { ...options };
+  if (!requestOptions.credentials || requestOptions.credentials === 'same-origin') {
+    requestOptions.credentials = 'include';
+  }
+  if (actionToken) {
+    const headers = new Headers(requestOptions.headers || {});
+    if (!headers.has('X-Action-Token')) {
+      headers.set('X-Action-Token', actionToken);
+    }
+    requestOptions.headers = headers;
+  }
+  return requestOptions;
+}
+
+/** 带 Cookie 的 API 请求（IAM 会话） */
+export async function apiFetch(url, options = {}) {
+  const attachToken = shouldAttachActionToken(url);
+  const token = attachToken ? await fetchActionToken() : null;
+  let response = await fetch(url, buildRequestOptions(options, token));
+
+  if (attachToken && response.status === 403) {
+    const data = await response.clone().json().catch(() => ({}));
+    if (data?.code === 'ACTION_TOKEN_INVALID') {
+      clearActionTokenCache();
+      const freshToken = await fetchActionToken();
+      response = await fetch(url, buildRequestOptions(options, freshToken));
+    }
+  }
+
+  return response;
+}
+
+const PLATFORM_API_PREFIXES = {
+  guangdada: 'catalog/g1',
+  insightrackr: 'insightrackr',
+  sensortower: 'sensortower',
+};
+
+function joinApiPath(base, path = '') {
+  const cleanPath = String(path || '').replace(/^\/+/, '');
+  return cleanPath ? `${base}/${cleanPath}` : base;
+}
+
+function platformApiUrl(platform, path = '') {
+  const prefix = PLATFORM_API_PREFIXES[platform] || String(platform || '').replace(/^\/+|\/+$/g, '');
+  return joinApiPath(`${API_BASE}/${prefix}`, path);
+}
+
+function guangdadaApiUrl(path = '') {
+  return platformApiUrl('guangdada', path);
+}
+
+export async function getIamMe() {
+  const res = await apiFetch(`${API_BASE}/iam/me`);
+  return res.json();
+}
+
+export async function iamLogout() {
+  const res = await apiFetch(`${API_BASE}/iam/logout`, { method: 'POST' });
+  return res.json();
+}
 
 /** 需走代理的 CDN 域名（防盗链会导致部署到非白名单域名时 403，通过后端代理可正常播放） */
 const PROXY_MEDIA_HOST_SUFFIXES = ['zingfront.com'];
@@ -36,21 +188,174 @@ export function formatRequestError(message) {
 }
 
 /**
- * 后端转码视频：POST /api/transcode-video，返回 MP4 Blob
- * @param {string} videoUrl - 视频 URL
- * @param {number} [targetW] - 目标宽，默认 800
- * @param {number} [targetH] - 目标高，默认 800
- * @param {AbortSignal} [signal] - 可选，用于超时或取消
- * @returns {Promise<Blob>}
+ * 后端转码视频：提交异步任务 → 轮询 → 下载 MP4 Blob
  */
-export async function transcodeVideoBackend(videoUrl, targetW = 800, targetH = 800, signal = null) {
-  const res = await fetch(`${API_BASE}/transcode-video`, {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function getTranscodeJob(jobId) {
+  const res = await apiFetch(`${API_BASE}/transcode-jobs/${encodeURIComponent(jobId)}`, {
+    credentials: 'same-origin',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `查询转码任务失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function listTranscodeJobs(options = {}) {
+  const params = new URLSearchParams();
+  if (options.activeOnly === false) params.set('active', '0');
+  if (options.limit) params.set('limit', String(options.limit));
+  const qs = params.toString();
+  const res = await apiFetch(`${API_BASE}/transcode-jobs${qs ? `?${qs}` : ''}`, {
+    credentials: 'same-origin',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `读取转码任务列表失败: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.jobs ?? [];
+}
+
+export async function listOperationAudits(options = {}) {
+  const params = new URLSearchParams();
+  if (options.page) params.set('page', String(options.page));
+  if (options.pageSize) params.set('pageSize', String(options.pageSize));
+  if (options.platform) params.set('platform', options.platform);
+  if (options.action) params.set('action', options.action);
+  const qs = params.toString();
+  const res = await apiFetch(`${API_BASE}/health/operation-audits${qs ? `?${qs}` : ''}`, {
+    credentials: 'same-origin',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `读取操作审计失败: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.data ?? { items: [], total: 0 };
+}
+
+export async function getOperationAuditSummary(options = {}) {
+  const params = new URLSearchParams();
+  if (options.platform) params.set('platform', options.platform);
+  if (options.action) params.set('action', options.action);
+  if (options.days) params.set('days', String(options.days));
+  if (options.limit) params.set('limit', String(options.limit));
+  const qs = params.toString();
+  const res = await apiFetch(`${API_BASE}/health/operation-audits/summary${qs ? `?${qs}` : ''}`, {
+    credentials: 'same-origin',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `读取操作审计汇总失败: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.data ?? { items: [], days: options.days || 7 };
+}
+
+function toMaterialAuditTask(task) {
+  const sourceUrl = task.sourceUrl
+    || (task.sourceType === 'local' ? '' : (task.processPayload?.url ?? ''));
+  return {
+    id: task.id,
+    filename: task.filename,
+    sizeLabel: task.sizeLabel,
+    sourceUrl,
+    sourceLabel: task.sourceLabel,
+    originalWidth: task.originalWidth ?? null,
+    originalHeight: task.originalHeight ?? null,
+    targetWidth: task.targetWidth ?? task.processPayload?.targetW ?? null,
+    targetHeight: task.targetHeight ?? task.processPayload?.targetH ?? null,
+    isVideo: !!task.isVideo,
+    isHtml: !!task.isHtml,
+    sourceType: task.sourceType || 'remote',
+    processPayload: {
+      url: sourceUrl,
+      targetW: task.processPayload?.targetW ?? null,
+      targetH: task.processPayload?.targetH ?? null,
+    },
+  };
+}
+
+export async function auditMaterialBatchSubmit(batch) {
+  const res = await apiFetch(`${API_BASE}/material-processing/batch-audit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      batchId: batch.id,
+      source: batch.source,
+      sourceLabel: batch.sourceLabel,
+      folderName: batch.folderName,
+      tasks: (batch.tasks || []).map(toMaterialAuditTask),
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.success === false) {
+    throw new Error(data.message || `记录操作日志失败: ${res.status}`);
+  }
+  return data;
+}
+
+export async function waitAndDownloadTranscodeJob(jobId, signal = null, onProgress = null) {
+  const started = Date.now();
+  const timeoutMs = 360000;
+  while (true) {
+    if (signal?.aborted) {
+      const err = new Error('Aborted');
+      err.name = 'AbortError';
+      throw err;
+    }
+    if (Date.now() - started > timeoutMs) {
+      throw new Error('等待转码结果超时');
+    }
+    const job = await getTranscodeJob(jobId);
+    if (onProgress && job.phase && job.status === 'running') {
+      const phaseProgress = { downloading: 20, probing: 40, transcoding: 70 };
+      onProgress(phaseProgress[job.phase] ?? 10);
+    }
+    if (job.status === 'completed') {
+      if (onProgress) onProgress(95);
+      const res = await apiFetch(`${API_BASE}/transcode-jobs/${encodeURIComponent(jobId)}/download`, {
+        credentials: 'same-origin',
+        signal,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || `下载转码结果失败: ${res.status}`);
+      }
+      const blob = await res.blob();
+      if (onProgress) onProgress(100);
+      return blob;
+    }
+    if (job.status === 'failed') {
+      throw new Error(job.errorMessage || '转码失败');
+    }
+    await sleep(1500);
+  }
+}
+
+/**
+ * @param {Object} [meta]
+ * @param {string} [meta.clientBatchId]
+ * @param {string} [meta.clientTaskId]
+ * @param {string} [meta.sourceLabel]
+ * @param {(jobId: string) => void} [meta.onJobSubmitted]
+ */
+export async function transcodeVideoBackend(videoUrl, targetW = 800, targetH = 800, signal = null, meta = {}) {
+  const res = await apiFetch(`${API_BASE}/transcode-video`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       videoUrl: String(videoUrl).trim(),
       targetW: Number(targetW) || 800,
       targetH: Number(targetH) || 800,
+      clientBatchId: meta.clientBatchId ?? undefined,
+      clientTaskId: meta.clientTaskId ?? undefined,
+      sourceLabel: meta.sourceLabel ?? undefined,
     }),
     credentials: 'same-origin',
     signal,
@@ -59,22 +364,26 @@ export async function transcodeVideoBackend(videoUrl, targetW = 800, targetH = 8
     const data = await res.json().catch(() => ({}));
     throw new Error(data.message || `转码失败: ${res.status}`);
   }
-  return res.blob();
+  const data = await res.json();
+  const jobId = data.jobId;
+  if (!jobId) throw new Error('服务器未返回转码任务 ID');
+  meta.onJobSubmitted?.(jobId);
+  return waitAndDownloadTranscodeJob(jobId, signal, meta.onProgress);
 }
 
 /**
- * 获取后端视频转码队列状态，用于下载列表展示排队进度
- * @returns {Promise<{ running: number, waiting: number }>}
+ * 获取后端视频转码队列状态，用于下载列表与健康页展示
+ * @returns {Promise<{ running: number, waiting: number, jobs?: Array }>}
  */
 export async function getTranscodeQueueStatus() {
-  const res = await fetch(`${API_BASE}/transcode-queue`, { credentials: 'same-origin' });
+  const res = await apiFetch(`${API_BASE}/transcode-queue`, { credentials: 'same-origin' });
   if (!res.ok) return { running: 0, waiting: 0 };
   return res.json();
 }
 
 export async function getStatus(platform) {
   // 使用相对路径，localhost 与 IP 访问都会走当前页面的 origin，由 Vite 代理到后端；登录状态在后端共享
-  const response = await fetch(`${API_BASE}/${platform}/status`, {
+  const response = await apiFetch(platformApiUrl(platform, 'status'), {
     credentials: 'same-origin',
   });
   const raw = await response.text();
@@ -103,7 +412,7 @@ export async function login(platform, email, password, otp, authLink) {
   if (authLink != null && String(authLink).trim() !== '') {
     body.authLink = String(authLink).trim();
   }
-  const response = await fetch(`${API_BASE}/${platform}/login`, {
+  const response = await apiFetch(platformApiUrl(platform, 'login'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -113,8 +422,68 @@ export async function login(platform, email, password, otp, authLink) {
   return await response.json();
 }
 
+/** 服务端是否配置了平台一键登录凭据 */
+export async function getPlatformAutoLoginInfo(platform) {
+  const res = await apiFetch(platformApiUrl(platform, 'auto-login-info'), {
+    credentials: 'same-origin',
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) {
+    return { configured: false };
+  }
+  return json.data || { configured: false };
+}
+
+/** Insightrackr 服务端是否配置了一键登录凭据 */
+export async function getInsightrackrAutoLoginInfo() {
+  return getPlatformAutoLoginInfo('insightrackr');
+}
+
+/** 触发服务端凭据登录（互斥锁，已登录则跳过） */
+export async function triggerPlatformLogin(platform) {
+  const res = await apiFetch(platformApiUrl(platform, 'trigger-login'), {
+    method: 'POST',
+    credentials: 'same-origin',
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok && !json.message) {
+    throw new Error(`登录请求失败: ${res.status}`);
+  }
+  return json;
+}
+
+/** 触发 Insightrackr 服务端凭据登录（互斥锁，已登录则跳过） */
+export async function triggerInsightrackrLogin() {
+  return triggerPlatformLogin('insightrackr');
+}
+
+export async function getPlatformCredentials() {
+  const res = await apiFetch(`${API_BASE}/health/platform-credentials`, {
+    credentials: 'same-origin',
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) {
+    throw new Error(json.message || `读取平台账号配置失败: ${res.status}`);
+  }
+  return json.data || [];
+}
+
+export async function updatePlatformCredentials(platform, values) {
+  const res = await apiFetch(`${API_BASE}/health/platform-credentials/${encodeURIComponent(platform)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(values || {}),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) {
+    throw new Error(json.message || `保存平台账号配置失败: ${res.status}`);
+  }
+  return json.data;
+}
+
 export async function clearLogin(platform) {
-  const response = await fetch(`${API_BASE}/${platform}/clearLogin`, {
+  const response = await apiFetch(platformApiUrl(platform, 'clearLogin'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -143,7 +512,7 @@ function checkGuangdadaHumanVerification(result) {
 
 export async function searchData(platform, searchParams) {
   const payload = platform === 'guangdada' ? bodyForGuangdadaSearch(searchParams) : searchParams;
-  const response = await fetch(`${API_BASE}/${platform}/search`, {
+  const response = await apiFetch(platformApiUrl(platform, 'search'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -290,7 +659,7 @@ export async function guangdadaMultiModalSearch(keywordOrPayload) {
       : { multimodal_search_type: '1', multimodal_search_content: raw, snapshot_flag: 'false' };
   }
 
-  const response = await fetch(`${API_BASE}/guangdada/multi-modal-search`, {
+  const response = await apiFetch(guangdadaApiUrl('multi-modal-search'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -301,17 +670,72 @@ export async function guangdadaMultiModalSearch(keywordOrPayload) {
   return result;
 }
 
+export async function getGuangdadaQuotaStatus(options = {}) {
+  const params = new URLSearchParams();
+  if (options.forceRefresh) params.set('force', '1');
+  const qs = params.toString();
+  const response = await apiFetch(`${guangdadaApiUrl('quota-status')}${qs ? `?${qs}` : ''}`, {
+    method: 'GET',
+    credentials: 'same-origin',
+  });
+  return response.json();
+}
+
+export async function consumeGuangdadaQuota(quotaKey, amount = 1, metadata = {}) {
+  const response = await apiFetch(guangdadaApiUrl('quota-consume'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      quotaKey,
+      amount,
+      metadata,
+    }),
+  });
+  return response.json();
+}
+
 // 广大大广告主联想（搜索框输入时下拉列表）
 export async function getGuangdadaAdvertiserAssociation(keyword, appType = 1) {
   const k = keyword != null ? String(keyword).trim() : '';
   if (!k) return { success: true, data: { advertiser_list: [] } };
   const params = new URLSearchParams({ association_kwd: k, app_type: String(appType) });
-  const response = await fetch(`${API_BASE}/guangdada/advertiser-association?${params.toString()}`, {
+  const response = await apiFetch(`${guangdadaApiUrl('advertiser-association')}?${params.toString()}`, {
     method: 'GET',
     credentials: 'same-origin'
   });
   const result = await response.json();
   checkGuangdadaHumanVerification(result);
+  return result;
+}
+
+// 广大大素材内容属性：GET /napi/v1/creative/ai-tags-v2?app_type=1，经后端已登录浏览器转发
+export async function getGuangdadaAiTagsV2(appType = 1) {
+  const params = new URLSearchParams({ app_type: String(appType || 1) });
+  const response = await apiFetch(`${guangdadaApiUrl('ai-tags-v2')}?${params.toString()}`, {
+    method: 'GET',
+    credentials: 'same-origin',
+  });
+  const result = await response.json();
+  checkGuangdadaHumanVerification(result);
+  return result;
+}
+
+export async function getGuangdadaCreativeRankList(body = {}) {
+  const response = await apiFetch(guangdadaApiUrl('creative-rank/list'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(body || {}),
+  });
+  const result = await response.json();
+  checkGuangdadaHumanVerification(result);
+  if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
+    const err = new Error(result.message || '需要重新登录');
+    err.code = result.code;
+    err.requiresLogin = true;
+    throw err;
+  }
   return result;
 }
 
@@ -322,7 +746,7 @@ export async function getCount(platform, searchParams) {
   }
 
   const payload = platform === 'guangdada' ? bodyForGuangdadaSearch(searchParams) : searchParams;
-  const response = await fetch(`${API_BASE}/${platform}/count`, {
+  const response = await apiFetch(platformApiUrl(platform, 'count'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -398,7 +822,7 @@ const INSIGHTRACKR_SEARCH_GLOBAL_BASE_OPTION = {
 export async function getInsightrackrSearchGlobal(keyWord, searchType = '1') {
   const k = keyWord != null ? String(keyWord).trim() : '';
   if (!k) return { success: true, data: { productList: [], companyList: [] } };
-  const response = await fetch(`${API_BASE}/insightrackr/search-global`, {
+  const response = await apiFetch(`${API_BASE}/insightrackr/search-global`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -441,7 +865,7 @@ export async function getDistributeMedia(platform, body) {
   if (platform !== 'insightrackr') {
     throw new Error('distribute/media 仅支持 Insightrackr');
   }
-  const response = await fetch(`${API_BASE}/${platform}/distribute/media`, {
+  const response = await apiFetch(platformApiUrl(platform, 'distribute/media'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -468,12 +892,78 @@ export async function getDistributeMedia(platform, body) {
 
 // 广大大创意详情（detail-v2），返回文案语言、地区、素材尺寸、material_id 等
 export async function getGuangdadaCreativeDetail(params) {
-  const { ad_key, app_type = 1, search_flag } = params || {};
+  const { ad_key, app_type = 1, search_flag, search_fag } = params || {};
+  const effectiveSearchFlag = search_flag ?? search_fag;
   const qs = new URLSearchParams();
   if (ad_key) qs.set('ad_key', ad_key);
   if (app_type != null) qs.set('app_type', String(app_type));
+  if (effectiveSearchFlag != null) qs.set('search_flag', String(effectiveSearchFlag));
+  const response = await apiFetch(`${guangdadaApiUrl('creative-detail')}?${qs.toString()}`, {
+    method: 'GET',
+    credentials: 'same-origin',
+  });
+  const result = await response.json();
+  checkGuangdadaHumanVerification(result);
+  if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
+    const err = new Error(result.message || '需要重新登录');
+    err.code = result.code;
+    err.requiresLogin = true;
+    throw err;
+  }
+  return result;
+}
+
+export async function getGuangdadaRelatedDynamic(params) {
+  const qs = new URLSearchParams();
+  const { dynamic_number, app_type = 1, creative_key, ad_key, platform, created_at } = params || {};
+  if (dynamic_number != null) qs.set('dynamic_number', String(dynamic_number));
+  if (app_type != null) qs.set('app_type', String(app_type));
+  if (creative_key || ad_key) qs.set('creative_key', String(creative_key || ad_key));
+  if (platform != null && platform !== '') qs.set('platform', String(platform));
+  if (created_at != null) qs.set('created_at', String(created_at));
+  const response = await apiFetch(`${guangdadaApiUrl('related-dynamic')}?${qs.toString()}`, {
+    method: 'GET',
+    credentials: 'same-origin',
+  });
+  const result = await response.json();
+  checkGuangdadaHumanVerification(result);
+  if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
+    const err = new Error(result.message || '需要重新登录');
+    err.code = result.code;
+    err.requiresLogin = true;
+    throw err;
+  }
+  return result;
+}
+
+export async function getGuangdadaRankStatus(params) {
+  const qs = new URLSearchParams();
+  const { ad_key, app_type = 1 } = params || {};
+  if (ad_key) qs.set('ad_key', String(ad_key));
+  if (app_type != null) qs.set('app_type', String(app_type));
+  const response = await apiFetch(`${guangdadaApiUrl('rank-status')}?${qs.toString()}`, {
+    method: 'GET',
+    credentials: 'same-origin',
+  });
+  const result = await response.json();
+  checkGuangdadaHumanVerification(result);
+  if (!result.success && result.code && LOGIN_REQUIRED_CODES.includes(result.code)) {
+    const err = new Error(result.message || '需要重新登录');
+    err.code = result.code;
+    err.requiresLogin = true;
+    throw err;
+  }
+  return result;
+}
+
+export async function getGuangdadaMaterialScriptAnalysis(params) {
+  const qs = new URLSearchParams();
+  const { ad_key, app_type = 1, search_flag, ads_type } = params || {};
+  if (ad_key) qs.set('ad_key', String(ad_key));
+  if (app_type != null) qs.set('app_type', String(app_type));
   if (search_flag != null) qs.set('search_flag', String(search_flag));
-  const response = await fetch(`${API_BASE}/guangdada/creative-detail?${qs.toString()}`, {
+  if (ads_type != null) qs.set('ads_type', String(ads_type));
+  const response = await apiFetch(`${guangdadaApiUrl('material-script-analysis')}?${qs.toString()}`, {
     method: 'GET',
     credentials: 'same-origin',
   });
@@ -495,7 +985,7 @@ export async function getGuangdadaHiddenInfo(params) {
   if (ad_key) qs.set('ad_key', ad_key);
   if (app_type != null) qs.set('app_type', String(app_type));
   if (created_at != null) qs.set('created_at', String(created_at));
-  const response = await fetch(`${API_BASE}/guangdada/hidden-info?${qs.toString()}`, {
+  const response = await apiFetch(`${guangdadaApiUrl('hidden-info')}?${qs.toString()}`, {
     method: 'GET',
     credentials: 'same-origin',
   });
@@ -512,7 +1002,7 @@ export async function getGuangdadaHiddenInfo(params) {
 
 /** 广大大文案翻译（走后端代理，需已登录）text 为字符串，target_lan 如 zh-CN / en，返回译文字符串 */
 export async function translateTextGuangdada(text, target_lan = 'zh-CN') {
-  const response = await fetch(`${API_BASE}/guangdada/translate`, {
+  const response = await apiFetch(guangdadaApiUrl('translate'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -537,7 +1027,7 @@ export async function translateTextGuangdada(text, target_lan = 'zh-CN') {
 
 // 广大大使用相同素材的其他广告主（相似广告主）
 export async function getGuangdadaRelatedAdvertisers(body) {
-  const response = await fetch(`${API_BASE}/guangdada/related-advertisers`, {
+  const response = await apiFetch(guangdadaApiUrl('related-advertisers'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -556,7 +1046,7 @@ export async function getGuangdadaRelatedAdvertisers(body) {
 
 // 广大大使用相同素材的其他广告（关联广告）
 export async function getGuangdadaRelatedAds(body) {
-  const response = await fetch(`${API_BASE}/guangdada/related-ads`, {
+  const response = await apiFetch(guangdadaApiUrl('related-ads'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -575,7 +1065,7 @@ export async function getGuangdadaRelatedAds(body) {
 
 // 广大大相似素材推荐（similar-ads）
 export async function getGuangdadaSimilarAds(body) {
-  const response = await fetch(`${API_BASE}/guangdada/similar-ads`, {
+  const response = await apiFetch(guangdadaApiUrl('similar-ads'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -602,7 +1092,7 @@ export async function getGuangdadaDailyPopularity(params) {
   if (app_type != null) qs.set('app_type', String(app_type));
   if (platform != null) qs.set('platform', String(platform));
   if (category != null && category !== '') qs.set('category', String(category));
-  const response = await fetch(`${API_BASE}/guangdada/daily-popularity?${qs.toString()}`, {
+  const response = await apiFetch(`${guangdadaApiUrl('daily-popularity')}?${qs.toString()}`, {
     method: 'GET',
     credentials: 'same-origin',
   });
@@ -619,7 +1109,7 @@ export async function getGuangdadaDailyPopularity(params) {
 
 // 广大大相似广告主推荐（adv-rec-list），用于概览「相似广告主」
 export async function getGuangdadaAdvRecList(body) {
-  const response = await fetch(`${API_BASE}/guangdada/adv-rec-list`, {
+  const response = await apiFetch(guangdadaApiUrl('adv-rec-list'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -640,7 +1130,7 @@ export async function getGuangdadaAdvRecList(body) {
 export async function getGuangdadaAdvertiserDetail(params) {
   const qs = new URLSearchParams();
   if (params?.domain) qs.set('domain', params.domain);
-  const response = await fetch(`${API_BASE}/guangdada/advertiser-detail?${qs.toString()}`, {
+  const response = await apiFetch(`${guangdadaApiUrl('advertiser-detail')}?${qs.toString()}`, {
     method: 'GET',
     credentials: 'same-origin',
   });
@@ -660,7 +1150,7 @@ export async function getDistributeApp(platform, body) {
   if (platform !== 'insightrackr') {
     throw new Error('distribute/app 仅支持 Insightrackr');
   }
-  const response = await fetch(`${API_BASE}/${platform}/distribute/app`, {
+  const response = await apiFetch(platformApiUrl(platform, 'distribute/app'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -686,7 +1176,7 @@ export async function getDistributeApp(platform, body) {
 }
 
 /**
- * 国内版 BBA 广告列表：GET /api/guangdada-cn/ad-info（服务端代理；优先 X-BBA-Authorization / 环境变量；否则 Puppeteer 登录页从 localStorage jwt.cn 读取）
+ * 国内版 BBA 广告列表：GET /api/catalog/g1-cn/ad-info（服务端代理；优先 X-BBA-Authorization / 环境变量；否则 Puppeteer 登录页从 localStorage jwt.cn 读取）
  * @param {object} payload - GuangdadaDomesticSearchForm 提交的表单对象（含 position、keyword、exactSearch、excludeKeyword、dateRange 等）
  * @param {{ bbaAuthorization?: string, bbaCookie?: string }} [options] - 可选：显式 JWT；bbaCookie 保留为兼容字段（上游当前不转发 Cookie）
  */
@@ -699,7 +1189,7 @@ export async function searchGuangdadaCnAdInfo(payload, options = {}) {
   if (options.bbaCookie) {
     headers['X-BBA-Cookie'] = String(options.bbaCookie).trim();
   }
-  const pathAndQuery = `${API_BASE}/guangdada-cn/ad-info?${qs}`;
+  const pathAndQuery = `${API_BASE}/catalog/g1-cn/ad-info?${qs}`;
   if (typeof window !== 'undefined') {
     const fullUrl = `${window.location.origin}${pathAndQuery}`;
     console.warn(
@@ -716,7 +1206,7 @@ export async function searchGuangdadaCnAdInfo(payload, options = {}) {
       },
     );
   }
-  const response = await fetch(pathAndQuery, {
+  const response = await apiFetch(pathAndQuery, {
     method: 'GET',
     credentials: 'same-origin',
     headers,

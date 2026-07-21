@@ -2,6 +2,10 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { resolveChromeExecutablePath } from './utils/resolveChromeExecutablePath.js';
+import {
+  ANTI_DETECTION_CHROME_ARGS,
+  resolveStealthHeadless,
+} from './utils/browserAntiDetection.js';
 
 const __configDir = path.dirname(fileURLToPath(import.meta.url));
 /** 仓库根目录（含 `tmp/`）。Puppeteer 的 userDataDir 必须锚定在此，否则相对路径会随 `process.cwd()` 变化，Chrome 每次像新用户一样需重新登录 */
@@ -15,25 +19,21 @@ function chromeProfileDir(subdir) {
 const CHROME_EXECUTABLE_PATH = resolveChromeExecutablePath();
 
 /**
- * 是否无头模式。`npm start` 为 production 时各平台默认无界面；本地调试要弹出 Chrome：`HEADLESS=false npm start`
+ * 是否无头模式。远程生产（APP_PUBLIC_BASE_URL 指向公网）默认无界面；
+ * 本地开发（含 npm start）默认弹出 Chrome，可用 HEADLESS=true 强制无头。
  */
-export function resolvePuppeteerHeadless(defaultForThisProfile) {
-    const v = process.env.HEADLESS ?? process.env.PUPPETEER_HEADLESS;
-    if (v === undefined || v === '') return defaultForThisProfile;
-    const s = String(v).trim().toLowerCase();
-    if (['0', 'false', 'no', 'off'].includes(s)) return false;
-    if (['1', 'true', 'yes', 'on'].includes(s)) return true;
-    return defaultForThisProfile;
-}
-
 /** Chrome 启动时默认简体中文（UI 语言 + Accept-Language 偏好） */
 export const CHROME_ZH_CN_LAUNCH_ARGS = [
-    '--lang=zh-CN',
-    '--accept-lang=zh-CN,zh;q=0.9,en;q=0.8',
+  '--lang=zh-CN',
+  '--accept-lang=zh-CN,zh;q=0.9,en;q=0.8',
 ];
 
+export function resolvePuppeteerHeadless(defaultForThisProfile) {
+  return resolveStealthHeadless(defaultForThisProfile);
+}
+
 export function chromeLaunchArgs(extra = []) {
-    return [...CHROME_ZH_CN_LAUNCH_ARGS, ...extra];
+  return [...CHROME_ZH_CN_LAUNCH_ARGS, ...ANTI_DETECTION_CHROME_ARGS, ...extra];
 }
 
 // 广大大使用的配置（userDataDir 独立，避免与 Insightrackr 冲突）

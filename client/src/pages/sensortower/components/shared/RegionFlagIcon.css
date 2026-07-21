@@ -1,0 +1,13 @@
+.st-ffd__flag.flag-icon,
+.st-msd__flag.flag-icon {
+  display: inline-block;
+  width: 22px;
+  height: 16px;
+  line-height: 16px;
+  background-size: cover;
+  background-position: center;
+  border-radius: 2px;
+  border: 1px solid #e0e4e8;
+  flex-shrink: 0;
+  vertical-align: middle;
+}

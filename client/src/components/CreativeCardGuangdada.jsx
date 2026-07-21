@@ -2,38 +2,33 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Popover } from 'antd';
 import { getProxiedMediaUrl, getDownloadImageUrl } from '../utils/api';
 
-function CreativeCardGuangdada({ item, batchMode = false, selected = false, onToggleSelect, onEnterBatchMode, onOpenDetail, onRequestVideoDownload, onBlockAdvertiser }) {
+function CreativeCardGuangdada({ item, batchMode = false, selected = false, onToggleSelect, onEnterBatchMode, onOpenDetail, onRequestVideoDownload, onBlockAdvertiser, onBeforeDownload }) {
   // 使用 useMemo 缓存计算结果，避免每次渲染都重新计算
-  const { isVideo, thumbnailUrl, videoUrl, videoDuration, htmlUrl } = useMemo(() => {
+  const { isVideo, hasPlayableVideo, thumbnailUrl, videoUrl, videoDuration, htmlUrl } = useMemo(() => {
     let isVideo = false;
     let thumbnailUrl = '';
     let videoUrl = '';
     let videoDuration = null;
     let htmlUrl = '';
     
-    // 判断是否为视频：优先检查 ads_type (2=视频)，其次检查 resource_urls[0].type (2=视频)，最后检查是否有 video_url
-    const adsTypeIsVideo = item.ads_type === 2;
-    const resourceTypeIsVideo = item.resource_urls && 
-                                Array.isArray(item.resource_urls) && 
-                                item.resource_urls.length > 0 && 
-                                item.resource_urls[0].type === 2;
-    const hasVideoUrl = item.resource_urls && 
-                       Array.isArray(item.resource_urls) && 
-                       item.resource_urls.length > 0 && 
-                       item.resource_urls[0].video_url && 
-                       item.resource_urls[0].video_url.trim() !== '';
+    const resource = Array.isArray(item.resource_urls) && item.resource_urls.length > 0 ? item.resource_urls[0] : null;
+    const rawVideoUrl = resource?.video_url != null ? String(resource.video_url).trim() : '';
+    // 素材类型可以是视频，但只有存在 video_url 时才展示播放入口。
+    const adsTypeIsVideo = Number(item.ads_type) === 2;
+    const resourceTypeIsVideo = Number(resource?.type) === 2;
+    const hasVideoUrl = rawVideoUrl !== '';
     
     isVideo = adsTypeIsVideo || resourceTypeIsVideo || hasVideoUrl;
+    const hasPlayableVideo = Boolean(hasVideoUrl);
     
-    if (item.resource_urls && Array.isArray(item.resource_urls) && item.resource_urls.length > 0) {
-      const resource = item.resource_urls[0];
+    if (resource) {
       // type 4：HTML 资源，支持 iframe 展示
       if (resource.type === 4 && resource.html_url && String(resource.html_url).trim() !== '') {
         htmlUrl = resource.html_url.trim();
       }
       if (isVideo) {
         // 视频资源：优先使用 preview_img_url 作为预览图，否则使用 resource.image_url
-        videoUrl = resource.video_url || '';
+        videoUrl = rawVideoUrl;
         thumbnailUrl = item.preview_img_url || resource.image_url || '';
       } else {
         // 图片资源：优先使用 resource.image_url，其次使用 preview_img_url
@@ -46,7 +41,7 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
     
     videoDuration = item.video_duration || null;
     
-    return { isVideo, thumbnailUrl, videoUrl, videoDuration, htmlUrl };
+    return { isVideo, hasPlayableVideo, thumbnailUrl, videoUrl, videoDuration, htmlUrl };
   }, [item.resource_urls, item.preview_img_url, item.video_duration, item.ad_key, item.ads_type]);
 
   // 视频时长展示：≥60s 为 "1m12s"，否则 "59s"
@@ -191,7 +186,13 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
     if (appName && appName !== 'N/A') return sanitizeFileName(appName);
     return sanitizeFileName(String(item.ad_key || '')) || `creative_${Date.now()}`;
   };
-  const handleDownload = (e) => {
+  const requestDownloadQuota = async (meta = {}) => {
+    if (typeof onBeforeDownload !== 'function') return true;
+    const ok = await onBeforeDownload(item, meta);
+    return ok !== false;
+  };
+
+  const handleDownload = async (e) => {
     e.stopPropagation();
     // 视频、图片均走尺寸选择弹窗；仅 HTML 直接下载
     if (onRequestVideoDownload && !htmlUrl) {
@@ -199,6 +200,8 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
       return;
     }
     if (htmlUrl) {
+      const ok = await requestDownloadQuota({ kind: 'html', sourceUrl: htmlUrl });
+      if (!ok) return;
       const baseName = getDownloadBaseName();
       const filename = `${baseName}_${Date.now()}.html`;
       fetch(htmlUrl, { mode: 'cors', referrerPolicy: 'no-referrer' })
@@ -216,10 +219,12 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
         });
       return;
     }
-    const url = isVideo ? videoUrl : thumbnailUrl;
+    const url = hasPlayableVideo ? videoUrl : thumbnailUrl;
     if (!url) return;
+    const ok = await requestDownloadQuota({ kind: hasPlayableVideo ? 'video' : 'image', sourceUrl: url });
+    if (!ok) return;
     const extFromUrl = getExtensionFromUrl(url);
-    const ext = isVideo
+    const ext = hasPlayableVideo
       ? (extFromUrl === 'mp4' || extFromUrl === 'webm' || extFromUrl === 'mov' ? extFromUrl : 'mp4')
       : (extFromUrl === 'gif' || extFromUrl === 'png' || extFromUrl === 'webp' ? extFromUrl : 'jpg');
     const baseName = getDownloadBaseName();
@@ -237,7 +242,7 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
         window.open(url, '_blank', 'noopener');
       });
   };
-  const downloadUrl = htmlUrl ? htmlUrl : (isVideo ? videoUrl : thumbnailUrl);
+  const downloadUrl = htmlUrl ? htmlUrl : (hasPlayableVideo ? videoUrl : thumbnailUrl);
 
   const handleCardClick = (e) => {
     if (
@@ -258,10 +263,12 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
   };
 
   /** 下载当前 app icon（card-logo 图片）：文件名 = 产品名称_时间.png，走后端代理触发直接下载 */
-  const handleDownloadAppIcon = (e) => {
+  const handleDownloadAppIcon = async (e) => {
     e.stopPropagation();
     const url = item.logo_url && String(item.logo_url).trim();
     if (!url) return;
+    const ok = await requestDownloadQuota({ kind: 'app_icon', sourceUrl: url });
+    if (!ok) return;
     const now = new Date();
     const timeStr =
       now.getFullYear() +
@@ -489,7 +496,7 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
         </div>
         
         {/* hover 播放按钮时在缩略图上叠加播放视频，移出时停止并清空 src 控制内存 */}
-        {isVideo && videoUrl && (
+        {hasPlayableVideo && (
           <video
             ref={videoHoverRef}
             className="card-thumbnail-hover-video"
@@ -501,12 +508,12 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
           />
         )}
         {/* 悬停到视频开始播放前显示加载动画，避免黑屏 */}
-        {isVideo && isHoverVideoLoading && (
+        {hasPlayableVideo && isHoverVideoLoading && (
           <div className="card-thumbnail-hover-loading" aria-hidden>
             <span className="card-thumbnail-hover-spinner" />
           </div>
         )}
-        {isVideo && (
+        {hasPlayableVideo ? (
           <div
             className="play-icon-center"
             onClick={(e) => {
@@ -546,7 +553,9 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
             <span className="play-symbol">▶</span>
             {videoDurationLabel && <span className="video-duration">{videoDurationLabel}</span>}
           </div>
-        )}
+        ) : isVideo ? (
+          <div className="card-thumbnail-no-source">暂无播放源</div>
+        ) : null}
         
         {/* 日期范围 - 底部右侧 */}
         {lifecycleStart !== 'N/A' && lifecycleEnd !== 'N/A' && (
@@ -557,8 +566,8 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
         {/* 下载按钮 - 底部，hover 时显示（参考 Insightrackr） */}
         {downloadUrl && (
           <div className="card-thumbnail-download" onClick={handleDownload}>
-            <span className="card-download-icon" title={htmlUrl ? '下载HTML' : isVideo ? '下载视频' : '下载图片'}>⬇</span>
-            <span className="card-download-text">{htmlUrl ? '下载HTML' : isVideo ? '下载视频' : '下载图片'}</span>
+            <span className="card-download-icon" title={htmlUrl ? '下载HTML' : hasPlayableVideo ? '下载视频' : '下载图片'}>⬇</span>
+            <span className="card-download-text">{htmlUrl ? '下载HTML' : hasPlayableVideo ? '下载视频' : '下载图片'}</span>
           </div>
         )}
       </div>
@@ -602,7 +611,7 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
       </div>
       
       {/* 视频播放模态框 */}
-      {showVideoPlayer && isVideo && videoUrl && (
+      {showVideoPlayer && hasPlayableVideo && (
         <div 
           className="video-player-modal"
           onClick={(e) => {

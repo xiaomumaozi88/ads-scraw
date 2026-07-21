@@ -9,8 +9,7 @@ import { FACEBOOK_FAMILY_ITEMS, GOOGLE_FAMILY_ITEMS } from '../data/guangdadaCha
 import GuangdadaCountryPopover from './GuangdadaCountryPopover';
 import GuangdadaCopyLangPopover from './GuangdadaCopyLangPopover';
 import GuangdadaMaterialAttrPopover, { DEFAULT_ATTR as GUANGDADA_CREATIVE_ATTR_DEFAULT } from './GuangdadaMaterialAttrPopover';
-import GuangdadaImageAnalysisPopover from './GuangdadaImageAnalysisPopover';
-import GuangdadaVideoAnalysisPopover from './GuangdadaVideoAnalysisPopover';
+import GuangdadaContentAttributesPopover from './GuangdadaContentAttributesPopover';
 import GuangdadaCoreTrackPopover from './GuangdadaCoreTrackPopover';
 import GuangdadaFbAudiencePopover from './GuangdadaFbAudiencePopover';
 import GuangdadaFbSpendPopover, { getFbSpendDisplayText } from './GuangdadaFbSpendPopover';
@@ -41,14 +40,12 @@ import ExposureEstimateRangeSelector from './ExposureEstimateRangeSelector';
 import InteractionMetricsSelector from './InteractionMetricsSelector';
 import SortSelector from './SortSelector';
 import { buildGuangdadaApiBody } from '../utils/guangdadaApiBody';
-import { getGuangdadaAdvertiserAssociation } from '../utils/api';
+import { getGuangdadaAdvertiserAssociation, getGuangdadaAiTagsV2 } from '../utils/api';
 import InsightrackrGlobalSearch from './InsightrackrGlobalSearch';
 import GuangdadaAiFileSearchModal from './GuangdadaAiFileSearchModal';
 import { GUANGDADA_COUNTRY_CODE_TO_CN } from '../data/guangdadaCountries';
 import { CHANNEL_VALUE_MAP } from '../data/guangdadaChannels';
 import { GUANGDADA_COPY_LANG_OPTIONS } from '../data/guangdadaCopyLangs';
-import { GUANGDADA_IMAGE_ANALYSIS_CATEGORIES } from '../data/guangdadaImageAnalysis';
-import { GUANGDADA_VIDEO_ANALYSIS_CATEGORIES } from '../data/guangdadaVideoAnalysis';
 import { GUANGDADA_CORE_TRACK_CATEGORIES } from '../data/guangdadaCoreTrack';
 import {
   GUANGDADA_VIDEO_DURATION_OPTIONS,
@@ -168,8 +165,6 @@ function getCreativeAttrDisplayText(attr) {
   return { summaryText, fullText };
 }
 
-const IMAGE_ANALYSIS_VALUE_TO_LABEL = flattenCategoriesToMap(GUANGDADA_IMAGE_ANALYSIS_CATEGORIES);
-const VIDEO_ANALYSIS_VALUE_TO_LABEL = flattenCategoriesToMap(GUANGDADA_VIDEO_ANALYSIS_CATEGORIES);
 const CORE_TRACK_VALUE_TO_LABEL = flattenCategoriesToMap(GUANGDADA_CORE_TRACK_CATEGORIES);
 const GAME_CATEGORY_VALUE_TO_LABEL = flattenGameToolTreeToMap(GUANGDADA_GAME_CATEGORIES_TREE);
 const TOOL_CATEGORY_VALUE_TO_LABEL = flattenGameToolTreeToMap(GUANGDADA_TOOL_CATEGORIES_TREE);
@@ -267,6 +262,10 @@ function getGuangdadaFilterTags(formData) {
   if (formData.guangdadaNewAds === true) {
     tags.push({ fieldKey: 'guangdadaNewAds', label: '只看新增', summaryText: '是', fullText: '是', defaultValue: false });
   }
+  // 新广告主
+  if (formData.guangdadaNewAdvertiserFlag === true) {
+    tags.push({ fieldKey: 'guangdadaNewAdvertiserFlag', label: '新广告主', summaryText: '是', fullText: '是', defaultValue: false });
+  }
   // 媒体类型
   const mediaType = formData.guangdadaMediaType || '';
   if (mediaType) {
@@ -319,19 +318,17 @@ function getGuangdadaFilterTags(formData) {
     const { summaryText: attrSummary, fullText: attrFull } = getCreativeAttrDisplayText(attr);
     tags.push({ fieldKey: 'guangdadaCreativeAttr', label: '素材规格', summaryText: attrSummary, fullText: attrFull, defaultValue: { ...GUANGDADA_CREATIVE_ATTR_DEFAULT, size: [], quality: [], resolution: [], resolutionCustom: [] } });
   }
-  // 图片智能分析
-  const imageAnalysis = formData.guangdadaImageAnalysis || [];
-  if (imageAnalysis.length > 0) {
-    const labels = imageAnalysis.map((v) => IMAGE_ANALYSIS_VALUE_TO_LABEL[v] ?? v);
-    const summary = labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`;
-    tags.push({ fieldKey: 'guangdadaImageAnalysis', label: '图片智能分析', summaryText: summary, fullText: labels.join('、'), defaultValue: [] });
-  }
-  // 视频智能分析
-  const videoAnalysis = formData.guangdadaVideoAnalysis || [];
-  if (videoAnalysis.length > 0) {
-    const labels = videoAnalysis.map((v) => VIDEO_ANALYSIS_VALUE_TO_LABEL[v] ?? v);
-    const summary = labels.length === 1 ? labels[0] : `${labels[0]}等 ${labels.length} 项`;
-    tags.push({ fieldKey: 'guangdadaVideoAnalysis', label: '视频智能分析', summaryText: summary, fullText: labels.join('、'), defaultValue: [] });
+  // 素材内容属性
+  const contentAttributes = formData.guangdadaContentAttributes || [];
+  if (contentAttributes.length > 0) {
+    const labels = contentAttributes.map((item) => item?.label || item?.cn_name || item?.value || item?.key || '');
+    const safeLabels = labels.filter(Boolean);
+    const summary = safeLabels.length === 0
+      ? `已选 ${contentAttributes.length} 项`
+      : safeLabels.length === 1
+        ? safeLabels[0]
+        : `${safeLabels[0]}等 ${contentAttributes.length} 项`;
+    tags.push({ fieldKey: 'guangdadaContentAttributes', label: '素材内容属性', summaryText: summary, fullText: safeLabels.join('、'), defaultValue: [] });
   }
   // 创意规格（文案）
   const creativeSpec = formData.guangdadaCreativeSpec || '';
@@ -419,6 +416,10 @@ function getGuangdadaFilterTags(formData) {
   if (formData.guangdadaEndCard === true) {
     tags.push({ fieldKey: 'guangdadaEndCard', label: '尾卡', summaryText: '是', fullText: '是', defaultValue: false });
   }
+  // 自定义商店页
+  if (formData.guangdadaHasCustomStorePage === true) {
+    tags.push({ fieldKey: 'guangdadaHasCustomStorePage', label: '自定义商店页', summaryText: '是', fullText: '是', defaultValue: false });
+  }
   // COD
   if (formData.guangdadaCodFlag != null && Number(formData.guangdadaCodFlag) !== 0) {
     tags.push({ fieldKey: 'guangdadaCodFlag', label: 'COD', summaryText: `已选(${formData.guangdadaCodFlag})`, fullText: String(formData.guangdadaCodFlag), defaultValue: 0 });
@@ -466,6 +467,7 @@ function getDefaultInsightrackrFormState() {
     sort_field: '-first_seen',
     duplicate_removal: 0,
     guangdadaNewAds: false,
+    guangdadaNewAdvertiserFlag: false,
     guangdadaIsTheater: false,
     guangdadaIsAiApp: false,
     guangdadaMediaType: '',
@@ -481,8 +483,7 @@ function getDefaultInsightrackrFormState() {
     guangdadaOnlyInSelectedRegion: false,
     guangdadaCopyLangs: [],
     guangdadaCreativeAttr: { ...GUANGDADA_CREATIVE_ATTR_DEFAULT, size: [], quality: [], resolution: [], resolutionCustom: [] },
-    guangdadaImageAnalysis: [],
-    guangdadaVideoAnalysis: [],
+    guangdadaContentAttributes: [],
     guangdadaCreativeSpec: '',
     guangdadaAdvertiserSystem: '',
     guangdadaCoreTrack: [],
@@ -501,6 +502,7 @@ function getDefaultInsightrackrFormState() {
     guangdadaIncludePageInfo: false,
     guangdadaViolationAd: false,
     guangdadaEndCard: false,
+    guangdadaHasCustomStorePage: false,
     guangdadaCodFlag: 0,
     guangdadaSearchArbitrageFlag: 0,
     guangdadaWebsiteTypeCodes: [],
@@ -613,8 +615,11 @@ function SearchForm({
   const [countryPopoverOpen, setCountryPopoverOpen] = useState(false);
   const [copyLangPopoverOpen, setCopyLangPopoverOpen] = useState(false);
   const [materialAttrPopoverOpen, setMaterialAttrPopoverOpen] = useState(false);
-  const [imageAnalysisPopoverOpen, setImageAnalysisPopoverOpen] = useState(false);
-  const [videoAnalysisPopoverOpen, setVideoAnalysisPopoverOpen] = useState(false);
+  const [contentAttributesPopoverOpen, setContentAttributesPopoverOpen] = useState(false);
+  const [contentAttributeCategories, setContentAttributeCategories] = useState([]);
+  const [contentAttributeLoading, setContentAttributeLoading] = useState(false);
+  const [contentAttributeError, setContentAttributeError] = useState('');
+  const contentAttributeRequestRef = useRef(0);
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   const [coreTrackPopoverOpen, setCoreTrackPopoverOpen] = useState(false);
   const [fbAudiencePopoverOpen, setFbAudiencePopoverOpen] = useState(false);
@@ -701,6 +706,45 @@ function SearchForm({
       if (associationTimerRef.current) clearTimeout(associationTimerRef.current);
     };
   }, [platform, formData.guangdadaSearchCategory, formData.keyWord, formData.guangdadaPrimaryTab]);
+
+  const fetchGuangdadaContentAttributes = (force = false) => {
+    if (contentAttributeLoading) return;
+    if (!force && contentAttributeCategories.length > 0) return;
+    const requestId = contentAttributeRequestRef.current + 1;
+    contentAttributeRequestRef.current = requestId;
+    setContentAttributeLoading(true);
+    setContentAttributeError('');
+    getGuangdadaAiTagsV2(1)
+      .then((res) => {
+        if (contentAttributeRequestRef.current !== requestId) return;
+        const list = Array.isArray(res?.data)
+          ? res.data
+          : Array.isArray(res?.data?.data)
+            ? res.data.data
+            : [];
+        if (res?.success && Array.isArray(list)) {
+          setContentAttributeCategories(list);
+          return;
+        }
+        setContentAttributeCategories([]);
+        setContentAttributeError(res?.message || '素材内容属性加载失败');
+      })
+      .catch((error) => {
+        if (contentAttributeRequestRef.current !== requestId) return;
+        setContentAttributeCategories([]);
+        setContentAttributeError(error?.message || '素材内容属性加载失败');
+      })
+      .finally(() => {
+        if (contentAttributeRequestRef.current === requestId) {
+          setContentAttributeLoading(false);
+        }
+      });
+  };
+
+  useEffect(() => {
+    if (platform !== 'guangdada' || formData.guangdadaPrimaryTab !== '游戏' || !contentAttributesPopoverOpen) return;
+    fetchGuangdadaContentAttributes(false);
+  }, [platform, formData.guangdadaPrimaryTab, contentAttributesPopoverOpen]);
 
   // 仅切换平台时清空已选广告主；在 广告信息 / 素材内容 之间切换时保留，切回 广告信息 时恢复显示
   useEffect(() => {
@@ -1122,6 +1166,7 @@ function SearchForm({
       searchParams.guangdadaSearchType = formDataToUse.guangdadaSearchType || '综合';
       searchParams.guangdadaExactSearch = formDataToUse.guangdadaExactSearch !== false;
       searchParams.guangdadaNewAds = !!formDataToUse.guangdadaNewAds;
+      searchParams.guangdadaNewAdvertiserFlag = !!formDataToUse.guangdadaNewAdvertiserFlag;
       searchParams.guangdadaIsTheater = !!formDataToUse.guangdadaIsTheater;
       searchParams.guangdadaIsAiApp = !!formDataToUse.guangdadaIsAiApp;
       searchParams.guangdadaMediaType = formDataToUse.guangdadaMediaType || '';
@@ -1138,8 +1183,7 @@ function SearchForm({
       searchParams.guangdadaOnlyInSelectedRegion = !!formDataToUse.guangdadaOnlyInSelectedRegion;
       searchParams.guangdadaCopyLangs = formDataToUse.guangdadaCopyLangs || [];
       searchParams.guangdadaCreativeAttr = formDataToUse.guangdadaCreativeAttr || {};
-      searchParams.guangdadaImageAnalysis = formDataToUse.guangdadaImageAnalysis || [];
-      searchParams.guangdadaVideoAnalysis = formDataToUse.guangdadaVideoAnalysis || [];
+      searchParams.guangdadaContentAttributes = formDataToUse.guangdadaContentAttributes || [];
       searchParams.guangdadaAdvertiserSystem = formDataToUse.guangdadaAdvertiserSystem || '';
       searchParams.guangdadaCoreTrack = formDataToUse.guangdadaCoreTrack || [];
       searchParams.guangdadaPreorderAd = formDataToUse.guangdadaPreorderAd || [];
@@ -1157,6 +1201,7 @@ function SearchForm({
       searchParams.guangdadaIncludePageInfo = !!formDataToUse.guangdadaIncludePageInfo;
       searchParams.guangdadaViolationAd = !!formDataToUse.guangdadaViolationAd;
       searchParams.guangdadaEndCard = !!formDataToUse.guangdadaEndCard;
+      searchParams.guangdadaHasCustomStorePage = !!formDataToUse.guangdadaHasCustomStorePage;
       searchParams.guangdadaCodFlag = formDataToUse.guangdadaCodFlag != null ? Number(formDataToUse.guangdadaCodFlag) : 0;
       searchParams.guangdadaSearchArbitrageFlag = formDataToUse.guangdadaSearchArbitrageFlag != null ? Number(formDataToUse.guangdadaSearchArbitrageFlag) : 0;
       // 已选广告主：请求 creative/list 时带上 advertiser_key（选中的 id 数组）。联想返回里 id 取 domain，cross_app_id 常为空
@@ -1505,6 +1550,14 @@ function SearchForm({
                     onChange={(e) => handleChange('guangdadaNewAds', e.target.checked)}
                   />
                   <span>新广告</span>
+                </label>
+                <label className="guangdada-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={formData.guangdadaNewAdvertiserFlag}
+                    onChange={(e) => handleChange('guangdadaNewAdvertiserFlag', e.target.checked)}
+                  />
+                  <span>新广告主</span>
                 </label>
                 <div className="guangdada-filter-dropdown-wrap">
                   <select
@@ -2329,66 +2382,39 @@ function SearchForm({
                     </button>
                   </Popover>
                   {formData.guangdadaPrimaryTab === '游戏' && (
-                    <>
-                      <div className="guangdada-filter-select-wrap">
-                        <Popover
-                          open={imageAnalysisPopoverOpen}
-                          onOpenChange={setImageAnalysisPopoverOpen}
-                          trigger="click"
-                          placement="bottomLeft"
-                          title={null}
-                          content={
-                            <GuangdadaImageAnalysisPopover
-                              open={imageAnalysisPopoverOpen}
-                              value={formData.guangdadaImageAnalysis || []}
-                              onChange={(arr) => handleChange('guangdadaImageAnalysis', arr)}
-                              onConfirm={() => setImageAnalysisPopoverOpen(false)}
-                              onCancel={() => setImageAnalysisPopoverOpen(false)}
-                            />
-                          }
-                          overlayClassName="guangdada-image-analysis-popover-overlay"
-                          getPopupContainer={(node) => node?.parentElement ?? document.body}
+                    <div className="guangdada-filter-select-wrap">
+                      <Popover
+                        open={contentAttributesPopoverOpen}
+                        onOpenChange={setContentAttributesPopoverOpen}
+                        trigger="click"
+                        placement="bottomLeft"
+                        title={null}
+                        content={
+                          <GuangdadaContentAttributesPopover
+                            open={contentAttributesPopoverOpen}
+                            value={formData.guangdadaContentAttributes || []}
+                            categories={contentAttributeCategories}
+                            loading={contentAttributeLoading}
+                            error={contentAttributeError}
+                            onRetry={() => fetchGuangdadaContentAttributes(true)}
+                            onChange={(arr) => handleChange('guangdadaContentAttributes', arr)}
+                            onConfirm={() => setContentAttributesPopoverOpen(false)}
+                            onCancel={() => setContentAttributesPopoverOpen(false)}
+                          />
+                        }
+                        overlayClassName="guangdada-image-analysis-popover-overlay"
+                        getPopupContainer={(node) => node?.parentElement ?? document.body}
+                      >
+                        <button
+                          type="button"
+                          className="guangdada-filter-select guangdada-filter-select--field guangdada-filter-select-trigger"
                         >
-                          <button
-                            type="button"
-                            className="guangdada-filter-select guangdada-filter-select--field guangdada-filter-select-trigger"
-                          >
-                            {(formData.guangdadaImageAnalysis || []).length === 0
-                              ? '图片智能分析'
-                              : `图片智能分析（已选 ${formData.guangdadaImageAnalysis.length} 项）`}
-                          </button>
-                        </Popover>
-                      </div>
-                      <div className="guangdada-filter-select-wrap">
-                        <Popover
-                          open={videoAnalysisPopoverOpen}
-                          onOpenChange={setVideoAnalysisPopoverOpen}
-                          trigger="click"
-                          placement="bottomLeft"
-                          title={null}
-                          content={
-                            <GuangdadaVideoAnalysisPopover
-                              open={videoAnalysisPopoverOpen}
-                              value={formData.guangdadaVideoAnalysis || []}
-                              onChange={(arr) => handleChange('guangdadaVideoAnalysis', arr)}
-                              onConfirm={() => setVideoAnalysisPopoverOpen(false)}
-                              onCancel={() => setVideoAnalysisPopoverOpen(false)}
-                            />
-                          }
-                          overlayClassName="guangdada-video-analysis-popover-overlay"
-                          getPopupContainer={(node) => node?.parentElement ?? document.body}
-                        >
-                          <button
-                            type="button"
-                            className="guangdada-filter-select guangdada-filter-select--field guangdada-filter-select-trigger"
-                          >
-                            {(formData.guangdadaVideoAnalysis || []).length === 0
-                              ? '视频智能分析'
-                              : `视频智能分析（已选 ${formData.guangdadaVideoAnalysis.length} 项）`}
-                          </button>
-                        </Popover>
-                      </div>
-                    </>
+                          {(formData.guangdadaContentAttributes || []).length === 0
+                            ? '素材内容属性'
+                            : `素材内容属性（已选 ${formData.guangdadaContentAttributes.length} 项）`}
+                        </button>
+                      </Popover>
+                    </div>
                   )}
                 </div>
                 <button
@@ -2859,6 +2885,13 @@ function SearchForm({
                             onChange={(e) => handleChange('guangdadaViolationAd', e.target.checked)}
                           />
                           <span>违规广告</span>
+                        </label>
+                        <label className="guangdada-advanced-checkbox">
+                          <Checkbox
+                            checked={!!formData.guangdadaHasCustomStorePage}
+                            onChange={(e) => handleChange('guangdadaHasCustomStorePage', e.target.checked)}
+                          />
+                          <span>自定义商店页</span>
                         </label>
                       </div>
                     </div>

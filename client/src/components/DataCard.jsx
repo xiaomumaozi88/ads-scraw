@@ -10,11 +10,18 @@ import {
   clearLogin,
   formatRequestError,
   guangdadaMultiModalSearch,
+  getGuangdadaQuotaStatus,
+  consumeGuangdadaQuota,
   getGuangdadaHiddenInfo,
   searchGuangdadaCnAdInfo,
 } from '../utils/api';
 import { dateRangeToSeenParams } from '../utils/guangdadaApiBody';
 import { DOMESTIC_AD_INFO_PAGE_SIZE } from '../utils/guangdadaDomesticAdInfo';
+import {
+  GUANGDADA_UPSTREAM_PAGE_SIZE,
+  getGuangdadaUpstreamPage,
+  withGuangdadaPaging,
+} from '../utils/guangdadaPaging';
 import SearchForm from './SearchForm';
 import GuangdadaDomesticSearchForm from './GuangdadaDomesticSearchForm';
 import GuangdadaDomesticShortcutBar from './GuangdadaDomesticShortcutBar';
@@ -22,6 +29,7 @@ import DataDisplay from './DataDisplay';
 import TimeFilter from './TimeFilter';
 import SortDedupBar from './SortDedupBar';
 import SensorTowerPanel from '../pages/sensortower/SensorTowerPanel';
+import GuangdadaQuotaStatusBoard from './GuangdadaQuotaStatusBoard';
 
 /** 广大大 count 数值格式化为「万、百万、千万、亿」等 */
 function formatGuangdadaCount(num) {
@@ -203,9 +211,8 @@ function DataCard({
   const [domesticListPage, setDomesticListPage] = useState(1);
   /** 国内版：最近一次请求完成时间（用于统计区「更新时间」兜底） */
   const [domesticFetchedAt, setDomesticFetchedAt] = useState(null);
-  /** 国内版：切换到国内版且已登录时递增，触发搜索表单与手动「搜索」一致的一次提交 */
-  const [domesticAutoSearchKey, setDomesticAutoSearchKey] = useState(0);
-  const domesticAutoSearchPrevRef = useRef({ domestic: false, logged: false });
+  const [guangdadaQuotaStatus, setGuangdadaQuotaStatus] = useState(null);
+  const [guangdadaQuotaLoading, setGuangdadaQuotaLoading] = useState(false);
   /** 国内版搜索表单 ref：推荐/排序在无上次请求时也可 submit */
   const domesticFormRef = useRef(null);
   /** 与 state 同步，供 handleDomesticFormSearch 在同步 submit 前读到最新 sort / 推荐 */
@@ -213,6 +220,75 @@ function DataCard({
   const domesticRecommendedKeyRef = useRef(domesticRecommendedKey);
   domesticSortRef.current = domesticSort;
   domesticRecommendedKeyRef.current = domesticRecommendedKey;
+
+  const applyGuangdadaQuotaStatus = useCallback((result) => {
+    const nextStatus = result?.quotaStatus || result?.data?.quotaStatus || null;
+    if (nextStatus) {
+      setGuangdadaQuotaStatus(nextStatus);
+      return true;
+    }
+    return false;
+  }, []);
+
+  const refreshGuangdadaQuotaStatus = useCallback(async (options = {}) => {
+    if (platform !== 'guangdada' || !isLoggedIn) {
+      setGuangdadaQuotaStatus(null);
+      return null;
+    }
+    setGuangdadaQuotaLoading(true);
+    try {
+      const res = await getGuangdadaQuotaStatus({ forceRefresh: !!options.forceRefresh });
+      if (res?.success && res.data) {
+        setGuangdadaQuotaStatus(res.data);
+        return res.data;
+      }
+      if (!options.silent) {
+        addLog(`读取广大大额度失败: ${res?.message || '未知错误'}`, 'warn');
+      }
+      return null;
+    } catch (err) {
+      if (!options.silent) {
+        addLog(`读取广大大额度失败: ${err.message}`, 'warn');
+      }
+      return null;
+    } finally {
+      setGuangdadaQuotaLoading(false);
+    }
+  }, [platform, isLoggedIn, addLog]);
+
+  React.useEffect(() => {
+    if (platform === 'guangdada' && isLoggedIn) {
+      refreshGuangdadaQuotaStatus({ silent: true, forceRefresh: true });
+      return;
+    }
+    setGuangdadaQuotaStatus(null);
+  }, [platform, isLoggedIn, refreshGuangdadaQuotaStatus]);
+
+  const handleGuangdadaDownloadQuotaConsume = useCallback(async ({ amount = 1, metadata = {} } = {}) => {
+    if (platform !== 'guangdada') return true;
+    try {
+      const res = await consumeGuangdadaQuota('download', amount, metadata);
+      applyGuangdadaQuotaStatus(res);
+      if (!res?.success) {
+        const msg = res?.message || '素材下载额度不足';
+        addLog(`下载额度拦截: ${msg}`, 'warn');
+        antdMessage.warning(msg);
+        if (!res?.quotaStatus) refreshGuangdadaQuotaStatus({ silent: true });
+        return false;
+      }
+      addLog(`已扣减广大大下载额度: ${amount}`, 'info');
+      return true;
+    } catch (err) {
+      addLog(`下载额度校验失败: ${err.message}`, 'error');
+      antdMessage.error(formatRequestError(err.message));
+      refreshGuangdadaQuotaStatus({ silent: true });
+      return false;
+    }
+  }, [platform, addLog, applyGuangdadaQuotaStatus, refreshGuangdadaQuotaStatus]);
+
+  const handleGuangdadaQuotaChanged = useCallback(() => {
+    refreshGuangdadaQuotaStatus({ silent: true });
+  }, [refreshGuangdadaQuotaStatus]);
 
   const toggleSelect = useCallback((id) => {
     setSelectedIds((prev) => {
@@ -222,9 +298,6 @@ function DataCard({
       return next;
     });
   }, []);
-  const selectAllPage = useCallback((ids) => {
-    setSelectedIds(new Set(ids));
-  }, []);
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
   }, []);
@@ -233,13 +306,17 @@ function DataCard({
     setSelectedIds(new Set());
   }, []);
 
-  const handleSearch = async (searchParams) => {
+  const handleSearch = async (searchParams, options = {}) => {
     if (platform === 'guangdada') setGuangdadaPendingDateRange(null);
-    let paramsToUse = searchParams;
+    let paramsToUse = platform === 'guangdada'
+      ? withGuangdadaPaging(searchParams, options.displayPage)
+      : searchParams;
     if (platform === 'guangdada' && blockedAdvertisers.length > 0 && searchParams.exclude_advertiser_key === undefined) {
       paramsToUse = { ...searchParams, exclude_advertiser_key: blockedAdvertisers.map((b) => b.advertiser_id) };
+      paramsToUse = withGuangdadaPaging(paramsToUse, options.displayPage);
     }
     const isInsightrackrTab = platform === 'insightrackr';
+    const skipCount = platform === 'guangdada' && options.skipCount === true;
     const tab = isInsightrackrTab ? (paramsToUse.insightrackrSearchTab === 'playable' ? 'playable' : 'imagevideo') : null;
 
     if (!isInsightrackrTab) {
@@ -253,7 +330,7 @@ function DataCard({
     setLoading(true);
     if (!isInsightrackrTab) {
       setData(null);
-      setCountData(null);
+      if (!skipCount) setCountData(null);
     }
 
     const keyword = platform === 'guangdada' ? (paramsToUse.keyword ?? paramsToUse.keyWord) : paramsToUse.keyWord;
@@ -303,6 +380,7 @@ function DataCard({
             multiRes = await guangdadaMultiModalSearch(mr);
           }
           if (multiRes && multiRes.success && multiRes.data && multiRes.data.multimodal_md5) {
+            applyGuangdadaQuotaStatus(multiRes);
             const cdn = multiRes.data.multi_modal_file_cdn_url;
             const preview = await resolveMultimodalPreview(mr, cdn);
             paramsToUse = {
@@ -321,7 +399,13 @@ function DataCard({
             setCurrentSearchParams(paramsToUse);
             addLog('multi-modal-search 成功，已带入 list/count', 'info');
           } else if (multiRes && !multiRes.success) {
+            applyGuangdadaQuotaStatus(multiRes);
             addLog(`multi-modal-search 失败: ${multiRes.message || '未返回 multimodal_md5'}`, 'warn');
+            if (multiRes.code === 'GUANGDADA_QUOTA_EXCEEDED') {
+              antdMessage.warning(multiRes.message || '素材内容搜索额度不足');
+              setLoading(false);
+              return;
+            }
           }
         } catch (err) {
           addLog(`multi-modal-search 请求异常: ${err.message}`, 'warn');
@@ -330,10 +414,11 @@ function DataCard({
     }
 
     try {
-      // 并行请求搜索数据和总数
+      const shouldRequestCount = !skipCount && (platform === 'insightrackr' || platform === 'guangdada');
+      // 并行请求搜索数据和总数；广大大纯翻页时复用上次 count，避免重复请求 count 接口
       const [searchResult, countResult] = await Promise.all([
         searchData(platform, paramsToUse),
-        (platform === 'insightrackr' || platform === 'guangdada')
+        shouldRequestCount
           ? getCount(platform, paramsToUse).catch((err) => {
               addLog(`获取总数失败: ${err.message}`, 'warn');
               return { success: false, data: null };
@@ -341,9 +426,13 @@ function DataCard({
           : Promise.resolve({ success: false, data: null })
       ]);
 
+      if (platform === 'guangdada') {
+        applyGuangdadaQuotaStatus(searchResult);
+      }
+
       if (searchResult.success) {
         addLog('数据查询成功', 'success');
-        const countInner = countResult.success && countResult.data
+        const countInner = shouldRequestCount && countResult.success && countResult.data
           ? (platform === 'guangdada' ? countResult.data : (countResult.data.data || countResult.data))
           : null;
 
@@ -393,7 +482,7 @@ function DataCard({
           setCurrentSearchParams(paramsToUse);
           setMediaDistribute({});
           setAppDistribute({});
-          setCountData(countInner);
+          if (shouldRequestCount) setCountData(countInner);
           if (platform === 'insightrackr' && searchResult.data) {
             const raw = searchResult.data;
             const list = raw?.list || raw?.data?.list || (Array.isArray(raw?.data) ? raw.data : []);
@@ -418,7 +507,11 @@ function DataCard({
         }
       } else {
         addLog(`查询失败: ${searchResult.message}`, 'error');
-        antdMessage.error(formatRequestError(searchResult.message || '查询失败'));
+        if (searchResult.code === 'GUANGDADA_QUOTA_EXCEEDED') {
+          antdMessage.warning(searchResult.message || '广大大账户额度不足');
+        } else {
+          antdMessage.error(formatRequestError(searchResult.message || '查询失败'));
+        }
       }
     } catch (error) {
       // 检查是否需要重新登录：直接弹出登录框，不显示错误文案
@@ -446,19 +539,20 @@ function DataCard({
       }
     } finally {
       setLoading(false);
+      if (platform === 'guangdada') {
+        refreshGuangdadaQuotaStatus({ silent: true });
+      }
     }
   };
 
   const todayBeijing = getTodayBeijingDayjs();
   const effectiveParams = platform === 'insightrackr' ? insightrackrResultByTab[insightrackrSearchTab]?.params : currentSearchParams;
 
-  // 进入广大大/Insightrackr 页面且已登录时，用默认参数自动发起一次查询；Insightrackr 必须等 status 返回「已登录」后再请求
+  // 进入 Insightrackr 页面且已登录时，用默认参数自动发起一次查询；广大大需用户主动选择筛选条件后查询
   React.useEffect(() => {
-    if (platform !== 'guangdada' && platform !== 'insightrackr') return;
-    if (platform === 'guangdada' && guangdadaEdition === 'domestic') return;
-    if (platform === 'insightrackr' && !insightrackrStatusConfirmed) return;
-    if (platform === 'guangdada' && !isLoggedIn) return;
-    if (platform === 'insightrackr' && !isLoggedIn) return;
+    if (platform !== 'insightrackr') return;
+    if (!insightrackrStatusConfirmed) return;
+    if (!isLoggedIn) return;
     if (effectiveParams != null) return;
     setRequestDefaultSearch(true);
   }, [platform, isLoggedIn, insightrackrStatusConfirmed, effectiveParams, guangdadaEdition]);
@@ -472,16 +566,6 @@ function DataCard({
       setDomesticListPage(1);
     }
   }, [platform, guangdadaEdition]);
-
-  React.useEffect(() => {
-    const isDomestic = platform === 'guangdada' && guangdadaEdition === 'domestic';
-    const shouldAutoSearch = isDomestic && isLoggedIn;
-    const prev = domesticAutoSearchPrevRef.current;
-    if (shouldAutoSearch && (!prev.domestic || !prev.logged)) {
-      setDomesticAutoSearchKey((k) => k + 1);
-    }
-    domesticAutoSearchPrevRef.current = { domestic: isDomestic, logged: !!isLoggedIn };
-  }, [platform, guangdadaEdition, isLoggedIn]);
 
   const runDomesticSearch = useCallback(
     async (payload) => {
@@ -725,13 +809,20 @@ function DataCard({
           </button>
         </div>
       )}
+      {platform === 'guangdada' && (
+        <GuangdadaQuotaStatusBoard
+          status={guangdadaQuotaStatus}
+          loading={guangdadaQuotaLoading}
+          isLoggedIn={isLoggedIn}
+          onRefresh={refreshGuangdadaQuotaStatus}
+        />
+      )}
       {platform === 'guangdada' && guangdadaEdition === 'domestic' ? (
         <>
           <GuangdadaDomesticSearchForm
             ref={domesticFormRef}
             loading={loading}
             onSearch={handleDomesticFormSearch}
-            autoSearchKey={domesticAutoSearchKey}
           />
           <GuangdadaDomesticShortcutBar
             recommendedKey={domesticRecommendedKey}
@@ -823,11 +914,12 @@ function DataCard({
             batchDownloadMode={batchDownloadMode}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
-            onSelectAllPage={selectAllPage}
             onBatchDownloadCancel={exitBatchMode}
             onEnterBatchMode={() => setBatchDownloadMode(true)}
             onBatchModeEnteredWithHint={onBatchModeEnteredWithHint}
             onExitBatchMode={exitBatchMode}
+            onGuangdadaDownloadQuotaConsume={handleGuangdadaDownloadQuotaConsume}
+            onGuangdadaQuotaChanged={handleGuangdadaQuotaChanged}
             onPageChange={(page) => {
               window.scrollTo(0, 0);
               const scrollEl = document.querySelector('.data-card');
@@ -842,14 +934,14 @@ function DataCard({
         {showDomesticPanel && !loading && !domesticAdInfoResult && (
           <div className="data-container data-container--empty">
             <div className="data-placeholder">
-              <p>{isLoggedIn ? '暂无数据' : '登录后查看数据'}</p>
+              <p>{isLoggedIn ? '请选择筛选条件后查询' : '登录后查看数据'}</p>
             </div>
           </div>
         )}
         {showGlobalData && !loading && !effectiveData && (
           <div className="data-container data-container--empty">
             <div className="data-placeholder">
-              <p>{isLoggedIn ? '暂无数据' : '登录后查看数据'}</p>
+              <p>{isLoggedIn && platform === 'guangdada' ? '请选择筛选条件后查询' : isLoggedIn ? '暂无数据' : '登录后查看数据'}</p>
             </div>
           </div>
         )}
@@ -865,19 +957,26 @@ function DataCard({
             batchDownloadMode={batchDownloadMode}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
-            onSelectAllPage={selectAllPage}
             onBatchDownloadCancel={exitBatchMode}
             onEnterBatchMode={() => setBatchDownloadMode(true)}
             onBatchModeEnteredWithHint={onBatchModeEnteredWithHint}
             onExitBatchMode={exitBatchMode}
             onBlockAdvertiser={platform === 'guangdada' ? handleBlockAdvertiser : undefined}
+            onGuangdadaDownloadQuotaConsume={platform === 'guangdada' ? handleGuangdadaDownloadQuotaConsume : undefined}
+            onGuangdadaQuotaChanged={platform === 'guangdada' ? handleGuangdadaQuotaChanged : undefined}
             onPageChange={(page) => {
               window.scrollTo(0, 0);
               const scrollEl = document.querySelector('.data-card');
               if (scrollEl) scrollEl.scrollTop = 0;
               if (effectiveParams) {
+                const nextUpstreamPage = platform === 'guangdada' ? getGuangdadaUpstreamPage(page) : null;
+                const currentUpstreamPage = platform === 'guangdada' ? (Number(effectiveParams.page) || 1) : null;
                 const updatedParams = platform === 'guangdada'
-                  ? { ...effectiveParams, page }
+                  ? withGuangdadaPaging({
+                      ...effectiveParams,
+                      page_size: GUANGDADA_UPSTREAM_PAGE_SIZE,
+                      pageSize: GUANGDADA_UPSTREAM_PAGE_SIZE,
+                    }, page)
                   : {
                       ...effectiveParams,
                       baseOption: {
@@ -885,7 +984,11 @@ function DataCard({
                         pageIndex: page
                       }
                     };
-                handleSearch(updatedParams);
+                if (platform === 'guangdada' && nextUpstreamPage === currentUpstreamPage) {
+                  setCurrentSearchParams(updatedParams);
+                  return;
+                }
+                handleSearch(updatedParams, { skipCount: platform === 'guangdada' });
               }
             }}
           />

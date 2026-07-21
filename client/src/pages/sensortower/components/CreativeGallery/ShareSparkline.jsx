@@ -18,9 +18,12 @@ function buildPath(points, width, height, padY = 2) {
     .join(' ');
 }
 
-function ShareSparkline({ creative, width = 120, height = 36 }) {
+function ShareSparkline({ creative, shareSeries: shareSeriesProp, width = 120, height = 36 }) {
   const gradId = useId().replace(/:/g, '');
-  const series = useMemo(() => extractShareSeries(creative), [creative]);
+  const series = useMemo(() => {
+    if (Array.isArray(shareSeriesProp) && shareSeriesProp.length) return shareSeriesProp;
+    return extractShareSeries(creative);
+  }, [creative, shareSeriesProp]);
   const color = useMemo(() => getShareSparklineColor(series), [series]);
   const linePath = useMemo(() => buildPath(series, width, height), [series, width, height]);
   const areaPath = useMemo(() => {

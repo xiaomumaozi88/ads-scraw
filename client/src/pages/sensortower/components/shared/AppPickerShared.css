@@ -1,0 +1,562 @@
+/* —— 应用选择：编辑 / 收起 —— */
+.st-is-app-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.st-is-app-picker__platform {
+  margin: 0;
+}
+
+.st-is-app-picker__summary {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.st-is-app-picker__summary:hover .st-is-app-picker__row--summary {
+  border-color: #00897b;
+  box-shadow: 0 1px 4px rgba(0, 137, 123, 0.12);
+}
+
+.st-is-app-picker__summary:focus-visible {
+  outline: 2px solid #1565c0;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.st-is-app-picker__summary-more {
+  display: block;
+  margin-top: 0.35rem;
+  padding-left: 0.25rem;
+  font-size: 0.75rem;
+  color: #78909c;
+}
+
+.st-is-app-picker__summary-icon,
+.st-is-app-picker__row-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.st-is-app-picker__icon-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.st-is-app-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid #e0e4e8;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0.35rem;
+  box-shadow: 0 2px 8px rgba(38, 50, 56, 0.06);
+}
+
+.st-is-app-picker__item {
+  position: relative;
+  margin: 0;
+}
+
+.st-is-app-picker__item:has(.st-is-app-picker__name-wrap:hover) {
+  z-index: 4;
+}
+
+.st-is-app-picker__row {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  border: 1px solid #e0e4e8;
+  border-radius: 4px;
+  background: #fff;
+  overflow: visible;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.st-is-app-picker__row:hover {
+  border-color: #00897b;
+}
+
+.st-is-app-picker__row--summary {
+  width: 100%;
+}
+
+.st-is-app-picker__row--selected {
+  border-color: #cfd8dc;
+}
+
+.st-is-app-picker__check-col {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  flex-shrink: 0;
+  align-self: stretch;
+  background: transparent;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.st-is-app-picker__check-col--checked {
+  background: transparent;
+}
+
+.st-is-app-picker__check-col--static {
+  cursor: default;
+}
+
+.st-is-app-picker__checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.st-is-app-picker__check-mark {
+  position: absolute;
+  z-index: 1;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.st-is-app-picker__check-col:not(.st-is-app-picker__check-col--checked) .st-is-app-picker__check-mark {
+  color: transparent;
+}
+
+.st-is-app-picker__check-col::after {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border: 2px solid #90a4ae;
+  border-radius: 2px;
+  background: #fff;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.st-is-app-picker__check-col--checked::after {
+  border-color: #5b6b81;
+  background: #5b6b81;
+}
+
+.st-is-app-picker__store-counts {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.4rem 0.5rem;
+  border-right: 1px solid #eceff1;
+  flex-shrink: 0;
+  min-width: 2.5rem;
+}
+
+.st-is-app-picker__store-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #546e7a;
+  line-height: 1;
+}
+
+.st-is-app-picker__store-icon {
+  line-height: 1;
+}
+
+.st-is-app-picker__store-icon--ios {
+  color: #37474f;
+}
+
+.st-is-app-picker__store-icon--gp {
+  color: #2e7d32;
+}
+
+.st-is-app-picker__meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.st-is-app-picker__metrics {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 0.2rem;
+  padding: 0.35rem 0.5rem;
+  border-left: 1px solid #eceff1;
+  flex-shrink: 0;
+  min-width: 3.5rem;
+}
+
+.st-is-app-picker__metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #546e7a;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.st-is-app-picker__metric--revenue {
+  color: #37474f;
+  text-transform: uppercase;
+}
+
+.st-is-app-picker__metric-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 0.7rem;
+  height: 0.7rem;
+  color: #78909c;
+  line-height: 1;
+}
+
+.st-is-app-picker__metric-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.st-is-app-picker__name-wrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.st-is-app-picker__name {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #263238;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-is-app-picker__name-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: min(280px, 70vw);
+  padding: 0.45rem 0.6rem;
+  border-radius: 4px;
+  background: #263238;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease, visibility 0.12s ease;
+}
+
+.st-is-app-picker__name-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 12px;
+  border: 5px solid transparent;
+  border-bottom-color: #263238;
+}
+
+.st-is-app-picker__name-wrap:hover .st-is-app-picker__name-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.st-is-app-picker__publisher {
+  font-size: 0.75rem;
+  color: #78909c;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.st-is-app-picker__caret-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  flex-shrink: 0;
+  border: none;
+  border-left: 1px solid #eceff1;
+  background: #fff;
+  cursor: pointer;
+}
+
+.st-is-app-picker__caret-btn:hover {
+  background: #f5f7f9;
+}
+
+.st-is-app-picker__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  flex-shrink: 0;
+  border: none;
+  border-left: 1px solid #eceff1;
+  background: #fff;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: #78909c;
+  cursor: pointer;
+}
+
+.st-is-app-picker__remove:hover {
+  color: #c62828;
+  background: #ffebee;
+}
+
+.st-is-app-picker__versions-hint {
+  margin: 0.35rem 0 0;
+  padding: 0.35rem 0.5rem 0.35rem 2.25rem;
+  font-size: 0.75rem;
+  color: #78909c;
+  background: #f5f7f9;
+  border-radius: 0 0 4px 4px;
+}
+
+.st-is-app-picker__versions-hint--error {
+  color: #c62828;
+}
+
+.st-is-app-picker__versions {
+  list-style: none;
+  margin: 0;
+  padding: 0.15rem 0 0.35rem;
+  background: #f5f7f9;
+  border-radius: 0 0 4px 4px;
+}
+
+.st-is-app-picker__version-item {
+  margin: 0;
+}
+
+.st-is-app-picker__version-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.35rem 0.5rem 0.35rem 0;
+  border-top: 1px solid #eceff1;
+  background: #f5f7f9;
+}
+
+.st-is-app-picker__version-row:first-child {
+  border-top: none;
+}
+
+.st-is-app-picker__check-col--version {
+  width: 22px;
+  align-self: center;
+}
+
+.st-is-app-picker__version-store {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #455a64;
+  line-height: 1;
+}
+
+.st-is-app-picker__version-store--android {
+  color: #2e7d32;
+}
+
+.st-is-app-picker__version-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  object-fit: cover;
+  margin: 0;
+}
+
+.st-is-app-picker__version-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: 0;
+}
+
+.st-is-app-picker__version-row .st-is-app-picker__metrics {
+  align-self: center;
+  border-left: 1px solid #eceff1;
+  min-width: 3.25rem;
+  padding: 0 0 0 0.45rem;
+  margin-left: 0.1rem;
+}
+
+.st-is-app-picker__row-icon--compact {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  margin: auto 0;
+}
+
+.st-sidebar__app-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.st-sidebar__app-label .st-is-app-picker__store-counts {
+  border-right: none;
+}
+
+.st-sidebar__app-label:hover .st-is-app-picker__meta {
+  color: inherit;
+}
+
+.st-sidebar__app-label:focus-visible {
+  outline: 2px solid #00897b;
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.st-sidebar__app-label-caret {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex-shrink: 0;
+  border-left: none;
+  background: transparent;
+}
+
+.st-sidebar__app-card--expanded .st-is-app-picker__row {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.st-sidebar__app-card--expanded .st-is-app-picker__versions,
+.st-sidebar__app-card--expanded .st-is-app-picker__versions-hint {
+  border: 1px solid #e0e4e8;
+  border-top: none;
+  margin-top: -1px;
+}
+
+.st-is-app-picker__version-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #37474f;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-is-app-picker__version-publisher {
+  font-size: 0.6rem;
+  color: #78909c;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-is-app-picker__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.st-is-app-picker__done-btn {
+  flex: 1;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #bbdefb;
+  border-radius: 4px;
+  background: #e8f4fc;
+  color: #1565c0;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.st-is-app-picker__done-btn:hover {
+  background: #d2eafc;
+  border-color: #90caf9;
+}
+
+.st-is-app-picker__footer-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #bbdefb;
+  border-radius: 4px;
+  background: #e8f4fc;
+  color: #1565c0;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.st-is-app-picker__footer-icon:hover {
+  background: #d2eafc;
+}
+
+.st-is-app-picker__footer-icon-glyph {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
