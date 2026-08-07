@@ -43,6 +43,7 @@ router.get('/health/platform-credentials', healthController.getPlatformCredentia
 router.put('/health/platform-credentials/:platform', healthController.putPlatformCredentials);
 router.get('/health/operation-audits', operationAuditController.getOperationAudits);
 router.get('/health/operation-audits/summary', operationAuditController.getOperationAuditSummary);
+router.get('/health/operation-audits/:id', operationAuditController.getOperationAuditDetail);
 router.get('/proxy-media', proxyMediaController.getProxyMedia);
 router.post('/transcode-video', transcodeVideoController.transcodeVideo);
 router.get('/transcode-queue', transcodeVideoController.getTranscodeQueue);

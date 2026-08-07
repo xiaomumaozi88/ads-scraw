@@ -1,0 +1,1559 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>视频尺寸转换工具</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --panel-border: #dbe2ea;
+      --text: #1f2933;
+      --muted: #667085;
+      --line: #e5e9ef;
+      --primary: #1f6feb;
+      --primary-dark: #175bcc;
+      --success: #15803d;
+      --danger: #b42318;
+      --warning: #a15c00;
+      --shadow: 0 12px 30px rgba(31, 41, 51, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .app {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 44px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 26px;
+      line-height: 1.25;
+      font-weight: 700;
+    }
+
+    .subtitle {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 118px;
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--panel-border);
+      background: #fff;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .panel__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel__header h2 {
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .panel__body {
+      padding: 20px;
+    }
+
+    .segmented {
+      display: inline-grid;
+      grid-template-columns: repeat(2, 1fr);
+      padding: 3px;
+      border-radius: 8px;
+      background: #edf2f7;
+      margin-bottom: 16px;
+    }
+
+    .segment {
+      height: 34px;
+      padding: 0 18px;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .segment[aria-selected="true"] {
+      background: #fff;
+      color: var(--text);
+      box-shadow: 0 2px 8px rgba(31, 41, 51, 0.09);
+    }
+
+    .dropzone {
+      display: grid;
+      place-items: center;
+      min-height: 176px;
+      padding: 22px;
+      border: 1px dashed #9aa8ba;
+      border-radius: 8px;
+      background: #f8fafc;
+      text-align: center;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .dropzone.is-over {
+      border-color: var(--primary);
+      background: #eef5ff;
+    }
+
+    .dropzone__title {
+      font-size: 16px;
+      font-weight: 650;
+      margin-bottom: 7px;
+    }
+
+    .dropzone__hint,
+    .field-hint {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .url-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+    }
+
+    .text-input,
+    .number-input {
+      width: 100%;
+      height: 38px;
+      border: 1px solid #cbd5e1;
+      border-radius: 7px;
+      padding: 0 12px;
+      outline: none;
+      background: #fff;
+      color: var(--text);
+    }
+
+    .number-input {
+      width: 104px;
+      text-align: center;
+    }
+
+    .text-input:focus,
+    .number-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.12);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 0 15px;
+      border-radius: 7px;
+      background: #edf2f7;
+      color: var(--text);
+      font-weight: 600;
+      white-space: nowrap;
+      transition: background-color 0.15s ease, transform 0.15s ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-dark);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--primary);
+      padding: 0;
+      min-height: auto;
+    }
+
+    .source-summary {
+      display: grid;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .summary-row {
+      display: grid;
+      grid-template-columns: 80px minmax(0, 1fr);
+      gap: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .summary-row span:first-child {
+      color: var(--muted);
+    }
+
+    .summary-row span:last-child {
+      overflow-wrap: anywhere;
+    }
+
+    .preview-box {
+      display: grid;
+      place-items: center;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      min-height: 240px;
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #111827;
+    }
+
+    .preview-box img,
+    .preview-box video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #111827;
+    }
+
+    .preview-placeholder {
+      color: #d1d5db;
+      font-size: 14px;
+    }
+
+    .size-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .size-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 48px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .size-option label {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .size-option small {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .custom-fields {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .setting-note {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .action-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .status-text {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .status-text.is-error {
+      color: var(--danger);
+    }
+
+    .status-text.is-success {
+      color: var(--success);
+    }
+
+    .results-panel {
+      margin-top: 18px;
+    }
+
+    .results-header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .task-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .empty-results {
+      display: grid;
+      place-items: center;
+      min-height: 96px;
+      color: var(--muted);
+      border: 1px dashed var(--panel-border);
+      border-radius: 8px;
+      background: #fbfcfe;
+      font-size: 14px;
+    }
+
+    .task-row {
+      display: grid;
+      grid-template-columns: minmax(160px, 1fr) minmax(180px, 0.85fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .task-title {
+      font-weight: 650;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .task-subtitle {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      margin-top: 2px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--primary);
+      transition: width 0.18s ease;
+    }
+
+    .task-state {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    .task-state.is-error {
+      color: var(--danger);
+    }
+
+    .task-state.is-success {
+      color: var(--success);
+    }
+
+    .download-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 7px;
+      background: #eaf3ff;
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 900px) {
+      .topbar,
+      .workspace,
+      .task-row,
+      .action-bar {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar,
+      .action-bar {
+        display: grid;
+        align-items: stretch;
+      }
+
+      .status-pill {
+        justify-content: flex-start;
+      }
+
+      .url-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div>
+        <h1>视频尺寸转换工具</h1>
+        <p class="subtitle">按当前素材尺寸修改逻辑输出：画布固定尺寸，背景按 cover 铺满并模糊，前景按 contain 居中展示。</p>
+      </div>
+      <div id="sourceBadge" class="status-pill">未加载素材</div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel">
+        <div class="panel__header">
+          <h2>1. 选择素材</h2>
+          <button id="clearSourceBtn" class="btn btn-ghost" type="button" disabled>清空</button>
+        </div>
+        <div class="panel__body">
+          <div class="segmented" role="tablist" aria-label="素材来源">
+            <button class="segment" type="button" data-mode="upload" aria-selected="true">本地文件</button>
+            <button class="segment" type="button" data-mode="url" aria-selected="false">远程 URL</button>
+          </div>
+
+          <div id="uploadPane">
+            <label id="dropzone" class="dropzone" for="fileInput">
+              <input id="fileInput" class="hidden" type="file" accept="video/*,image/*" />
+              <span>
+                <span class="dropzone__title">点击或拖拽视频 / 图片到此区域</span><br />
+                <span class="dropzone__hint">支持 mp4、mov、webm、jpg、png、webp 等常见格式</span>
+              </span>
+            </label>
+          </div>
+
+          <div id="urlPane" class="hidden">
+            <div class="url-row">
+              <input id="remoteUrlInput" class="text-input" type="url" placeholder="https://example.com/creative.mp4" />
+              <button id="loadRemoteBtn" class="btn btn-primary" type="button">加载素材</button>
+            </div>
+            <p class="field-hint" style="margin-top: 8px;">远程 URL 需要允许浏览器跨域读取。</p>
+          </div>
+
+          <div id="sourceSummary" class="source-summary hidden">
+            <div class="summary-row"><span>文件名</span><span id="summaryName">-</span></div>
+            <div class="summary-row"><span>类型</span><span id="summaryKind">-</span></div>
+            <div class="summary-row"><span>原尺寸</span><span id="summarySize">-</span></div>
+            <div class="summary-row"><span>体积</span><span id="summaryBytes">-</span></div>
+          </div>
+
+          <div id="previewBox" class="preview-box">
+            <div class="preview-placeholder">加载素材后预览</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__header">
+          <h2>2. 输出尺寸</h2>
+        </div>
+        <div class="panel__body">
+          <div class="size-list">
+            <div class="size-option">
+              <label><input id="size720x1280" type="checkbox" data-size="720x1280" checked />720×1280（竖版）</label>
+              <small>默认</small>
+            </div>
+            <div class="size-option">
+              <label><input type="checkbox" data-size="1280x720" />1280×720（横版）</label>
+              <small>16:9</small>
+            </div>
+            <div class="size-option">
+              <label><input type="checkbox" data-size="800x800" />800×800（方形）</label>
+              <small>1:1</small>
+            </div>
+            <div class="size-option">
+              <label><input id="customEnabled" type="checkbox" />自定义尺寸</label>
+              <div class="custom-fields">
+                <input id="customWidth" class="number-input" type="number" min="8" max="4096" step="1" value="720" disabled />
+                <span>×</span>
+                <input id="customHeight" class="number-input" type="number" min="8" max="4096" step="1" value="1280" disabled />
+              </div>
+            </div>
+          </div>
+          <p class="setting-note">自定义宽高范围：8 到 4096 像素。视频输出优先使用 ffmpeg.wasm，失败时回退到浏览器录制方案。</p>
+          <div class="action-bar">
+            <div id="statusText" class="status-text">请选择素材并确认输出尺寸。</div>
+            <button id="convertBtn" class="btn btn-primary" type="button" disabled>开始转换</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <section class="panel results-panel">
+      <div class="panel__header">
+        <h2>3. 转换结果</h2>
+        <div class="results-header-actions">
+          <button id="clearResultsBtn" class="btn" type="button" disabled>清除结果</button>
+          <button id="downloadAllBtn" class="btn btn-primary" type="button" disabled>下载全部</button>
+        </div>
+      </div>
+      <div class="panel__body">
+        <div id="taskList" class="task-list">
+          <div class="empty-results">转换完成后会在这里生成下载项</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module">
+    const VIDEO_EXT = /\.(mp4|webm|mov|m4v|avi|mkv|flv)(\?|$)/i;
+    const IMAGE_EXT = /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?|$)/i;
+    const CUSTOM_SIZE_MIN = 8;
+    const CUSTOM_SIZE_MAX = 4096;
+    const IMAGE_BLUR_RADIUS = 24;
+    const VIDEO_GBLUR_SIGMA = 30;
+    const MIN_VIDEO_KBPS = 2500;
+    const FALLBACK_VIDEO_KBPS = 5000;
+    const TRANSCODE_TIMEOUT_MS = 300000;
+    const FFMPEG_LOCAL_PACKAGE_URL = './vendor/ffmpeg/index.js';
+    const FFMPEG_LOCAL_UTIL_URL = './vendor/ffmpeg-util/index.js';
+    const FFMPEG_LOCAL_CLASS_WORKER_URL = './vendor/ffmpeg/worker.js';
+    const FFMPEG_LOCAL_CORE_BASE_URL = './vendor/ffmpeg-core';
+    const FFMPEG_CDN_PACKAGE_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js';
+    const FFMPEG_CDN_UTIL_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js';
+    const FFMPEG_CDN_CLASS_WORKER_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/worker.js';
+    const FFMPEG_CDN_CORE_BASE_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
+
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+
+    const dom = {
+      sourceBadge: $('#sourceBadge'),
+      clearSourceBtn: $('#clearSourceBtn'),
+      fileInput: $('#fileInput'),
+      dropzone: $('#dropzone'),
+      uploadPane: $('#uploadPane'),
+      urlPane: $('#urlPane'),
+      remoteUrlInput: $('#remoteUrlInput'),
+      loadRemoteBtn: $('#loadRemoteBtn'),
+      sourceSummary: $('#sourceSummary'),
+      summaryName: $('#summaryName'),
+      summaryKind: $('#summaryKind'),
+      summarySize: $('#summarySize'),
+      summaryBytes: $('#summaryBytes'),
+      previewBox: $('#previewBox'),
+      customEnabled: $('#customEnabled'),
+      customWidth: $('#customWidth'),
+      customHeight: $('#customHeight'),
+      statusText: $('#statusText'),
+      convertBtn: $('#convertBtn'),
+      taskList: $('#taskList'),
+      clearResultsBtn: $('#clearResultsBtn'),
+      downloadAllBtn: $('#downloadAllBtn'),
+    };
+
+    let activeSource = null;
+    let generatedItems = [];
+    let isProcessing = false;
+    let ffmpegLoadPromise = null;
+
+    function setStatus(text, type = 'normal') {
+      dom.statusText.textContent = text;
+      dom.statusText.classList.toggle('is-error', type === 'error');
+      dom.statusText.classList.toggle('is-success', type === 'success');
+    }
+
+    function setSourceBadge(text) {
+      dom.sourceBadge.textContent = text;
+    }
+
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return '-';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let value = bytes;
+      let index = 0;
+      while (value >= 1024 && index < units.length - 1) {
+        value /= 1024;
+        index += 1;
+      }
+      const digits = value >= 10 || index === 0 ? 0 : 1;
+      return `${value.toFixed(digits)} ${units[index]}`;
+    }
+
+    function detectMediaTypeFromFile(file) {
+      const type = String(file?.type || '').toLowerCase();
+      if (type.startsWith('video/')) return 'video';
+      if (type.startsWith('image/')) return 'image';
+      const name = String(file?.name || '').toLowerCase();
+      if (VIDEO_EXT.test(name)) return 'video';
+      if (IMAGE_EXT.test(name)) return 'image';
+      return null;
+    }
+
+    function detectMediaTypeFromUrl(url) {
+      const path = String(url || '').split('?')[0].split('#')[0].toLowerCase();
+      if (VIDEO_EXT.test(path)) return 'video';
+      if (IMAGE_EXT.test(path)) return 'image';
+      return null;
+    }
+
+    function detectMediaTypeFromBlob(blob) {
+      const type = String(blob?.type || '').toLowerCase();
+      if (type.startsWith('video/')) return 'video';
+      if (type.startsWith('image/')) return 'image';
+      return null;
+    }
+
+    function normalizeHttpUrl(raw) {
+      const value = String(raw || '').trim();
+      if (!value) return null;
+      return /^https?:\/\//i.test(value) ? value : null;
+    }
+
+    function displayNameFromUrl(url) {
+      try {
+        const segment = new URL(url).pathname.split('/').filter(Boolean).pop();
+        return segment ? decodeURIComponent(segment) : 'remote';
+      } catch {
+        return 'remote';
+      }
+    }
+
+    function sanitizeBaseName(name, fallback = 'material') {
+      const base = String(name || fallback).replace(/\.[^.]+$/, '');
+      return base.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim().slice(0, 80) || fallback;
+    }
+
+    function fitRect(srcW, srcH, dstW, dstH, scaleMode = 'contain') {
+      const scale = scaleMode === 'cover'
+        ? Math.max(dstW / srcW, dstH / srcH)
+        : Math.min(dstW / srcW, dstH / srcH);
+      const drawW = Math.round(srcW * scale);
+      const drawH = Math.round(srcH * scale);
+      const offsetX = Math.round((dstW - drawW) / 2);
+      const offsetY = Math.round((dstH - drawH) / 2);
+      return { drawW, drawH, offsetX, offsetY };
+    }
+
+    function clearPreview() {
+      dom.previewBox.replaceChildren();
+      const placeholder = document.createElement('div');
+      placeholder.className = 'preview-placeholder';
+      placeholder.textContent = '加载素材后预览';
+      dom.previewBox.appendChild(placeholder);
+    }
+
+    function renderPreview() {
+      dom.previewBox.replaceChildren();
+      if (!activeSource) {
+        clearPreview();
+        return;
+      }
+      const media = document.createElement(activeSource.kind === 'video' ? 'video' : 'img');
+      media.src = activeSource.url;
+      if (activeSource.kind === 'video') {
+        media.controls = true;
+        media.playsInline = true;
+      } else {
+        media.alt = activeSource.name || 'preview';
+      }
+      dom.previewBox.appendChild(media);
+    }
+
+    function renderSourceSummary() {
+      if (!activeSource) {
+        dom.sourceSummary.classList.add('hidden');
+        dom.clearSourceBtn.disabled = true;
+        setSourceBadge('未加载素材');
+        return;
+      }
+      const dims = activeSource.dimensions;
+      dom.summaryName.textContent = activeSource.name || '-';
+      dom.summaryKind.textContent = activeSource.kind === 'video' ? '视频' : '图片';
+      dom.summarySize.textContent = dims ? `${dims.width}×${dims.height}` : '读取中';
+      dom.summaryBytes.textContent = formatBytes(activeSource.blob?.size);
+      dom.sourceSummary.classList.remove('hidden');
+      dom.clearSourceBtn.disabled = false;
+      setSourceBadge(activeSource.kind === 'video' ? '已加载视频' : '已加载图片');
+    }
+
+    function syncConvertButton() {
+      dom.convertBtn.disabled = !activeSource || isProcessing;
+    }
+
+    function clearGenerated() {
+      generatedItems.forEach((item) => URL.revokeObjectURL(item.url));
+      generatedItems = [];
+      dom.taskList.replaceChildren();
+      const empty = document.createElement('div');
+      empty.className = 'empty-results';
+      empty.textContent = '转换完成后会在这里生成下载项';
+      dom.taskList.appendChild(empty);
+      dom.clearResultsBtn.disabled = true;
+      dom.downloadAllBtn.disabled = true;
+    }
+
+    function clearSource() {
+      if (activeSource?.url) URL.revokeObjectURL(activeSource.url);
+      activeSource = null;
+      dom.fileInput.value = '';
+      clearGenerated();
+      renderSourceSummary();
+      clearPreview();
+      setStatus('请选择素材并确认输出尺寸。');
+      syncConvertButton();
+    }
+
+    async function setSourceFromBlob(blob, name, kind, label) {
+      if (activeSource?.url) URL.revokeObjectURL(activeSource.url);
+      clearGenerated();
+      const objectUrl = URL.createObjectURL(blob);
+      activeSource = {
+        blob,
+        name,
+        kind,
+        label,
+        url: objectUrl,
+        dimensions: null,
+      };
+      renderSourceSummary();
+      renderPreview();
+      syncConvertButton();
+      setStatus('正在读取素材尺寸...');
+      const dims = await getMediaDimensions(objectUrl, kind === 'video');
+      if (activeSource?.url === objectUrl) {
+        activeSource.dimensions = dims;
+        renderSourceSummary();
+        setStatus(dims ? '素材已就绪。' : '素材已加载，但未能读取原始尺寸。', dims ? 'success' : 'normal');
+      }
+    }
+
+    function getMediaDimensions(url, isVideo) {
+      if (!url) return Promise.resolve(null);
+      if (isVideo) {
+        return new Promise((resolve) => {
+          const video = document.createElement('video');
+          video.preload = 'metadata';
+          video.playsInline = true;
+          video.style.position = 'fixed';
+          video.style.left = '-9999px';
+          video.style.width = '1px';
+          video.style.height = '1px';
+          let settled = false;
+          const timeoutId = setTimeout(() => done(null), 15000);
+          const done = (value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeoutId);
+            video.removeAttribute('src');
+            video.load();
+            video.remove();
+            resolve(value);
+          };
+          video.onloadedmetadata = () => {
+            const width = video.videoWidth;
+            const height = video.videoHeight;
+            done(width && height ? { width, height } : null);
+          };
+          video.onerror = () => done(null);
+          document.body.appendChild(video);
+          video.src = url;
+        });
+      }
+
+      return new Promise((resolve) => {
+        const img = new Image();
+        const timeoutId = setTimeout(() => {
+          img.onload = null;
+          img.onerror = null;
+          img.src = '';
+          resolve(null);
+        }, 10000);
+        img.onload = () => {
+          clearTimeout(timeoutId);
+          const width = img.naturalWidth || img.width;
+          const height = img.naturalHeight || img.height;
+          resolve(width && height ? { width, height } : null);
+        };
+        img.onerror = () => {
+          clearTimeout(timeoutId);
+          resolve(null);
+        };
+        img.src = url;
+      });
+    }
+
+    function loadImage(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('图片加载失败'));
+        img.src = url;
+      });
+    }
+
+    async function processImageToBlob(source, targetW, targetH, onProgress) {
+      const img = await loadImage(source.url);
+      onProgress?.(40);
+      const srcW = img.naturalWidth || img.width;
+      const srcH = img.naturalHeight || img.height;
+
+      if (srcW === targetW && srcH === targetH) {
+        onProgress?.(100);
+        return source.blob;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      const cover = fitRect(srcW, srcH, targetW, targetH, 'cover');
+      const contain = fitRect(srcW, srcH, targetW, targetH, 'contain');
+
+      ctx.save();
+      ctx.filter = `blur(${IMAGE_BLUR_RADIUS}px)`;
+      ctx.drawImage(img, 0, 0, srcW, srcH, cover.offsetX, cover.offsetY, cover.drawW, cover.drawH);
+      ctx.restore();
+      ctx.drawImage(img, 0, 0, srcW, srcH, contain.offsetX, contain.offsetY, contain.drawW, contain.drawH);
+      onProgress?.(70);
+
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('图片导出失败'));
+            return;
+          }
+          onProgress?.(100);
+          resolve(blob);
+        }, 'image/png', 0.92);
+      });
+    }
+
+    async function fetchRemoteBlob(url, onProgress) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      try {
+        const response = await fetch(url, {
+          mode: 'cors',
+          referrerPolicy: 'no-referrer',
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`远程素材下载失败：HTTP ${response.status}`);
+        const contentType = response.headers.get('content-type') || '';
+        const total = Number(response.headers.get('content-length')) || 0;
+        if (!response.body || !total) {
+          const blob = await response.blob();
+          onProgress?.(100);
+          return blob.type ? blob : new Blob([blob], { type: contentType });
+        }
+        const reader = response.body.getReader();
+        const chunks = [];
+        let received = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.byteLength;
+          onProgress?.(Math.min(99, Math.round((received / total) * 100)));
+        }
+        onProgress?.(100);
+        return new Blob(chunks, { type: contentType });
+      } catch (error) {
+        if (error?.name === 'AbortError') throw new Error('远程素材下载超时');
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    async function loadFFmpegBundle() {
+      if (ffmpegLoadPromise) return ffmpegLoadPromise;
+      ffmpegLoadPromise = (async () => {
+        setStatus('正在加载 ffmpeg.wasm，首次加载会稍慢...');
+        const importModule = async (localUrl, cdnUrl) => {
+          try {
+            return { module: await import(new URL(localUrl, window.location.href).href), source: 'local' };
+          } catch (localError) {
+            console.warn('[video-size-converter] 本地 ffmpeg 模块加载失败，改用 CDN:', localError);
+            return { module: await import(cdnUrl), source: 'cdn' };
+          }
+        };
+        const toAssetBlobUrl = async (toBlobURL, localUrl, cdnUrl, mimeType) => {
+          try {
+            return await toBlobURL(new URL(localUrl, window.location.href).href, mimeType);
+          } catch (localError) {
+            console.warn('[video-size-converter] 本地 ffmpeg 资源加载失败，改用 CDN:', localError);
+            return toBlobURL(cdnUrl, mimeType);
+          }
+        };
+        const [ffmpegImport, utilImport] = await Promise.all([
+          importModule(FFMPEG_LOCAL_PACKAGE_URL, FFMPEG_CDN_PACKAGE_URL),
+          importModule(FFMPEG_LOCAL_UTIL_URL, FFMPEG_CDN_UTIL_URL),
+        ]);
+        const { FFmpeg } = ffmpegImport.module;
+        const { fetchFile, toBlobURL } = utilImport.module;
+        const coreURL = await toAssetBlobUrl(
+          toBlobURL,
+          `${FFMPEG_LOCAL_CORE_BASE_URL}/ffmpeg-core.js`,
+          `${FFMPEG_CDN_CORE_BASE_URL}/ffmpeg-core.js`,
+          'text/javascript'
+        );
+        const wasmURL = await toAssetBlobUrl(
+          toBlobURL,
+          `${FFMPEG_LOCAL_CORE_BASE_URL}/ffmpeg-core.wasm`,
+          `${FFMPEG_CDN_CORE_BASE_URL}/ffmpeg-core.wasm`,
+          'application/wasm'
+        );
+        const preferredWorkerURL = ffmpegImport.source === 'local'
+          ? new URL(FFMPEG_LOCAL_CLASS_WORKER_URL, window.location.href).href
+          : FFMPEG_CDN_CLASS_WORKER_URL;
+        const fallbackWorkerURL = preferredWorkerURL === FFMPEG_CDN_CLASS_WORKER_URL
+          ? null
+          : FFMPEG_CDN_CLASS_WORKER_URL;
+        let ffmpeg = new FFmpeg();
+        try {
+          await ffmpeg.load({ classWorkerURL: preferredWorkerURL, coreURL, wasmURL });
+        } catch (error) {
+          if (!fallbackWorkerURL) throw error;
+          console.warn('[video-size-converter] 本地 ffmpeg worker 加载失败，改用 CDN:', error);
+          ffmpeg.terminate();
+          ffmpeg = new FFmpeg();
+          await ffmpeg.load({ classWorkerURL: fallbackWorkerURL, coreURL, wasmURL });
+        }
+        return { ffmpeg, fetchFile };
+      })().catch((error) => {
+        ffmpegLoadPromise = null;
+        throw error;
+      });
+      return ffmpegLoadPromise;
+    }
+
+    async function probeVideoMeta(ffmpeg, inputName) {
+      const logLines = [];
+      const onLog = ({ message }) => logLines.push(message);
+      ffmpeg.on('log', onLog);
+      try {
+        await ffmpeg.exec(['-i', inputName], 10000);
+      } catch {
+        // ffmpeg -i 只用于探测，非 0 退出可忽略。
+      } finally {
+        ffmpeg.off('log', onLog);
+      }
+      const text = logLines.join('\n');
+      let fps = 30;
+      let totalKbps = 0;
+      let audioKbps = 128;
+      const fpsMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:fps|tbr)/);
+      if (fpsMatch) fps = Math.max(1, Math.min(120, parseFloat(fpsMatch[1]) || 30));
+      const totalMatch = text.match(/bitrate:\s*(\d+)\s*kb\/s/);
+      if (totalMatch) totalKbps = parseInt(totalMatch[1], 10) || 0;
+      const audioMatch = text.match(/Audio:.*?\s(\d+)\s*kb\/s/);
+      if (audioMatch) audioKbps = parseInt(audioMatch[1], 10) || 128;
+      const rawVideoKbps = totalKbps > 0 ? Math.max(100, totalKbps - audioKbps) : 0;
+      const videoKbps = rawVideoKbps > 0 ? Math.max(MIN_VIDEO_KBPS, rawVideoKbps) : FALLBACK_VIDEO_KBPS;
+      return { fps, videoKbps };
+    }
+
+    async function processVideoToBlobWithFFmpeg(source, targetW, targetH, onProgress) {
+      const { ffmpeg, fetchFile } = await loadFFmpegBundle();
+      const runId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      const inputName = `input_${runId}`;
+      const outputName = `output_${runId}.mp4`;
+      let lastPercent = 0;
+      const onFfmpegProgress = ({ progress }) => {
+        const raw = Math.min(99, Math.round((progress || 0) * 100));
+        if (raw > lastPercent) {
+          lastPercent = raw;
+          onProgress?.(raw);
+        }
+      };
+
+      try {
+        onProgress?.(5);
+        await ffmpeg.writeFile(inputName, await fetchFile(source.blob));
+        onProgress?.(10);
+        const { fps, videoKbps } = await probeVideoMeta(ffmpeg, inputName);
+        onProgress?.(15);
+
+        const W = Number(targetW) || 800;
+        const H = Number(targetH) || 800;
+        const filterComplex = [
+          '[0:v]split=2[cover][contain]',
+          `[cover]scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos,crop=${W}:${H},gblur=sigma=${VIDEO_GBLUR_SIGMA}[bg]`,
+          `[contain]scale=${W}:${H}:force_original_aspect_ratio=decrease:flags=lanczos[fg]`,
+          `[bg][fg]overlay=x=(main_w-overlay_w)/2:y=(main_h-overlay_h)/2[v]`,
+        ].join(';');
+
+        ffmpeg.on('progress', onFfmpegProgress);
+        const exitCode = await ffmpeg.exec([
+          '-i', inputName,
+          '-filter_complex', filterComplex,
+          '-map', '[v]',
+          '-map', '0:a?',
+          '-r', String(fps),
+          '-b:v', `${videoKbps}k`,
+          '-maxrate', `${videoKbps}k`,
+          '-bufsize', `${Math.min(Math.max(videoKbps * 2, 1024), 10000)}k`,
+          '-max_muxing_queue_size', '1024',
+          '-g', String(Math.round(fps)),
+          '-pix_fmt', 'yuv420p',
+          '-c:v', 'libx264',
+          '-preset', 'fast',
+          '-c:a', 'copy',
+          '-y',
+          outputName,
+        ], TRANSCODE_TIMEOUT_MS);
+        if (exitCode !== 0) throw new Error(`ffmpeg 转码失败，退出码 ${exitCode}`);
+
+        const data = await ffmpeg.readFile(outputName);
+        onProgress?.(100);
+        return new Blob([data], { type: 'video/mp4' });
+      } finally {
+        ffmpeg.off('progress', onFfmpegProgress);
+        await Promise.allSettled([
+          ffmpeg.deleteFile(inputName),
+          ffmpeg.deleteFile(outputName),
+        ]);
+      }
+    }
+
+    function processVideoToBlobCanvas(source, targetW, targetH, onProgress) {
+      return new Promise((resolve, reject) => {
+        if (!window.MediaRecorder) {
+          reject(new Error('当前浏览器不支持 MediaRecorder 回退方案'));
+          return;
+        }
+
+        const video = document.createElement('video');
+        video.src = source.url;
+        video.volume = 1;
+        video.playsInline = true;
+        video.setAttribute('playsinline', 'true');
+        video.style.position = 'fixed';
+        video.style.left = '-9999px';
+        video.style.top = '-9999px';
+        video.style.width = '1px';
+        video.style.height = '1px';
+        video.style.opacity = '0';
+        document.body.appendChild(video);
+
+        let recorder = null;
+        let captureIntervalId = null;
+        let audioContext = null;
+        let readyTimer = null;
+        let chunks = [];
+        let settled = false;
+
+        const cleanup = () => {
+          if (captureIntervalId != null) clearInterval(captureIntervalId);
+          if (readyTimer != null) clearTimeout(readyTimer);
+          try {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+          } catch {
+            // ignore cleanup errors
+          }
+          try {
+            audioContext?.close?.();
+          } catch {
+            // ignore cleanup errors
+          }
+          video.remove();
+        };
+
+        const fail = (error) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(error instanceof Error ? error : new Error(String(error)));
+        };
+
+        const complete = (blob) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve(blob);
+        };
+
+        video.onerror = () => fail(new Error('视频加载失败'));
+        video.onloadedmetadata = () => {
+          const srcW = video.videoWidth;
+          const srcH = video.videoHeight;
+          if (!srcW || !srcH) {
+            fail(new Error('无法获取视频尺寸'));
+            return;
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = targetW;
+          tempCanvas.height = targetH;
+          const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+          const cover = fitRect(srcW, srcH, targetW, targetH, 'cover');
+          const contain = fitRect(srcW, srcH, targetW, targetH, 'contain');
+
+          let audioDestination = null;
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            try {
+              audioContext = new AudioContextClass();
+              const audioSource = audioContext.createMediaElementSource(video);
+              audioDestination = audioContext.createMediaStreamDestination();
+              const gainNode = audioContext.createGain();
+              gainNode.gain.value = 0;
+              audioSource.connect(gainNode);
+              gainNode.connect(audioContext.destination);
+              audioSource.connect(audioDestination);
+            } catch {
+              audioContext = null;
+              audioDestination = null;
+              video.muted = true;
+              video.volume = 0;
+            }
+          }
+
+          const drawOneFrame = () => {
+            ctx.clearRect(0, 0, targetW, targetH);
+            tempCtx.clearRect(0, 0, targetW, targetH);
+            tempCtx.filter = 'blur(50px)';
+            tempCtx.drawImage(video, cover.offsetX, cover.offsetY, cover.drawW, cover.drawH);
+            tempCtx.filter = 'none';
+            ctx.drawImage(tempCanvas, 0, 0);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(video, contain.offsetX, contain.offsetY, contain.drawW, contain.drawH);
+            if (video.duration > 0) {
+              onProgress?.(Math.min(99, Math.round((video.currentTime / video.duration) * 100)));
+            }
+          };
+
+          const finishRecording = () => {
+            drawOneFrame();
+            onProgress?.(100);
+            setTimeout(() => {
+              if (recorder && recorder.state === 'recording') recorder.stop();
+            }, 250);
+          };
+
+          const startRecording = () => {
+            if (readyTimer != null) clearTimeout(readyTimer);
+            const fps = 30;
+            const canvasStream = canvas.captureStream(fps);
+            const outputStream = new MediaStream();
+            canvasStream.getVideoTracks().forEach((track) => outputStream.addTrack(track));
+            audioDestination?.stream?.getAudioTracks?.().forEach((track) => outputStream.addTrack(track));
+
+            const mimeMp4 = MediaRecorder.isTypeSupported('video/mp4')
+              ? 'video/mp4'
+              : MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a')
+                ? 'video/mp4;codecs=avc1,mp4a'
+                : null;
+            const mimeWebm = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+              ? 'video/webm;codecs=vp9,opus'
+              : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+                ? 'video/webm;codecs=vp8,opus'
+                : 'video/webm';
+            const mimeType = mimeMp4 || mimeWebm;
+            chunks = [];
+            recorder = new MediaRecorder(outputStream, {
+              mimeType,
+              videoBitsPerSecond: 2500000,
+              audioBitsPerSecond: outputStream.getAudioTracks().length > 0 ? 192000 : undefined,
+            });
+            recorder.ondataavailable = (event) => {
+              if (event.data?.size > 0) chunks.push(event.data);
+            };
+            recorder.onerror = (event) => fail(new Error(event.error?.message || '视频编码失败'));
+            recorder.onstop = () => {
+              const blob = new Blob(chunks, { type: mimeType });
+              if (blob.size < 1000) {
+                fail(new Error('生成的视频过小'));
+                return;
+              }
+              complete(blob);
+            };
+            recorder.start(100);
+            captureIntervalId = setInterval(() => {
+              if (video.ended) {
+                finishRecording();
+              } else if (!video.paused) {
+                drawOneFrame();
+              }
+            }, 1000 / fps);
+            video.addEventListener('ended', finishRecording, { once: true });
+          };
+
+          const start = () => {
+            video.currentTime = 0;
+            video.play()
+              .then(() => {
+                if (audioContext?.state === 'suspended') audioContext.resume().catch(() => {});
+                startRecording();
+              })
+              .catch((error) => fail(new Error(`视频播放失败：${error?.message || '未知错误'}`)));
+          };
+
+          video.addEventListener('canplay', start, { once: true });
+          video.addEventListener('canplaythrough', start, { once: true });
+          readyTimer = setTimeout(start, 1200);
+        };
+        video.load();
+      });
+    }
+
+    async function processVideoToBlob(source, targetW, targetH, onProgress) {
+      try {
+        return await processVideoToBlobWithFFmpeg(source, targetW, targetH, onProgress);
+      } catch (error) {
+        console.warn('[video-size-converter] ffmpeg 处理失败，回退到 canvas:', error);
+        setStatus(`ffmpeg 处理失败，正在使用浏览器回退方案：${error?.message || error}`);
+        return processVideoToBlobCanvas(source, targetW, targetH, onProgress);
+      }
+    }
+
+    function getOutputExtension(blob, isVideo) {
+      const type = String(blob?.type || '').toLowerCase();
+      if (isVideo) {
+        if (type.includes('webm')) return 'webm';
+        if (type.includes('quicktime')) return 'mov';
+        return 'mp4';
+      }
+      if (type.includes('jpeg')) return 'jpg';
+      if (type.includes('webp')) return 'webp';
+      if (type.includes('gif')) return 'gif';
+      return 'png';
+    }
+
+    function getSelectedSizes() {
+      const sizes = $$('input[data-size]:checked').map((input) => {
+        const [width, height] = input.dataset.size.split('x').map((value) => parseInt(value, 10));
+        return { width, height, label: `${width}×${height}` };
+      });
+      if (dom.customEnabled.checked) {
+        const width = Math.floor(Number(dom.customWidth.value));
+        const height = Math.floor(Number(dom.customHeight.value));
+        if (
+          !Number.isInteger(width) || width < CUSTOM_SIZE_MIN || width > CUSTOM_SIZE_MAX
+          || !Number.isInteger(height) || height < CUSTOM_SIZE_MIN || height > CUSTOM_SIZE_MAX
+        ) {
+          throw new Error(`自定义尺寸宽、高须为 ${CUSTOM_SIZE_MIN} 到 ${CUSTOM_SIZE_MAX} 之间的整数`);
+        }
+        sizes.push({ width, height, label: `${width}×${height}` });
+      }
+      const seen = new Set();
+      return sizes.filter((size) => {
+        const key = `${size.width}x${size.height}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    function createTaskRow(size) {
+      const row = document.createElement('div');
+      row.className = 'task-row';
+
+      const info = document.createElement('div');
+      const title = document.createElement('div');
+      title.className = 'task-title';
+      title.textContent = size.label;
+      const subtitle = document.createElement('div');
+      subtitle.className = 'task-subtitle';
+      subtitle.textContent = activeSource?.name || '-';
+      info.append(title, subtitle);
+
+      const progressWrap = document.createElement('div');
+      const track = document.createElement('div');
+      track.className = 'progress-track';
+      const fill = document.createElement('div');
+      fill.className = 'progress-fill';
+      track.appendChild(fill);
+      const state = document.createElement('div');
+      state.className = 'task-state';
+      state.textContent = '等待处理';
+      progressWrap.append(track, state);
+
+      const action = document.createElement('div');
+      action.textContent = '-';
+
+      row.append(info, progressWrap, action);
+      dom.taskList.appendChild(row);
+      return {
+        setProgress(value) {
+          fill.style.width = `${Math.max(0, Math.min(100, value || 0))}%`;
+        },
+        setState(text, type = 'normal') {
+          state.textContent = text;
+          state.classList.toggle('is-error', type === 'error');
+          state.classList.toggle('is-success', type === 'success');
+        },
+        setDownload(url, filename) {
+          action.replaceChildren();
+          const link = document.createElement('a');
+          link.className = 'download-link';
+          link.href = url;
+          link.download = filename;
+          link.textContent = '下载';
+          action.appendChild(link);
+        },
+      };
+    }
+
+    async function handleFile(file) {
+      const kind = detectMediaTypeFromFile(file);
+      if (!kind) {
+        setStatus('请上传视频或图片文件。', 'error');
+        return;
+      }
+      await setSourceFromBlob(file, file.name, kind, `本地文件：${file.name}`);
+    }
+
+    async function handleRemoteLoad() {
+      const raw = normalizeHttpUrl(dom.remoteUrlInput.value);
+      if (!raw) {
+        setStatus('请输入有效的 http(s) 链接。', 'error');
+        return;
+      }
+      dom.loadRemoteBtn.disabled = true;
+      setStatus('正在下载远程素材：0%');
+      try {
+        const blob = await fetchRemoteBlob(raw, (percent) => {
+          setStatus(`正在下载远程素材：${percent}%`);
+        });
+        const kind = detectMediaTypeFromUrl(raw) || detectMediaTypeFromBlob(blob);
+        if (!kind) throw new Error('无法识别素材类型，请使用视频或图片直链');
+        await setSourceFromBlob(blob, displayNameFromUrl(raw), kind, `远程链接：${raw}`);
+      } catch (error) {
+        setStatus(error?.message || '远程素材加载失败。', 'error');
+      } finally {
+        dom.loadRemoteBtn.disabled = false;
+      }
+    }
+
+    async function handleConvert() {
+      if (!activeSource || isProcessing) return;
+      let sizes;
+      try {
+        sizes = getSelectedSizes();
+      } catch (error) {
+        setStatus(error.message, 'error');
+        return;
+      }
+      if (sizes.length === 0) {
+        setStatus('请至少选择一种输出尺寸。', 'error');
+        return;
+      }
+
+      clearGenerated();
+      dom.taskList.replaceChildren();
+      isProcessing = true;
+      syncConvertButton();
+      dom.clearSourceBtn.disabled = true;
+      setStatus('开始转换...');
+
+      const sourceSnapshot = activeSource;
+      const baseName = sanitizeBaseName(sourceSnapshot.name, sourceSnapshot.kind === 'video' ? 'video' : 'image');
+      let successCount = 0;
+
+      for (const size of sizes) {
+        const task = createTaskRow(size);
+        try {
+          task.setState('处理中');
+          const blob = sourceSnapshot.kind === 'video'
+            ? await processVideoToBlob(sourceSnapshot, size.width, size.height, (percent) => {
+              task.setProgress(percent);
+              task.setState(`处理中：${Math.round(percent || 0)}%`);
+            })
+            : await processImageToBlob(sourceSnapshot, size.width, size.height, (percent) => {
+              task.setProgress(percent);
+              task.setState(`处理中：${Math.round(percent || 0)}%`);
+            });
+          const extension = getOutputExtension(blob, sourceSnapshot.kind === 'video');
+          const filename = `${baseName}_${size.width}x${size.height}.${extension}`;
+          const url = URL.createObjectURL(blob);
+          generatedItems.push({ url, filename });
+          task.setProgress(100);
+          task.setState(`完成：${filename}`, 'success');
+          task.setDownload(url, filename);
+          successCount += 1;
+        } catch (error) {
+          task.setProgress(0);
+          task.setState(error?.message || '转换失败', 'error');
+        }
+      }
+
+      isProcessing = false;
+      syncConvertButton();
+      dom.clearSourceBtn.disabled = false;
+      dom.clearResultsBtn.disabled = generatedItems.length === 0;
+      dom.downloadAllBtn.disabled = generatedItems.length === 0;
+      setStatus(
+        successCount > 0 ? `转换完成：${successCount}/${sizes.length}` : '转换失败，请查看结果明细。',
+        successCount > 0 ? 'success' : 'error'
+      );
+    }
+
+    function setInputMode(mode) {
+      const isUpload = mode === 'upload';
+      dom.uploadPane.classList.toggle('hidden', !isUpload);
+      dom.urlPane.classList.toggle('hidden', isUpload);
+      $$('.segment').forEach((button) => {
+        button.setAttribute('aria-selected', String(button.dataset.mode === mode));
+      });
+    }
+
+    $$('.segment').forEach((button) => {
+      button.addEventListener('click', () => setInputMode(button.dataset.mode));
+    });
+
+    dom.fileInput.addEventListener('change', () => {
+      const file = dom.fileInput.files?.[0];
+      if (file) handleFile(file);
+    });
+
+    dom.dropzone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      dom.dropzone.classList.add('is-over');
+    });
+
+    dom.dropzone.addEventListener('dragleave', () => {
+      dom.dropzone.classList.remove('is-over');
+    });
+
+    dom.dropzone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dom.dropzone.classList.remove('is-over');
+      const file = event.dataTransfer?.files?.[0];
+      if (file) handleFile(file);
+    });
+
+    dom.remoteUrlInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') handleRemoteLoad();
+    });
+
+    dom.loadRemoteBtn.addEventListener('click', handleRemoteLoad);
+    dom.clearSourceBtn.addEventListener('click', clearSource);
+    dom.convertBtn.addEventListener('click', handleConvert);
+    dom.clearResultsBtn.addEventListener('click', clearGenerated);
+    dom.downloadAllBtn.addEventListener('click', () => {
+      generatedItems.forEach((item, index) => {
+        setTimeout(() => {
+          const link = document.createElement('a');
+          link.href = item.url;
+          link.download = item.filename;
+          link.click();
+        }, index * 180);
+      });
+    });
+
+    dom.customEnabled.addEventListener('change', () => {
+      const enabled = dom.customEnabled.checked;
+      dom.customWidth.disabled = !enabled;
+      dom.customHeight.disabled = !enabled;
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if (activeSource?.url) URL.revokeObjectURL(activeSource.url);
+      generatedItems.forEach((item) => URL.revokeObjectURL(item.url));
+    });
+
+    clearPreview();
+    syncConvertButton();
+  </script>
+</body>
+</html>

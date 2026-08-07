@@ -75,6 +75,17 @@ const checkLoginUrl = 'https://guangdada.net/modules/auth/login';
 /** 国际版创意列表（napi Referer 基准） */
 const DISPLAY_ADS_URL_GLOBAL = 'https://guangdada.net/modules/creative/display-ads';
 
+async function gotoGuangdadaLoginPage(page) {
+    try {
+        await page.goto(loginPageUrl, { timeout: 60 * 1000, waitUntil: 'domcontentloaded' });
+    } catch (error) {
+        const hasLoginForm = await page.$(selectors.loginForm).then(Boolean).catch(() => false);
+        if (!hasLoginForm) throw error;
+        logger.warn('[广大大] 登录页导航等待超时，但登录表单已加载，继续登录流程');
+    }
+    await page.waitForSelector(selectors.loginForm, { timeout: 60 * 1000 });
+}
+
 /**
  * 国际版 napi 请求依赖国际版路径；若当前停在国内版 /modules/cn/... 则切回国际版 display-ads
  */
@@ -1107,10 +1118,8 @@ export const login = async (email, password) => {
     // 设置反检测措施
     await setupAntiDetection(page);
     try {
-        await page.goto(loginPageUrl, { timeout: 120 * 1000, waitUntil: 'networkidle2' });
-        
         // 等待表单加载
-        await page.waitForSelector(selectors.loginForm, { timeout: 30000 });
+        await gotoGuangdadaLoginPage(page);
         logger.info('登录表单已加载');
 
         // 输入邮箱

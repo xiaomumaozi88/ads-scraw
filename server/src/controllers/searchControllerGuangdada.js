@@ -5,6 +5,7 @@ import {
   getGuangdadaQuotaStatus,
 } from '../services/guangdadaQuotaService.js';
 import { auditPlatformRequest } from '../services/auditLogService.js';
+import { scheduleSearchResultIngestion } from '../services/creativeIntelligenceAutoSyncService.js';
 
 const CREATIVE_RANK_CACHE_TTL_MS = 10 * 60 * 1000;
 const CREATIVE_RANK_CACHE_LIMIT = 120;
@@ -243,6 +244,13 @@ export const search = async (req, res) => {
       }, quotaResult));
     }
 
+    scheduleSearchResultIngestion({
+      platform: 'guangdada',
+      result,
+      searchParams,
+      operatorProfile: req.iamProfile,
+    });
+
     res.status(200).json(withQuotaStatus({
       data: result.data,
       success: true,
@@ -476,6 +484,13 @@ export const creativeRankList = async (req, res) => {
         message: '创意排行榜命中缓存，未扣减搜索额度',
         metadata: { chartType, appType, page, pageSize, cacheHit: true },
       });
+      scheduleSearchResultIngestion({
+        platform: 'guangdada',
+        result: cached.payload,
+        searchParams: requestBody,
+        operatorProfile: req.iamProfile,
+        sourceChannel: 'rank_cache_result_auto_sync',
+      });
       return res.status(200).json({
         ...cached.payload,
         cached: true,
@@ -519,6 +534,13 @@ export const creativeRankList = async (req, res) => {
       message: result.message,
     }, quotaResult);
     if (result.success) {
+      scheduleSearchResultIngestion({
+        platform: 'guangdada',
+        result,
+        searchParams: requestBody,
+        operatorProfile: req.iamProfile,
+        sourceChannel: 'rank_result_auto_sync',
+      });
       setCreativeRankCacheEntry(cacheKey, responsePayload);
     }
 

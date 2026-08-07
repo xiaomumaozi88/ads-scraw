@@ -4,6 +4,7 @@ import {
   isExternalSearchDebugEnabled,
   pushExternalSearchDebugEntry,
 } from '../utils/externalSearchDebugStore.js';
+import { scheduleSearchResultIngestion } from '../services/creativeIntelligenceAutoSyncService.js';
 
 function getKeyWord(req) {
   const v = req.body?.keyWord ?? req.query?.keyWord;
@@ -701,6 +702,13 @@ export const externalInsightrackrTop50 = async (req, res) => {
         pagesFetched,
       },
     };
+    scheduleSearchResultIngestion({
+      platform: 'insightrackr',
+      result: { success: true, data: { list: merged } },
+      searchParams: payload,
+      operatorProfile: req.iamProfile,
+      sourceChannel: 'external_top_query_auto_sync',
+    });
     finalizeExternalDebugSession(debugSession, okBody);
     return res.status(200).json(okBody);
   } catch (error) {

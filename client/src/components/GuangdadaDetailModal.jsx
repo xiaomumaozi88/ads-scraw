@@ -32,6 +32,7 @@ import {
   getGuangdadaAdvertiserDetail,
   getProxiedMediaUrl,
 } from '../utils/api';
+import { getGuangdadaCreativeMedia } from '../utils/guangdadaCreativeMedia';
 import { GUANGDADA_COUNTRY_CODE_TO_CN } from '../data/guangdadaCountries';
 import {
   formatGuangdadaChannel,
@@ -48,30 +49,7 @@ import './GuangdadaDetailModal.css';
  * 从列表项解析缩略图/视频 URL（与 CreativeCardGuangdada 一致）
  */
 function getMediaUrls(item) {
-  let thumbnailUrl = '';
-  let videoUrl = '';
-  let htmlUrl = '';
-  const resource = Array.isArray(item?.resource_urls) && item.resource_urls.length > 0 ? item.resource_urls[0] : null;
-  const rawVideoUrl = resource?.video_url != null ? String(resource.video_url).trim() : '';
-  const isVideo =
-    Number(item?.ads_type) === 2 ||
-    Number(resource?.type) === 2 ||
-    rawVideoUrl !== '';
-  if (resource) {
-    const r = resource;
-    if (r.type === 4 && r.html_url && String(r.html_url).trim() !== '') {
-      htmlUrl = r.html_url.trim();
-    }
-    if (isVideo) {
-      videoUrl = rawVideoUrl;
-      thumbnailUrl = item.preview_img_url || r.image_url || '';
-    } else {
-      thumbnailUrl = r.image_url || item.preview_img_url || '';
-    }
-  } else {
-    thumbnailUrl = item.preview_img_url || '';
-  }
-  return { thumbnailUrl, videoUrl, isVideo, hasPlayableVideo: Boolean(videoUrl), htmlUrl };
+  return getGuangdadaCreativeMedia(item);
 }
 
 function toValueList(value) {
@@ -355,8 +333,8 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload, onQuotaC
     return raw ? { ...item, ...raw } : item;
   }, [detailData?.raw, item]);
 
-  const { thumbnailUrl, videoUrl, isVideo, hasPlayableVideo, htmlUrl } = useMemo(
-    () => (mergedItem ? getMediaUrls(mergedItem) : { thumbnailUrl: '', videoUrl: '', isVideo: false, hasPlayableVideo: false, htmlUrl: '' }),
+  const { thumbnailUrl, videoUrl, isVideo, hasPlayableVideo, downloadHtmlUrl, isPlayableAd } = useMemo(
+    () => (mergedItem ? getMediaUrls(mergedItem) : { thumbnailUrl: '', videoUrl: '', isVideo: false, hasPlayableVideo: false, downloadHtmlUrl: '', isPlayableAd: false }),
     [mergedItem]
   );
 
@@ -704,10 +682,11 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload, onQuotaC
 
   const handleDownload = (e) => {
     e.stopPropagation();
+    if (isPlayableAd && !downloadHtmlUrl) return;
     const name = (title || appName || displayItem.ad_key || 'creative').replace(/[\\/:*?"<>|]/g, '').slice(0, 80) || 'creative';
-    // HTML 类型：直接下载 .html，不走尺寸弹窗
-    if (htmlUrl) {
-      fetch(htmlUrl, { mode: 'cors', referrerPolicy: 'no-referrer' })
+    // HTML / 试玩广告：直接下载 .html，不走尺寸弹窗
+    if (downloadHtmlUrl) {
+      fetch(getProxiedMediaUrl(downloadHtmlUrl), { mode: 'cors', referrerPolicy: 'no-referrer' })
         .then((r) => r.text())
         .then((text) => {
           const blob = new Blob([text], { type: 'text/html;charset=utf-8' });
@@ -717,7 +696,7 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload, onQuotaC
           a.click();
           URL.revokeObjectURL(a.href);
         })
-        .catch(() => window.open(htmlUrl, '_blank', 'noopener'));
+        .catch(() => window.open(downloadHtmlUrl, '_blank', 'noopener'));
       return;
     }
     const url = hasPlayableVideo ? videoUrl : thumbnailUrl;
@@ -733,6 +712,12 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload, onQuotaC
         URL.revokeObjectURL(a.href);
       })
       .catch(() => window.open(url, '_blank', 'noopener'));
+  };
+
+  const handleOpenPlayable = (e) => {
+    e.stopPropagation();
+    if (!isPlayableAd || !downloadHtmlUrl) return;
+    window.open(downloadHtmlUrl, '_blank', 'noopener,noreferrer');
   };
 
   const overviewTab = (
@@ -1199,14 +1184,15 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload, onQuotaC
           </div>
           <div className="guangdada-detail-creative-area">
             <div className="guangdada-detail-image-wrap">
-              {htmlUrl ? (
-                <div className="guangdada-detail-iframe-wrap">
+              {downloadHtmlUrl ? (
+                <div className={`guangdada-detail-iframe-wrap${isPlayableAd ? ' guangdada-detail-iframe-wrap--playable' : ''}`}>
                   <iframe
-                    src={htmlUrl}
-                    title="创意预览"
+                    src={downloadHtmlUrl}
+                    title={isPlayableAd ? '试玩广告' : '创意预览'}
                     className="guangdada-detail-media guangdada-detail-iframe"
                     referrerPolicy="no-referrer"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                    allow="autoplay; fullscreen; gamepad"
                     scrolling="no"
                   />
                 </div>
@@ -1251,9 +1237,10 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload, onQuotaC
                 <Button
                   type="link"
                   size="small"
+                  disabled={isPlayableAd && !downloadHtmlUrl}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (htmlUrl) {
+                    if (downloadHtmlUrl) {
                       handleDownload(e);
                     } else if (onRequestDownload && displayItem) {
                       // 视频、图片均走尺寸选择弹窗
@@ -1265,6 +1252,15 @@ function GuangdadaDetailModal({ item, open, onClose, onRequestDownload, onQuotaC
                 >
                   下载素材
                 </Button>
+                {isPlayableAd && downloadHtmlUrl && (
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={handleOpenPlayable}
+                  >
+                    打开试玩
+                  </Button>
+                )}
                 {(displayItem?.store_url || detailData?.raw?.store_url) && (
                   <AntdTooltip title={displayItem?.store_url || detailData?.raw?.store_url || ''}>
                     <a

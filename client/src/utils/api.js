@@ -239,6 +239,18 @@ export async function listOperationAudits(options = {}) {
   return data.data ?? { items: [], total: 0 };
 }
 
+export async function getOperationAudit(id) {
+  const res = await apiFetch(`${API_BASE}/health/operation-audits/${encodeURIComponent(id)}`, {
+    credentials: 'same-origin',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `读取操作审计详情失败: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.data?.item ?? null;
+}
+
 export async function getOperationAuditSummary(options = {}) {
   const params = new URLSearchParams();
   if (options.platform) params.set('platform', options.platform);

@@ -1,47 +1,15 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Popover } from 'antd';
 import { getProxiedMediaUrl, getDownloadImageUrl } from '../utils/api';
+import { getGuangdadaCreativeMedia } from '../utils/guangdadaCreativeMedia';
 
 function CreativeCardGuangdada({ item, batchMode = false, selected = false, onToggleSelect, onEnterBatchMode, onOpenDetail, onRequestVideoDownload, onBlockAdvertiser, onBeforeDownload }) {
   // 使用 useMemo 缓存计算结果，避免每次渲染都重新计算
-  const { isVideo, hasPlayableVideo, thumbnailUrl, videoUrl, videoDuration, htmlUrl } = useMemo(() => {
-    let isVideo = false;
-    let thumbnailUrl = '';
-    let videoUrl = '';
-    let videoDuration = null;
-    let htmlUrl = '';
-    
-    const resource = Array.isArray(item.resource_urls) && item.resource_urls.length > 0 ? item.resource_urls[0] : null;
-    const rawVideoUrl = resource?.video_url != null ? String(resource.video_url).trim() : '';
-    // 素材类型可以是视频，但只有存在 video_url 时才展示播放入口。
-    const adsTypeIsVideo = Number(item.ads_type) === 2;
-    const resourceTypeIsVideo = Number(resource?.type) === 2;
-    const hasVideoUrl = rawVideoUrl !== '';
-    
-    isVideo = adsTypeIsVideo || resourceTypeIsVideo || hasVideoUrl;
-    const hasPlayableVideo = Boolean(hasVideoUrl);
-    
-    if (resource) {
-      // type 4：HTML 资源，支持 iframe 展示
-      if (resource.type === 4 && resource.html_url && String(resource.html_url).trim() !== '') {
-        htmlUrl = resource.html_url.trim();
-      }
-      if (isVideo) {
-        // 视频资源：优先使用 preview_img_url 作为预览图，否则使用 resource.image_url
-        videoUrl = rawVideoUrl;
-        thumbnailUrl = item.preview_img_url || resource.image_url || '';
-      } else {
-        // 图片资源：优先使用 resource.image_url，其次使用 preview_img_url
-        thumbnailUrl = resource.image_url || item.preview_img_url || '';
-      }
-    } else {
-      // 如果没有 resource_urls，使用 preview_img_url
-      thumbnailUrl = item.preview_img_url || '';
-    }
-    
-    videoDuration = item.video_duration || null;
-    
-    return { isVideo, hasPlayableVideo, thumbnailUrl, videoUrl, videoDuration, htmlUrl };
+  const { isVideo, hasPlayableVideo, thumbnailUrl, videoUrl, videoDuration, htmlUrl, downloadHtmlUrl, isPlayableAd } = useMemo(() => {
+    return {
+      ...getGuangdadaCreativeMedia(item),
+      videoDuration: item.video_duration || null,
+    };
   }, [item.resource_urls, item.preview_img_url, item.video_duration, item.ad_key, item.ads_type]);
 
   // 视频时长展示：≥60s 为 "1m12s"，否则 "59s"
@@ -194,17 +162,18 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
 
   const handleDownload = async (e) => {
     e.stopPropagation();
-    // 视频、图片均走尺寸选择弹窗；仅 HTML 直接下载
-    if (onRequestVideoDownload && !htmlUrl) {
+    if (isPlayableAd && !downloadHtmlUrl) return;
+    // 视频、图片均走尺寸选择弹窗；HTML / 试玩广告直接下载 html
+    if (onRequestVideoDownload && !downloadHtmlUrl) {
       onRequestVideoDownload(item);
       return;
     }
-    if (htmlUrl) {
-      const ok = await requestDownloadQuota({ kind: 'html', sourceUrl: htmlUrl });
+    if (downloadHtmlUrl) {
+      const ok = await requestDownloadQuota({ kind: isPlayableAd ? 'playable_html' : 'html', sourceUrl: downloadHtmlUrl });
       if (!ok) return;
       const baseName = getDownloadBaseName();
       const filename = `${baseName}_${Date.now()}.html`;
-      fetch(htmlUrl, { mode: 'cors', referrerPolicy: 'no-referrer' })
+      fetch(getProxiedMediaUrl(downloadHtmlUrl), { mode: 'cors', referrerPolicy: 'no-referrer' })
         .then((res) => res.text())
         .then((text) => {
           const blob = new Blob([text], { type: 'text/html;charset=utf-8' });
@@ -215,7 +184,7 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
           URL.revokeObjectURL(a.href);
         })
         .catch(() => {
-          window.open(htmlUrl, '_blank', 'noopener');
+          window.open(downloadHtmlUrl, '_blank', 'noopener');
         });
       return;
     }
@@ -242,7 +211,7 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
         window.open(url, '_blank', 'noopener');
       });
   };
-  const downloadUrl = htmlUrl ? htmlUrl : (hasPlayableVideo ? videoUrl : thumbnailUrl);
+  const downloadUrl = isPlayableAd ? downloadHtmlUrl : (downloadHtmlUrl || (hasPlayableVideo ? videoUrl : thumbnailUrl));
 
   const handleCardClick = (e) => {
     if (
@@ -444,7 +413,10 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
       ) : null}
       
       {/* 媒体预览区域：支持图片、视频预览图或 type=4 的 html_url iframe */}
-      <div className={`card-thumbnail${htmlUrl ? ' card-thumbnail--html' : ''}`}>
+      <div
+        className={`card-thumbnail${htmlUrl ? ' card-thumbnail--html' : ''}${isPlayableAd ? ' card-thumbnail--playable-ad' : ''}`}
+        title={isPlayableAd ? '请您点击进入创意详情查看完整试玩广告' : undefined}
+      >
         {htmlUrl ? (
           <div className="card-thumbnail-iframe-wrap">
             <iframe
@@ -490,10 +462,18 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
           {item.resume_advertising_flag && (
             <div className="resume-badge">重投</div>
           )}
+          {isPlayableAd && (
+            <div className="playable-badge">试玩广告</div>
+          )}
           {htmlUrl && (
             <div className="html-badge">HTML</div>
           )}
         </div>
+        {isPlayableAd && (
+          <div className="card-thumbnail-playable-hint">
+            请您点击进入创意详情查看完整试玩广告
+          </div>
+        )}
         
         {/* hover 播放按钮时在缩略图上叠加播放视频，移出时停止并清空 src 控制内存 */}
         {hasPlayableVideo && (
@@ -566,8 +546,8 @@ function CreativeCardGuangdada({ item, batchMode = false, selected = false, onTo
         {/* 下载按钮 - 底部，hover 时显示（参考 Insightrackr） */}
         {downloadUrl && (
           <div className="card-thumbnail-download" onClick={handleDownload}>
-            <span className="card-download-icon" title={htmlUrl ? '下载HTML' : hasPlayableVideo ? '下载视频' : '下载图片'}>⬇</span>
-            <span className="card-download-text">{htmlUrl ? '下载HTML' : hasPlayableVideo ? '下载视频' : '下载图片'}</span>
+            <span className="card-download-icon" title={downloadHtmlUrl ? '下载HTML' : hasPlayableVideo ? '下载视频' : '下载图片'}>⬇</span>
+            <span className="card-download-text">{downloadHtmlUrl ? '下载HTML' : hasPlayableVideo ? '下载视频' : '下载图片'}</span>
           </div>
         )}
       </div>

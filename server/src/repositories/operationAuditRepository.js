@@ -15,6 +15,7 @@ export const AUDIT_ACTION = {
   PLATFORM_VISIBILITY_UPDATE: 'platform_visibility_update',
   PLATFORM_CREDENTIAL_UPDATE: 'platform_credential_update',
   PLATFORM_REQUEST: 'platform_request',
+  MATERIAL_INGESTION_SYNC: 'material_ingestion_sync',
   MATERIAL_BATCH_SUBMIT: 'material_batch_submit',
   TRANSCODE_JOB_SUBMIT: 'transcode_job_submit',
 };
@@ -77,7 +78,28 @@ function formatBeijingCreatedAt(value) {
   }
 }
 
-function rowToAudit(row) {
+function compactAuditMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object') return metadata;
+  const hasIngestionDebugDetails = Boolean(metadata.ingestionRequest || metadata.ingestionResponse);
+  if (!hasIngestionDebugDetails) return metadata;
+  const {
+    ingestionRequest,
+    ingestionResponse,
+    upstreamResponse,
+    ...rest
+  } = metadata;
+  return {
+    ...rest,
+    upstreamResponse: upstreamResponse ? {
+      status: upstreamResponse.status ?? upstreamResponse.data?.status ?? null,
+      receipt_id: upstreamResponse.data?.receipt_id ?? null,
+      accepted_count: upstreamResponse.data?.accepted_count ?? null,
+    } : undefined,
+    hasIngestionDebugDetails,
+  };
+}
+
+function rowToAudit(row, { compactMetadata = false } = {}) {
   let metadata = null;
   if (row.metadata) {
     try {
@@ -86,6 +108,7 @@ function rowToAudit(row) {
       metadata = null;
     }
   }
+  if (compactMetadata) metadata = compactAuditMetadata(metadata);
   const createdAt = normalizeCreatedAtValue(row.created_at ?? row.createdAt);
   return {
     id: row.id,
@@ -135,11 +158,18 @@ function listLocalAudits({ page = 1, pageSize = 20, platform = null, action = nu
   const offset = (Math.max(1, page) - 1) * pageSize;
   const slice = items.slice(offset, offset + pageSize);
   return {
-    items: slice.map(rowToAudit),
+    items: slice.map((row) => rowToAudit(row, { compactMetadata: true })),
     total,
     page: Math.max(1, page),
     pageSize,
   };
+}
+
+function getLocalAuditById(id) {
+  loadLocalAuditsFromFile();
+  const numericId = Number(id);
+  const row = localAudits.find((item) => Number(item.id) === numericId);
+  return row ? rowToAudit(row) : null;
 }
 
 function getOperatorKey(row) {
@@ -298,7 +328,7 @@ export async function listOperationAudits({
     );
 
     return {
-      items: rows.map(rowToAudit),
+      items: rows.map((row) => rowToAudit(row, { compactMetadata: true })),
       total: Number(total) || 0,
       page: Math.max(1, page),
       pageSize,
@@ -306,6 +336,25 @@ export async function listOperationAudits({
   } catch (err) {
     console.warn('[Audit] MySQL 读取失败，回退本地文件:', err.message);
     return listLocalAudits({ page, pageSize, platform, action });
+  }
+}
+
+export async function getOperationAuditById(id) {
+  const numericId = Number(id);
+  if (!Number.isInteger(numericId) || numericId <= 0) return null;
+  if (!isDbEnabled()) {
+    return getLocalAuditById(numericId);
+  }
+
+  try {
+    const [rows] = await getPool().query(
+      'SELECT * FROM operation_audits WHERE id = ? LIMIT 1',
+      [numericId]
+    );
+    return rows[0] ? rowToAudit(rows[0]) : null;
+  } catch (err) {
+    console.warn('[Audit] MySQL 读取详情失败，回退本地文件:', err.message);
+    return getLocalAuditById(numericId);
   }
 }
 

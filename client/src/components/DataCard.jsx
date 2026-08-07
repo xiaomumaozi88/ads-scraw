@@ -22,6 +22,7 @@ import {
   getGuangdadaUpstreamPage,
   withGuangdadaPaging,
 } from '../utils/guangdadaPaging';
+import { scrollPageToTop } from '../utils/scrollToTop';
 import SearchForm from './SearchForm';
 import GuangdadaDomesticSearchForm from './GuangdadaDomesticSearchForm';
 import GuangdadaDomesticShortcutBar from './GuangdadaDomesticShortcutBar';
@@ -921,9 +922,7 @@ function DataCard({
             onGuangdadaDownloadQuotaConsume={handleGuangdadaDownloadQuotaConsume}
             onGuangdadaQuotaChanged={handleGuangdadaQuotaChanged}
             onPageChange={(page) => {
-              window.scrollTo(0, 0);
-              const scrollEl = document.querySelector('.data-card');
-              if (scrollEl) scrollEl.scrollTop = 0;
+              scrollPageToTop(null, { behavior: 'auto' });
               const base = domesticLastPayloadRef.current;
               if (!base) return;
               setDomesticListPage(page);
@@ -965,9 +964,7 @@ function DataCard({
             onGuangdadaDownloadQuotaConsume={platform === 'guangdada' ? handleGuangdadaDownloadQuotaConsume : undefined}
             onGuangdadaQuotaChanged={platform === 'guangdada' ? handleGuangdadaQuotaChanged : undefined}
             onPageChange={(page) => {
-              window.scrollTo(0, 0);
-              const scrollEl = document.querySelector('.data-card');
-              if (scrollEl) scrollEl.scrollTop = 0;
+              scrollPageToTop(null, { behavior: 'auto' });
               if (effectiveParams) {
                 const nextUpstreamPage = platform === 'guangdada' ? getGuangdadaUpstreamPage(page) : null;
                 const currentUpstreamPage = platform === 'guangdada' ? (Number(effectiveParams.page) || 1) : null;

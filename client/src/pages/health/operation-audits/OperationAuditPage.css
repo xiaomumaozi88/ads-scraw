@@ -36,3 +36,23 @@
 .operation-audit-page__table-card .ant-card-body {
   padding-top: 8px;
 }
+
+.operation-audit-page__json-block {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.operation-audit-page__json-block pre {
+  max-height: 360px;
+  margin: 8px 0 0;
+  padding: 12px;
+  overflow: auto;
+  background: #f6f8fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #1f2937;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

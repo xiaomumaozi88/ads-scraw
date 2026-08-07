@@ -879,11 +879,10 @@ function SearchForm({
     { value: 'app_preorder', label: '应用预约' },
     { value: 'other', label: '其它' },
   ];
-  // 创意形式：从产品 HTML 提取的 3 项
+  // 创意形式：从产品 HTML 提取的 2 项
   const GUANGDADA_CREATIVE_FORM_OPTIONS = [
     { value: '1', label: '广告原帖' },
     { value: '2', label: '动态广告' },
-    { value: '3', label: '试玩广告' },
   ];
   // 重投广告：从产品 HTML 提取的 2 项
   const GUANGDADA_RETARGETING_OPTIONS = [
@@ -1569,6 +1568,7 @@ function SearchForm({
                     <option value="">图片&amp;视频</option>
                     <option value="图片">图片</option>
                     <option value="视频">视频</option>
+                    <option value="试玩广告">试玩广告</option>
                     <option value="轮播">轮播</option>
                     <option value="HTML">HTML</option>
                   </select>

@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="${ROOT}/.env"
+LOCAL_SRC="${ROOT}/.env.local"
 OUT="${1:-${ROOT}/ads-scraw-production.env}"
 
 if [ ! -f "$SRC" ]; then
@@ -12,10 +13,16 @@ if [ ! -f "$SRC" ]; then
   exit 1
 fi
 
+ENV_SOURCES=("$SRC")
+if [ -f "$LOCAL_SRC" ]; then
+  ENV_SOURCES+=("$LOCAL_SRC")
+fi
+
 {
   echo "# 由 scripts/prepare-production-env.sh 生成，勿提交 Git"
   echo "# $(date -Iseconds)"
-  grep -E '^(NODE_ENV|PORT|IAM_|APP_|DB_|PLATFORM_|INSIGHTRACKR_|DOCKER_|CONTAINER_|CHROME_|FFMPEG_|BROWSER_|CORS_|COOKIE_)' "$SRC" \
+  cat "${ENV_SOURCES[@]}" \
+    | grep -E '^(NODE_ENV|PORT|IAM_|APP_|DB_|PLATFORM_|INSIGHTRACKR_|DOCKER_|CONTAINER_|CHROME_|FFMPEG_|BROWSER_|CORS_|COOKIE_|CREATIVE_INTELLIGENCE_)' \
     | grep -v '^VITE_' \
     | grep -v '^DEV_'
   # HTTP 部署（IP 直连）必须显式关闭 Secure Cookie

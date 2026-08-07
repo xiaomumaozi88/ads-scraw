@@ -1,5 +1,6 @@
 import * as puppeteerService from '../services/puppeteerServiceInsightrackr.js';
 import { logger } from '../utils/logger.js';
+import { scheduleSearchResultIngestion } from '../services/creativeIntelligenceAutoSyncService.js';
 
 /**
  * 构建搜索请求参数
@@ -93,6 +94,12 @@ export const search = async (req, res) => {
                 message: '服务器返回数据格式异常'
             });
         }
+        scheduleSearchResultIngestion({
+            platform: 'insightrackr',
+            result: data,
+            searchParams,
+            operatorProfile: req.iamProfile,
+        });
         res.json({...data});
     } catch (error) {
         console.error(error);
@@ -258,4 +265,3 @@ export const distributeAdfaction = async (req, res) => {
         });
     }
 };
-

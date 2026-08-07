@@ -6,12 +6,13 @@ import {
   Card,
   Select,
   Space,
+  Spin,
   Table,
   Tag,
   Typography,
 } from 'antd';
 import { ArrowLeftOutlined, ReloadOutlined } from '@ant-design/icons';
-import { getOperationAuditSummary, listOperationAudits } from '../../../utils/api';
+import { getOperationAudit, getOperationAuditSummary, listOperationAudits } from '../../../utils/api';
 import { ROUTES } from '../../../config/routes';
 import { formatBeijingTime } from '../utils/format';
 import './OperationAuditPage.css';
@@ -33,6 +34,7 @@ const ACTION_OPTIONS = [
   { value: 'platform_clear_login', label: '清除登录' },
   { value: 'platform_visibility_update', label: '平台显隐' },
   { value: 'platform_request', label: '平台请求/额度' },
+  { value: 'material_ingestion_sync', label: '素材入库同步' },
   { value: 'material_batch_submit', label: '素材批次提交' },
   { value: 'transcode_job_submit', label: '转码任务提交' },
 ];
@@ -50,6 +52,7 @@ const ACTION_LABEL = {
   platform_clear_login: '清除登录',
   platform_visibility_update: '平台显隐',
   platform_request: '平台请求/额度',
+  material_ingestion_sync: '素材入库同步',
   material_batch_submit: '素材批次提交',
   transcode_job_submit: '转码任务提交',
 };
@@ -81,9 +84,32 @@ function formatQuotaBreakdown(quotaByKey = {}) {
     .join('、') || '-';
 }
 
-function renderAuditMetadata(row) {
+function stringifyJson(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function renderJsonBlock(title, value) {
+  if (!value) return null;
+  const text = stringifyJson(value);
+  return (
+    <div className="operation-audit-page__json-block">
+      <Text strong copyable={{ text }}>{title}</Text>
+      <pre>{text}</pre>
+    </div>
+  );
+}
+
+function renderAuditMetadata(row, options = {}) {
   const metadata = row.metadata;
   if (!metadata || typeof metadata !== 'object') return null;
+  const detailMetadata = options.detailRow?.metadata && typeof options.detailRow.metadata === 'object'
+    ? options.detailRow.metadata
+    : null;
+  const fullMetadata = detailMetadata || metadata;
   if (row.action === 'platform_request') {
     return (
       <div style={{ padding: '4px 0' }}>
@@ -118,6 +144,59 @@ function renderAuditMetadata(row) {
               ))}
             </div>
           ) : null}
+        </Space>
+      </div>
+    );
+  }
+  if (row.action === 'material_ingestion_sync') {
+    const upstreamResponse = fullMetadata.upstreamResponse
+      ? JSON.stringify(fullMetadata.upstreamResponse).slice(0, 500)
+      : '';
+    const enrichment = fullMetadata.enrichment || metadata.enrichment;
+    return (
+      <div style={{ padding: '4px 0' }}>
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Text type="secondary">
+            通道：{metadata.sourceChannel || '-'} · 批次 {metadata.clientBatchId || '-'} · requestId {metadata.requestId || '-'}
+          </Text>
+          <Text type="secondary">
+            返回/已选/送入/上游接收/丢弃：{metadata.itemCount ?? '-'} / {metadata.selectedCount ?? '-'} / {metadata.sentCount ?? '-'} / {metadata.acceptedCount ?? '-'} / {metadata.droppedCount ?? '-'}
+            {metadata.upstreamStatus ? ` · 上游状态 ${metadata.upstreamStatus}` : ''}
+          </Text>
+          {enrichment ? (
+            <Text type="secondary">
+              详情补全：候选 {enrichment.candidateCount ?? '-'} · 请求 {enrichment.requestedCount ?? '-'} · 缓存 {enrichment.cachedCount ?? '-'} · 成功 {enrichment.enrichedCount ?? '-'} · 上限 {enrichment.detailLimit ?? '-'}
+              {enrichment.stoppedReason ? ` · 停止原因 ${enrichment.stoppedReason}` : ''}
+            </Text>
+          ) : null}
+          {metadata.receiptId ? (
+            <Text copyable={{ text: metadata.receiptId }} type="secondary">receipt_id：{metadata.receiptId}</Text>
+          ) : null}
+          {metadata.status != null || metadata.code ? (
+            <Text type="secondary">
+              错误：HTTP {metadata.status ?? '-'}{metadata.code ? ` · ${metadata.code}` : ''}
+            </Text>
+          ) : null}
+          {options.detailLoading ? (
+            <Text type="secondary">
+              <Spin size="small" /> 正在读取完整推送参数和返回...
+            </Text>
+          ) : null}
+          {options.detailError ? (
+            <Text type="danger">读取完整推送详情失败：{options.detailError}</Text>
+          ) : null}
+          {upstreamResponse ? (
+            <Paragraph
+              copyable={{ text: JSON.stringify(fullMetadata.upstreamResponse, null, 2) }}
+              ellipsis={{ rows: 2, expandable: true }}
+              style={{ margin: 0 }}
+              type="secondary"
+            >
+              上游响应：{upstreamResponse}
+            </Paragraph>
+          ) : null}
+          {renderJsonBlock('实际推送请求', fullMetadata.ingestionRequest)}
+          {renderJsonBlock('实际上游返回', fullMetadata.ingestionResponse || fullMetadata.upstreamResponse)}
         </Space>
       </div>
     );
@@ -185,6 +264,9 @@ function OperationAuditPage() {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summary, setSummary] = useState({ items: [], days: 7 });
   const [error, setError] = useState(null);
+  const [auditDetails, setAuditDetails] = useState({});
+  const [auditDetailLoading, setAuditDetailLoading] = useState({});
+  const [auditDetailErrors, setAuditDetailErrors] = useState({});
 
   const fetchAudits = useCallback(() => {
     setLoading(true);
@@ -229,6 +311,35 @@ function OperationAuditPage() {
   useEffect(() => {
     fetchAudits();
   }, [fetchAudits]);
+
+  const loadAuditDetail = useCallback((row, { force = false } = {}) => {
+    if (!row?.id || row.action !== 'material_ingestion_sync') return Promise.resolve(null);
+    if (!force && auditDetails[row.id]) return Promise.resolve(auditDetails[row.id]);
+    setAuditDetailLoading((prev) => ({ ...prev, [row.id]: true }));
+    setAuditDetailErrors((prev) => ({ ...prev, [row.id]: null }));
+    return getOperationAudit(row.id)
+      .then((detail) => {
+        setAuditDetails((prev) => ({ ...prev, [row.id]: detail }));
+        return detail;
+      })
+      .catch((err) => {
+        setAuditDetailErrors((prev) => ({ ...prev, [row.id]: err?.message || '加载失败' }));
+        return null;
+      })
+      .finally(() => {
+        setAuditDetailLoading((prev) => ({ ...prev, [row.id]: false }));
+      });
+  }, [auditDetails]);
+
+  const renderExpandedAuditMetadata = useCallback((row) => renderAuditMetadata(row, {
+    detailRow: auditDetails[row.id],
+    detailLoading: auditDetailLoading[row.id],
+    detailError: auditDetailErrors[row.id],
+  }), [auditDetails, auditDetailErrors, auditDetailLoading]);
+
+  const handleAuditRowExpand = useCallback((expanded, row) => {
+    if (expanded) loadAuditDetail(row);
+  }, [loadAuditDetail]);
 
   const columns = [
     {
@@ -426,7 +537,8 @@ function OperationAuditPage() {
             },
           }}
           expandable={{
-            expandedRowRender: renderAuditMetadata,
+            expandedRowRender: renderExpandedAuditMetadata,
+            onExpand: handleAuditRowExpand,
             rowExpandable: (row) => !!row.metadata,
           }}
           scroll={{ x: 960 }}

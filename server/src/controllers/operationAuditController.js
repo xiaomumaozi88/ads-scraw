@@ -1,5 +1,6 @@
 import {
   AUDIT_ACTION,
+  getOperationAuditById,
   getAuditStorageMode,
   listOperationAudits,
   summarizeOperationAudits,
@@ -24,6 +25,32 @@ export const getOperationAudits = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message || '读取操作审计失败' });
+  }
+};
+
+/** GET /api/health/operation-audits/:id — 操作审计详情 */
+export const getOperationAuditDetail = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ success: false, message: '无效的审计记录 ID' });
+      return;
+    }
+    const item = await getOperationAuditById(id);
+    if (!item) {
+      res.status(404).json({ success: false, message: '审计记录不存在' });
+      return;
+    }
+    res.json({
+      success: true,
+      data: {
+        item,
+        dbEnabled: isDbEnabled(),
+        storageMode: getAuditStorageMode(),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || '读取操作审计详情失败' });
   }
 };
 

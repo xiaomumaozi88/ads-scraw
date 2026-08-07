@@ -228,6 +228,15 @@ export async function consumeGuangdadaQuota(quotaKey, amount = 1, metadata = {})
       const status = await buildQuotaStatusUnlocked({ forceRefresh: false });
       const quota = status.quotaMap?.[quotaKey];
       if (!quota) {
+        if (normalizedReserve > 0) {
+          return {
+            allowed: false,
+            code: GUANGDADA_QUOTA_UNAVAILABLE_CODE,
+            message: `无法读取「${QUOTA_LABELS[quotaKey] || quotaKey}」额度，自动补全已暂停。`,
+            quota: null,
+            quotaStatus: status,
+          };
+        }
         return {
           allowed: true,
           code: 200,
@@ -242,6 +251,65 @@ export async function consumeGuangdadaQuota(quotaKey, amount = 1, metadata = {})
           allowed: false,
           code: GUANGDADA_QUOTA_EXCEEDED_CODE,
           message: buildQuotaExceededMessage(quota, normalizedAmount),
+          quota,
+          quotaStatus: status,
+        };
+      }
+
+      await incrementQuotaUsage({
+        accountKey: status.account.accountKey,
+        quotaKey,
+        periodKey: quota.periodKey,
+        periodStartMs: quota.periodStartMs,
+        periodEndMs: quota.periodEndMs,
+        amount: normalizedAmount,
+        limitCount: quota.limit,
+        cycle: quota.cycle,
+        metadata,
+      });
+
+      const nextStatus = await buildQuotaStatusUnlocked({ forceRefresh: false });
+      return {
+        allowed: true,
+        code: 200,
+        message: 'success',
+        quota: nextStatus.quotaMap?.[quotaKey] || quota,
+        quotaStatus: nextStatus,
+      };
+    } catch (err) {
+      return {
+        allowed: false,
+        code: err.code || GUANGDADA_QUOTA_UNAVAILABLE_CODE,
+        message: err.message || '无法读取广大大账户额度信息，请确认已登录后重试',
+        quota: null,
+        quotaStatus: null,
+      };
+    }
+  });
+}
+
+export async function consumeGuangdadaQuotaWithReserve(quotaKey, amount = 1, reserveRemaining = 0, metadata = {}) {
+  const normalizedAmount = Math.max(1, Math.floor(Number(amount) || 1));
+  const normalizedReserve = Math.max(0, Math.floor(Number(reserveRemaining) || 0));
+  return withQuotaLock(async () => {
+    try {
+      const status = await buildQuotaStatusUnlocked({ forceRefresh: false });
+      const quota = status.quotaMap?.[quotaKey];
+      if (!quota) {
+        return {
+          allowed: true,
+          code: 200,
+          message: 'success',
+          quota: null,
+          quotaStatus: status,
+        };
+      }
+
+      if (quota.remaining < normalizedAmount || quota.remaining - normalizedAmount < normalizedReserve) {
+        return {
+          allowed: false,
+          code: GUANGDADA_QUOTA_EXCEEDED_CODE,
+          message: `「${quota.label}」自动补全已暂停（${quota.cycleLabel} ${quota.used}/${quota.limit}，剩余 ${quota.remaining}，需预留 ${normalizedReserve} 给用户使用）。`,
           quota,
           quotaStatus: status,
         };

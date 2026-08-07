@@ -130,6 +130,11 @@
   margin: 0 auto;
 }
 
+.guangdada-detail-iframe-wrap--playable {
+  max-width: calc(520px * 9 / 16);
+  max-height: min(520px, 70vh);
+}
+
 .guangdada-detail-iframe-wrap .guangdada-detail-iframe {
   position: absolute;
   top: 0;
@@ -140,6 +145,10 @@
   display: block;
   pointer-events: none;
   overflow: hidden;
+}
+
+.guangdada-detail-iframe-wrap--playable .guangdada-detail-iframe {
+  pointer-events: auto;
 }
 
 .guangdada-detail-iframe {

@@ -237,6 +237,24 @@ export function auditMaterialBatchSubmit({
   });
 }
 
+export function auditMaterialIngestionSync({
+  operatorProfile,
+  platform,
+  success,
+  status,
+  message,
+  metadata,
+}) {
+  recordOperationAudit({
+    action: AUDIT_ACTION.MATERIAL_INGESTION_SYNC,
+    platform: normalizeMaterialPlatform(platform),
+    operatorProfile,
+    status: status || (success ? 'success' : 'failed'),
+    message: message || (success ? '素材同步已提交' : '素材同步失败'),
+    metadata,
+  });
+}
+
 export function auditTranscodeJobSubmit({
   operatorProfile,
   videoUrl,

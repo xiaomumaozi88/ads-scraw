@@ -32,6 +32,7 @@ import {
   getGuangdadaDisplayOffset,
   getGuangdadaDisplayPageFromParams,
 } from '../utils/guangdadaPaging';
+import { scrollPageToTop } from '../utils/scrollToTop';
 
 function DataDisplay({
   data,
@@ -56,6 +57,7 @@ function DataDisplay({
   onGuangdadaQuotaChanged,
 }) {
   const isDomesticGuangdadaView = platform === 'guangdada' && domesticAdInfoResult != null;
+  const rootRef = useRef(null);
   const startDownloadBtnRef = useRef(null);
   const [sizeModalOpen, setSizeModalOpen] = useState(false);
   /** 多选尺寸：选中的尺寸下标数组，如 [0,1,3] 表示 原尺寸、720×1280、800×800；含 CUSTOM_SIZE_INDEX 表示自定义 */
@@ -90,18 +92,7 @@ function DataDisplay({
   const [downloadSubmitting, setDownloadSubmitting] = useState(false);
   const { startBatch } = useMaterialProcessing();
   const scrollToTop = () => {
-    const scrollEl = document.querySelector('.data-card');
-    if (!scrollEl) return;
-    const start = scrollEl.scrollTop;
-    const startTime = performance.now();
-    const duration = 180;
-    const step = (now) => {
-      const t = Math.min((now - startTime) / duration, 1);
-      const ease = 1 - (1 - t) * (1 - t);
-      scrollEl.scrollTop = start * (1 - ease);
-      if (t < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
+    scrollPageToTop(rootRef.current);
   };
   const backToTopBtn = (
     <Tooltip title="点击回到顶部" placement="left">
@@ -118,7 +109,7 @@ function DataDisplay({
 
   if (!isDomesticGuangdadaView && !data) {
     return (
-      <div className="data-container data-container--empty">
+      <div ref={rootRef} className="data-container data-container--empty">
         <div className="data-placeholder">
           <p>暂无数据</p>
         </div>
@@ -130,7 +121,7 @@ function DataDisplay({
   // 检查是否有错误信息（国内版常用 status 20000）
   if (!isDomesticGuangdadaView && data.code != null && data.code !== 200 && data.message) {
     return (
-      <div className="data-container data-container--empty">
+      <div ref={rootRef} className="data-container data-container--empty">
         <div className="data-placeholder">
           <p className="error-message">{data.message}</p>
         </div>
@@ -184,7 +175,7 @@ function DataDisplay({
 
   if (displayDataList.length === 0 && !isDomesticGuangdadaView) {
     return (
-      <div className="data-container data-container--empty">
+      <div ref={rootRef} className="data-container data-container--empty">
         <div className="data-placeholder">
           <p>暂无数据</p>
         </div>
@@ -291,9 +282,12 @@ function DataDisplay({
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const taskDefs = [];
       for (const one of selectedItems) {
-        for (const sizeIndex of selectedSizeIndices) {
-          const opt = getSizeOptionAtIndex(sizeIndex);
-          const sizeLabel = opt.originalSize ? '原尺寸' : `${opt.width}×${opt.height}`;
+        const effectiveSizeIndices = one.isHtml ? [0] : selectedSizeIndices;
+        for (const sizeIndex of effectiveSizeIndices) {
+          const opt = one.isHtml
+            ? { label: 'HTML', width: null, height: null, originalSize: true }
+            : getSizeOptionAtIndex(sizeIndex);
+          const sizeLabel = one.isHtml ? 'HTML' : opt.originalSize ? '原尺寸' : `${opt.width}×${opt.height}`;
           const targetW = opt.originalSize ? null : opt.width;
           const targetH = opt.originalSize ? null : opt.height;
           let useW = targetW;
@@ -378,7 +372,7 @@ function DataDisplay({
   };
 
   return (
-    <div className="data-container">
+    <div ref={rootRef} className="data-container">
       <div className="data-content">
         {displayDataList.length > 0 &&
           (!batchDownloadMode ? (

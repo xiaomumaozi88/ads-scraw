@@ -5,6 +5,7 @@
 
 import { getProxiedMediaUrl } from './api';
 import { getDomesticVideoUrl, isDomesticVideoItem } from './domesticCreativeFormat';
+import { getGuangdadaCreativeMedia } from './guangdadaCreativeMedia';
 
 const BLUR_RADIUS = 24;
 
@@ -195,15 +196,15 @@ export function getBatchDownloadInfo(item, platform) {
       const name = (item.app_name || item.material_key || item.creative_id || '') + (title ? `_${title}` : '');
       return { url, isVideo, isHtml: false, filename: sanitize(name) || 'creative' };
     }
-    const r0 = item.resource_urls?.[0];
-    const rawVideoUrl = r0?.video_url != null ? String(r0.video_url).trim() : '';
-    const isHtml = Number(r0?.type) === 4 && r0?.html_url && String(r0.html_url).trim() !== '';
-    const hasPlayableVideo = !isHtml && rawVideoUrl !== '';
-    const isVideoType = !isHtml && (Number(item.ads_type) === 2 || Number(r0?.type) === 2 || hasPlayableVideo);
+    const media = getGuangdadaCreativeMedia(item);
+    const isHtml = Boolean(media.downloadHtmlUrl);
+    const hasPlayableVideo = !isHtml && media.hasPlayableVideo;
+    const isVideoType = !isHtml && media.isVideo;
     let url = '';
-    if (isHtml) url = r0.html_url.trim();
-    else if (hasPlayableVideo) url = rawVideoUrl;
-    else url = r0?.image_url ?? item.preview_img_url ?? '';
+    if (isHtml) url = getProxiedMediaUrl(media.downloadHtmlUrl);
+    else if (media.isPlayableAd) url = '';
+    else if (hasPlayableVideo) url = media.videoUrl;
+    else url = media.thumbnailUrl || '';
     const title = item.title || item.message || item.body || '';
     const name = (item.advertiser_name || item.ad_key || '') + (title ? `_${title}` : '');
     return { url, isVideo: isVideoType && hasPlayableVideo, isHtml: !!isHtml, filename: sanitize(name) || 'creative' };
